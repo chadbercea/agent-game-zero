@@ -36,7 +36,7 @@ function freeSpot(near?: { x: number; z: number }, radius = 4.2): { x: number; z
 const settings = {
   labels: false,
   chaos: true,
-  chaosInterval: 2.5,
+  chaosInterval: 5,
   lineage: 'auto' as Lineage | 'auto',
 };
 

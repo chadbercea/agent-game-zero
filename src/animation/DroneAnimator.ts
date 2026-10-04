@@ -25,8 +25,8 @@ const PROFILES: Record<Status, MotionProfile> = {
 };
 
 /** How fast continuous parameters converge on a new status (per second). */
-const EASE = 3.2;
-const SHAKE_DURATION = 0.75;
+const EASE = 2;
+const SHAKE_DURATION = 0.9;
 const START_KICK_DURATION = 0.5;
 
 /**
@@ -70,14 +70,15 @@ export class DroneAnimator {
     // Hover.
     const { hover, body, arms, ringMaterial, haloMaterial, blurMaterial, bladeMaterial } = drone.rig;
     const bob = Math.sin((t / c.bobPeriod) * Math.PI * 2 + this.phase) * c.bobAmplitude;
-    const kick = Math.sin((1 - this.kick / START_KICK_DURATION) * Math.PI) * 0.12 * Number(this.kick > 0);
+    const kick = Math.sin((1 - this.kick / START_KICK_DURATION) * Math.PI) * 0.05 * Number(this.kick > 0);
     hover.position.y = HOVER_HEIGHT + c.hoverOffset + bob + kick;
 
-    // Shake / error: sharp decaying jitter on entering Stopped.
+    // Shake / error: a brief, decaying wobble on entering Stopped. Kept small and
+    // slow enough to read as "something's wrong", not as violence.
     const s = this.shake / SHAKE_DURATION;
-    const jitter = s * s * 0.14;
-    hover.position.x = Math.sin(t * 61) * jitter * 0.6;
-    hover.rotation.z = Math.sin(t * 47 + 1.3) * jitter;
+    const jitter = s * s * 0.045;
+    hover.position.x = Math.sin(t * 22) * jitter * 0.6;
+    hover.rotation.z = Math.sin(t * 17 + 1.3) * jitter;
 
     body.rotation.x = c.pitch + Math.sin(t * 1.7 + this.phase) * 0.015;
     body.rotation.y = Math.sin(t * 1.1 + this.phase) * c.scan;

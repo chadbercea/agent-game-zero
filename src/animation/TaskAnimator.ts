@@ -28,9 +28,9 @@ const PROFILES: Record<Status, WorkProfile> = {
   stopped: { spin: 0, bobAmplitude: 0, bobPeriod: 1, flow: 0, tetherOpacity: 0.85 },
 };
 
-const EASE = 3.5;
+const EASE = 2.2;
 const REVEAL = 7;
-const POP_DURATION = 0.4;
+const POP_DURATION = 0.5;
 const SHAKE_DURATION = 0.6;
 const TETHER_SPACING = 0.09;
 
@@ -92,9 +92,9 @@ export class TaskAnimator {
       cube.rotation.y = MathUtils.lerp(cube.rotation.y, nearestQuarter(cube.rotation.y), k * 2);
     }
     const s = this.shake / SHAKE_DURATION;
-    work.position.x = Math.sin(t * 57) * s * s * 0.06;
+    work.position.x = Math.sin(t * 21) * s * s * 0.02;
     const p = this.pop / POP_DURATION;
-    cube.scale.setScalar(1 + Math.sin(p * Math.PI) * 0.22);
+    cube.scale.setScalar(1 + Math.sin(p * Math.PI) * 0.08);
 
     // Per-state adornments ease in and out.
     reveal1(glyph, this.reveal.glyph);
