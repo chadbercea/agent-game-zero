@@ -21,8 +21,16 @@ export interface PopulationDeps {
 const DEFAULT_DEPS: PopulationDeps = { spawnAgent, sendPacket };
 
 interface LiveConnection {
+  parent: SpawnedAgent;
+  child: SpawnedAgent;
   connection: Connection;
   reveal: ConnectionReveal;
+}
+
+interface InFlight {
+  from: SpawnedAgent;
+  to: SpawnedAgent;
+  cancel: () => void;
 }
 
 /**
@@ -42,7 +50,7 @@ interface LiveConnection {
 export class Population {
   readonly agents: SpawnedAgent[] = [];
   private readonly parents = new Map<SpawnedAgent, SpawnedAgent>();
-  private readonly inFlight = new Map<Packet, SpawnedAgent>();
+  private readonly inFlight = new Map<Packet, InFlight>();
   private connections: LiveConnection[] = [];
   private focused: SpawnedAgent | undefined;
   private readonly lastStatus = new Map<SpawnedAgent, Status>();
@@ -70,13 +78,30 @@ export class Population {
     return agent;
   }
 
+  /**
+   * Remove an agent and its whole subtree (ILI-875: sub-agents exist to serve
+   * their parent, so they go with it). Packets to or from removed agents are
+   * cancelled. If the focused family survives, Detail stays on it and only the
+   * removed connections retract.
+   */
   despawn(agent: SpawnedAgent): void {
-    if (this.focused && this.family(this.focused).includes(agent)) this.focus(undefined);
-    this.agents.splice(this.agents.indexOf(agent), 1);
-    this.parents.delete(agent);
-    this.lastStatus.delete(agent);
-    for (const [child, parent] of this.parents) if (parent === agent) this.parents.delete(child);
-    agent.despawn();
+    const removed = this.subtree(agent);
+    const gone = new Set(removed);
+    if (this.focused && gone.has(this.focused)) this.focus(undefined);
+    for (const live of this.connections) {
+      if (gone.has(live.parent) || gone.has(live.child)) live.reveal.shown = false;
+    }
+    for (const [packet, flight] of this.inFlight) {
+      if (!gone.has(flight.from) && !gone.has(flight.to)) continue;
+      flight.cancel();
+      this.inFlight.delete(packet);
+    }
+    for (const member of removed.reverse()) {
+      this.agents.splice(this.agents.indexOf(member), 1);
+      this.parents.delete(member);
+      this.lastStatus.delete(member);
+      member.despawn();
+    }
   }
 
   clear(): void {
@@ -96,19 +121,24 @@ export class Population {
   family(agent: SpawnedAgent): SpawnedAgent[] {
     let root = agent;
     for (let p = this.parents.get(root); p; p = this.parents.get(root)) root = p;
+    return this.subtree(root);
+  }
+
+  /** `agent` and all of its descendants, parents before children. */
+  subtree(agent: SpawnedAgent): SpawnedAgent[] {
     const members: SpawnedAgent[] = [];
     const walk = (a: SpawnedAgent) => {
       members.push(a);
       this.childrenOf(a).forEach(walk);
     };
-    walk(root);
+    walk(agent);
     return members;
   }
 
   send(from: SpawnedAgent, to: SpawnedAgent): void {
-    const { packet, landed } = this.deps.sendPacket(this.stage, from, to);
+    const { packet, landed, cancel } = this.deps.sendPacket(this.stage, from, to);
     packet.trail.visible = false; // revealed by tick() if its lineage is focused
-    this.inFlight.set(packet, from);
+    this.inFlight.set(packet, { from, to, cancel });
     void landed.then(() => this.inFlight.delete(packet));
   }
 
@@ -136,7 +166,7 @@ export class Population {
     this.stage.setDetail(() => {
       const family = new Set(this.family(agent));
       const members: Object3D[] = [...family].map((a) => a.unit);
-      for (const [packet, origin] of this.inFlight) if (family.has(origin)) members.push(packet);
+      for (const [packet, { from }] of this.inFlight) if (family.has(from)) members.push(packet);
       for (const { connection, reveal } of this.connections) if (reveal.shown) members.push(connection);
       return members;
     });
@@ -146,6 +176,8 @@ export class Population {
     const connection = new Connection(child.drone.lineage);
     this.stage.add(connection);
     this.connections.push({
+      parent,
+      child,
       connection,
       reveal: new ConnectionReveal(connection, parent.drone.rig.hover, child.drone.rig.hover),
     });
@@ -175,7 +207,7 @@ export class Population {
 
     const family = new Set(this.focused ? this.family(this.focused) : []);
     for (const agent of this.agents) agent.task.rig.tether.visible = family.has(agent);
-    for (const [packet, origin] of this.inFlight) packet.trail.visible = family.has(origin);
+    for (const [packet, { from }] of this.inFlight) packet.trail.visible = family.has(from);
 
     for (const live of this.connections) live.reveal.update(dt);
     this.connections = this.connections.filter((live) => {

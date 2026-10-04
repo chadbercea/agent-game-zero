@@ -47,6 +47,7 @@ interface Sent {
   to: SpawnedAgent;
   packet: Packet;
   land: () => void;
+  cancel: ReturnType<typeof vi.fn>;
 }
 
 function setup() {
@@ -58,8 +59,9 @@ function setup() {
       const packet = Object.assign(new Object3D(), { trail: { visible: true } }) as unknown as Packet;
       let land = () => {};
       const landed = new Promise<void>((resolve) => (land = resolve));
-      sent.push({ from, to, packet, land });
-      return { packet, landed };
+      const cancel = vi.fn(() => land());
+      sent.push({ from, to, packet, land, cancel });
+      return { packet, landed, cancel };
     },
   });
   const spawn = (options: DroneOptions & { parent?: SpawnedAgent } = {}) => population.spawn(0, 0, options);
@@ -194,7 +196,7 @@ describe('Population packet routing (reactToStatus)', () => {
   });
 });
 
-describe('Population despawn', () => {
+describe('Population despawn (cascade, ILI-875)', () => {
   it('removes the agent and tears it down', () => {
     const { population, spawn } = setup();
     const root = spawn();
@@ -203,6 +205,93 @@ describe('Population despawn', () => {
     expect(population.agents).toEqual([root]);
     expect(population.childrenOf(root)).toEqual([]);
     expect(leaf.despawn).toHaveBeenCalledOnce();
+  });
+
+  it('despawning a parent removes its whole subtree and nothing else', () => {
+    const { population, spawn } = setup();
+    const root = spawn();
+    const a = spawn({ parent: root });
+    const grandchild = spawn({ parent: a });
+    const b = spawn({ parent: root });
+    const stranger = spawn();
+
+    population.despawn(a);
+    expect(population.agents).toEqual([root, b, stranger]);
+    expect(a.despawn).toHaveBeenCalledOnce();
+    expect(grandchild.despawn).toHaveBeenCalledOnce();
+    expect(population.childrenOf(root)).toEqual([b]);
+
+    population.despawn(root);
+    expect(population.agents).toEqual([stranger]);
+    expect(b.despawn).toHaveBeenCalledOnce();
+  });
+
+  it('never leaves a sub-agent-scale root behind', () => {
+    const { population, spawn } = setup();
+    const root = spawn();
+    spawn({ parent: spawn({ parent: root }) });
+    spawn({ parent: root });
+    population.despawn(root);
+    for (const agent of population.agents) {
+      expect(!population.parentOf(agent) && agent.drone.subAgent).toBe(false);
+    }
+    expect(population.agents).toEqual([]);
+  });
+
+  it('frees the lineage color, so roots stay distinct afterwards', () => {
+    const { population, spawn } = setup();
+    const roots = LINEAGES.map(() => spawn());
+    for (const root of roots) spawn({ parent: root });
+    const freed = roots[2].drone.lineage;
+    population.despawn(roots[2]);
+    const replacement = spawn();
+    expect(replacement.drone.lineage).toBe(freed);
+    const rootColors = population.agents.filter((a) => !population.parentOf(a)).map((a) => a.drone.lineage);
+    expect(new Set(rootColors).size).toBe(rootColors.length);
+  });
+
+  it('cancels packets in flight to or from removed agents', () => {
+    const { stage, population, sent, spawn, setStatus } = setup();
+    const root = spawn();
+    const child = spawn({ parent: root });
+    const other = spawn();
+    const otherChild = spawn({ parent: other });
+    setStatus(child, 'stopped'); // child → root
+    setStatus(root, 'working'); // root → child
+    setStatus(other, 'working'); // other → otherChild (unaffected)
+
+    population.focus(other);
+    population.despawn(root);
+    const [up, down, unrelated] = sent;
+    expect(up.cancel).toHaveBeenCalledOnce();
+    expect(down.cancel).toHaveBeenCalledOnce();
+    expect(unrelated.cancel).not.toHaveBeenCalled();
+    expect(() => stage.tick()).not.toThrow();
+    expect(stage.detail!()).toContain(unrelated.packet);
+    expect(stage.detail!()).toContain(otherChild.unit);
+  });
+
+  it('keeps Detail on a surviving family and drops only the removed connections', () => {
+    const { stage, population, spawn } = setup();
+    const root = spawn();
+    const a = spawn({ parent: root });
+    spawn({ parent: root });
+    population.focus(root);
+    const connectionsBefore = stage.detail!().filter((m) => m instanceof Connection);
+    expect(connectionsBefore).toHaveLength(2);
+
+    population.despawn(a);
+    expect(stage.detail).not.toBeNull();
+    expect(stage.detail!().filter((m) => m instanceof Connection)).toHaveLength(1);
+  });
+
+  it('exits Detail when the focused agent itself is removed', () => {
+    const { stage, population, spawn } = setup();
+    const root = spawn();
+    const child = spawn({ parent: root });
+    population.focus(child);
+    population.despawn(root);
+    expect(stage.detail).toBeNull();
   });
 
   it('clear() removes everyone', () => {

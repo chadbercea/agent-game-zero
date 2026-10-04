@@ -141,7 +141,7 @@ selectedFolder.add({ remove: () => {
   const target = selected;
   select(undefined);
   population.despawn(target);
-} }, 'remove').name('Despawn');
+} }, 'remove').name('Despawn (with its sub-agents)');
 
 // Opening scene: four families, D3V1N's in the middle. Every agent belongs to a
 // family, because standalone agents are silent by design (packets stay in-lineage).

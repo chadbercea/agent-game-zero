@@ -5,8 +5,10 @@ import type { SceneHost } from './Stage';
 
 export interface SentPacket {
   packet: Packet;
-  /** Resolves once the packet has landed and its trail has faded. */
+  /** Resolves once the packet has landed and its trail has faded, or was cancelled. */
   landed: Promise<void>;
+  /** Remove the packet immediately (e.g. its sender or receiver despawned). */
+  cancel: () => void;
 }
 
 /**
@@ -22,14 +24,18 @@ export function sendPacket(
   const packet = new Packet();
   const flight = new PacketFlight(packet, from.drone.rig.hover, to.drone.rig.hover, options);
   stage.add(packet);
+  let finish = () => {};
   const landed = new Promise<void>((resolve) => {
     const untick = stage.onTick((dt) => {
       flight.update(dt);
-      if (!flight.done) return;
+      if (flight.done) finish();
+    });
+    finish = () => {
+      finish = () => {};
       untick();
       packet.dispose();
       resolve();
-    });
+    };
   });
-  return { packet, landed };
+  return { packet, landed, cancel: () => finish() };
 }
