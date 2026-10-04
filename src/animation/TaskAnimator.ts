@@ -46,6 +46,8 @@ export class TaskAnimator {
   private lastStatus: Status;
   private time: number;
   private flowOffset = 0;
+  /** Accumulated bob phase. Integrated per frame so easing the period never jumps it. */
+  private bobPhase = 0;
   private pop = 0;
   private shake = 0;
   private readonly phase: number;
@@ -84,7 +86,8 @@ export class TaskAnimator {
     const { work, cube, glyph, marker, orbit, tether } = task.rig;
 
     // Work item: bob, spin, pop on change, shake on halt.
-    const bob = c.bobPeriod > 0 ? Math.sin((t / c.bobPeriod) * Math.PI * 2 + this.phase) * c.bobAmplitude : 0;
+    this.bobPhase = (this.bobPhase + (dt / c.bobPeriod) * Math.PI * 2) % (Math.PI * 2);
+    const bob = Math.sin(this.bobPhase + this.phase) * c.bobAmplitude;
     work.position.y = WORK_HEIGHT + bob;
     cube.rotation.y += c.spin * dt;
     if (status === 'stopped') {

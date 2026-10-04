@@ -38,6 +38,8 @@ export class DroneAnimator {
   private lastStatus: Status;
   private time: number;
   private rotorAngle = 0;
+  /** Accumulated bob phase. Integrated per frame so easing the period never jumps it. */
+  private bobPhase = 0;
   private shake = 0;
   private kick = 0;
   /** Desynchronizes crowds of drones. */
@@ -69,7 +71,8 @@ export class DroneAnimator {
 
     // Hover.
     const { hover, body, arms, ringMaterial, haloMaterial, blurMaterial, bladeMaterial } = drone.rig;
-    const bob = Math.sin((t / c.bobPeriod) * Math.PI * 2 + this.phase) * c.bobAmplitude;
+    this.bobPhase = (this.bobPhase + (dt / c.bobPeriod) * Math.PI * 2) % (Math.PI * 2);
+    const bob = Math.sin(this.bobPhase + this.phase) * c.bobAmplitude;
     const kick = Math.sin((1 - this.kick / START_KICK_DURATION) * Math.PI) * 0.05 * Number(this.kick > 0);
     hover.position.y = HOVER_HEIGHT + c.hoverOffset + bob + kick;
 
