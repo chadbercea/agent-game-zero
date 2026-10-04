@@ -33,6 +33,8 @@ interface LiveConnection {
  * Packets are never random; they follow status changes:
  * - → Working: hand off to a sub-agent; with none, to the parent or a sibling.
  * - → Stopped: escalate to the parent. Root agents have no one to escalate to.
+ * Packets stay inside a lineage, so a standalone agent (no parent, no
+ * sub-agents) is silent by design (ILI-874).
  *
  * Dotted lines (task tethers, packet trails, connections) only appear in
  * Detail, and only for the focused lineage. Runtime shows no lines.

@@ -177,7 +177,16 @@ describe('Population packet routing (reactToStatus)', () => {
     expect(ctx.sent).toHaveLength(1);
   });
 
-  it('a top-level agent with no sub-agents stays silent', () => {
+  it('every member of a family can emit packets', () => {
+    const root = ctx.spawn();
+    const a = ctx.spawn({ parent: root });
+    const b = ctx.spawn({ parent: root });
+    const grandchild = ctx.spawn({ parent: a });
+    for (const agent of [root, a, b, grandchild]) ctx.setStatus(agent, 'working');
+    expect(new Set(ctx.sent.map((s) => s.from))).toEqual(new Set([root, a, b, grandchild]));
+  });
+
+  it('a top-level agent with no sub-agents stays silent (by design, ILI-874)', () => {
     const loner = ctx.spawn();
     ctx.setStatus(loner, 'working');
     ctx.setStatus(loner, 'stopped');

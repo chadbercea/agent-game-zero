@@ -143,13 +143,15 @@ selectedFolder.add({ remove: () => {
   population.despawn(target);
 } }, 'remove').name('Despawn');
 
-// Opening scene: D3V1N's family in the middle, a second family, and a few independents.
+// Opening scene: four families, D3V1N's in the middle. Every agent belongs to a
+// family, because standalone agents are silent by design (packets stay in-lineage).
 const devin = spawn({ status: 'working' });
 devin.unit.position.set(0, 0, 0);
 for (let i = 0; i < 3; i++) spawn({ parent: devin });
-const second = spawn({ status: 'waiting' });
-for (let i = 0; i < 2; i++) spawn({ parent: second });
-for (let i = 0; i < 4; i++) spawn();
+for (const size of [2, 2, 1]) {
+  const root = spawn();
+  for (let i = 0; i < size; i++) spawn({ parent: root });
+}
 select(undefined);
 
 Object.assign(window, { sandbox: { stage, population, spawn, select } });
