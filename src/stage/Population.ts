@@ -5,7 +5,7 @@ import { Connection } from '../primitives/connection/Connection';
 import type { DroneOptions } from '../primitives/drone/Drone';
 import type { Packet } from '../primitives/packet/Packet';
 import { type SentPacket, sendPacket } from './sendPacket';
-import { type SpawnedAgent, spawnAgent } from './spawnAgent';
+import { type SpawnedAgent, type SpawnOptions, spawnAgent } from './spawnAgent';
 import type { DetailHost, SceneHost } from './Stage';
 
 /**
@@ -14,7 +14,7 @@ import type { DetailHost, SceneHost } from './Stage';
  * logic runs without WebGL or the DOM.
  */
 export interface PopulationDeps {
-  spawnAgent: (stage: SceneHost, x: number, z: number, options: DroneOptions) => SpawnedAgent;
+  spawnAgent: (stage: SceneHost, x: number, z: number, options: SpawnOptions) => SpawnedAgent;
   sendPacket: (stage: SceneHost, from: SpawnedAgent, to: SpawnedAgent) => SentPacket;
 }
 
@@ -64,12 +64,19 @@ export class Population {
 
   /**
    * Add an agent at (x, z). With a parent it becomes a sub-agent in the
-   * parent's lineage; a new root gets the least-used lineage color.
+   * parent's lineage and emerges from the parent drone; a new root gets the
+   * least-used lineage color and descends into place. If the family is in
+   * Detail, the parent → child connection draws out with the emerging child.
    */
   spawn(x: number, z: number, options: DroneOptions & { parent?: SpawnedAgent } = {}): SpawnedAgent {
     const { parent, ...droneOptions } = options;
     const lineage = parent?.drone.lineage ?? droneOptions.lineage ?? this.freshLineage();
-    const agent = this.deps.spawnAgent(this.stage, x, z, { ...droneOptions, lineage, subAgent: Boolean(parent) });
+    const agent = this.deps.spawnAgent(this.stage, x, z, {
+      ...droneOptions,
+      lineage,
+      subAgent: Boolean(parent),
+      arrival: parent ? { kind: 'emerge', from: parent.drone.rig.hover } : { kind: 'descend' },
+    });
     agent.task.rig.tether.visible = false; // revealed by tick() if its lineage is focused
     if (parent) this.parents.set(agent, parent);
     this.agents.push(agent);

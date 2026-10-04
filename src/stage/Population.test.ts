@@ -5,7 +5,7 @@ import type { DroneOptions } from '../primitives/drone/Drone';
 import { Connection } from '../primitives/connection/Connection';
 import type { Packet } from '../primitives/packet/Packet';
 import { Population } from './Population';
-import type { SpawnedAgent } from './spawnAgent';
+import type { SpawnedAgent, SpawnOptions } from './spawnAgent';
 import type { DetailHost, TickFn } from './Stage';
 
 /** A stage stand-in: records ticks and the Detail provider, renders nothing. */
@@ -29,7 +29,10 @@ function fakeStage() {
 }
 
 /** Agents with just the fields Population reads: unit, drone status/lineage/hover, task tether. */
-function fakeSpawnAgent(_stage: unknown, x: number, z: number, options: DroneOptions): SpawnedAgent {
+const spawnCalls: SpawnOptions[] = [];
+
+function fakeSpawnAgent(_stage: unknown, x: number, z: number, options: SpawnOptions): SpawnedAgent {
+  spawnCalls.push(options);
   const unit = new Group();
   unit.position.set(x, 0, z);
   const hover = new Object3D();
@@ -120,6 +123,15 @@ describe('Population lineage model', () => {
 
     const secondRound = LINEAGES.map(() => spawn());
     expect(new Set(secondRound.map((a) => a.drone.lineage))).toEqual(new Set(LINEAGES));
+  });
+
+  it('sub-agents emerge from their parent; top-level agents descend (ILI-876)', () => {
+    const { spawn } = setup();
+    spawnCalls.length = 0;
+    const root = spawn();
+    spawn({ parent: root });
+    expect(spawnCalls[0].arrival).toEqual({ kind: 'descend' });
+    expect(spawnCalls[1].arrival).toEqual({ kind: 'emerge', from: root.drone.rig.hover });
   });
 
   it('respects an explicit lineage', () => {
