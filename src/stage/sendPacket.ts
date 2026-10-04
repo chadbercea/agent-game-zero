@@ -1,7 +1,7 @@
 import { type FlightOptions, PacketFlight } from '../animation/PacketFlight';
 import { Packet } from '../primitives/packet/Packet';
 import type { SpawnedAgent } from './spawnAgent';
-import type { Stage } from './Stage';
+import type { SceneHost } from './Stage';
 
 export interface SentPacket {
   packet: Packet;
@@ -14,7 +14,7 @@ export interface SentPacket {
  * after landing.
  */
 export function sendPacket(
-  stage: Stage,
+  stage: SceneHost,
   from: SpawnedAgent,
   to: SpawnedAgent,
   options: FlightOptions = {},

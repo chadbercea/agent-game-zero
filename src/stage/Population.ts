@@ -4,9 +4,21 @@ import { LINEAGES, type Lineage, type Status } from '../core/palette';
 import { Connection } from '../primitives/connection/Connection';
 import type { DroneOptions } from '../primitives/drone/Drone';
 import type { Packet } from '../primitives/packet/Packet';
-import { sendPacket } from './sendPacket';
+import { type SentPacket, sendPacket } from './sendPacket';
 import { type SpawnedAgent, spawnAgent } from './spawnAgent';
-import type { Stage } from './Stage';
+import type { DetailHost, SceneHost } from './Stage';
+
+/**
+ * How Population creates agents and sends packets. The defaults build real
+ * drones and packet flights; tests substitute lightweight fakes so the lineage
+ * logic runs without WebGL or the DOM.
+ */
+export interface PopulationDeps {
+  spawnAgent: (stage: SceneHost, x: number, z: number, options: DroneOptions) => SpawnedAgent;
+  sendPacket: (stage: SceneHost, from: SpawnedAgent, to: SpawnedAgent) => SentPacket;
+}
+
+const DEFAULT_DEPS: PopulationDeps = { spawnAgent, sendPacket };
 
 interface LiveConnection {
   connection: Connection;
@@ -33,7 +45,10 @@ export class Population {
   private focused: SpawnedAgent | undefined;
   private readonly lastStatus = new Map<SpawnedAgent, Status>();
 
-  constructor(private readonly stage: Stage) {
+  private readonly deps: PopulationDeps;
+
+  constructor(private readonly stage: DetailHost, deps: Partial<PopulationDeps> = {}) {
+    this.deps = { ...DEFAULT_DEPS, ...deps };
     stage.onTick((dt) => this.tick(dt));
   }
 
@@ -44,7 +59,7 @@ export class Population {
   spawn(x: number, z: number, options: DroneOptions & { parent?: SpawnedAgent } = {}): SpawnedAgent {
     const { parent, ...droneOptions } = options;
     const lineage = parent?.drone.lineage ?? droneOptions.lineage ?? this.freshLineage();
-    const agent = spawnAgent(this.stage, x, z, { ...droneOptions, lineage, subAgent: Boolean(parent) });
+    const agent = this.deps.spawnAgent(this.stage, x, z, { ...droneOptions, lineage, subAgent: Boolean(parent) });
     agent.task.rig.tether.visible = false; // revealed by tick() if its lineage is focused
     if (parent) this.parents.set(agent, parent);
     this.agents.push(agent);
@@ -89,7 +104,7 @@ export class Population {
   }
 
   send(from: SpawnedAgent, to: SpawnedAgent): void {
-    const { packet, landed } = sendPacket(this.stage, from, to);
+    const { packet, landed } = this.deps.sendPacket(this.stage, from, to);
     packet.trail.visible = false; // revealed by tick() if its lineage is focused
     this.inFlight.set(packet, from);
     void landed.then(() => this.inFlight.delete(packet));

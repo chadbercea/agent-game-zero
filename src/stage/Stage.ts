@@ -28,6 +28,17 @@ import { NEUTRAL } from '../core/palette';
 
 export type TickFn = (dt: number, elapsed: number) => void;
 
+/** The part of a Stage that compositions place objects into and tick from. */
+export interface SceneHost {
+  add(...objects: Object3D[]): void;
+  onTick(fn: TickFn): () => void;
+}
+
+/** A SceneHost that can also isolate objects in Detail view. */
+export interface DetailHost extends SceneHost {
+  setDetail(provider: (() => Object3D[]) | null): void;
+}
+
 export interface StageOptions {
   /** World units visible vertically at zoom 1. */
   viewSize?: number;
@@ -49,7 +60,7 @@ const DETAIL_EASE = 7;
  * pan + zoom (never rotation), studio lighting, shadow-catching floor, glow,
  * and world-space labels. Everything else is composed on top of it.
  */
-export class Stage {
+export class Stage implements DetailHost {
   readonly scene = new Scene();
   readonly camera: OrthographicCamera;
   readonly renderer: WebGLRenderer;

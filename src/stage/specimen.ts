@@ -22,6 +22,12 @@ export function specimenStage(options: StageOptions & { focusY?: number } = {}):
   return { root, stage };
 }
 
+/** Stop and release the current specimen's stage (between stories and tests). */
+export function disposeSpecimenStage(): void {
+  current?.dispose();
+  current = undefined;
+}
+
 /** Floor position `i` steps along screen-right, centered on the row. */
 export function rowPosition(i: number, count: number, spacing: number): { x: number; z: number } {
   const offset = (i - (count - 1) / 2) * spacing;

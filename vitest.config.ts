@@ -15,18 +15,32 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // Plain logic (lineage model, packet routing). Runs in Node; no WebGL or DOM.
+        test: {
+          name: 'unit',
+          include: ['src/**/*.test.ts'],
+          environment: 'node',
+        },
+      },
+      {
         extends: true,
         plugins: [
-          // The plugin will run tests for the stories defined in your Storybook config
+          // Every Storybook story renders as a smoke test.
           // See options at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon#storybooktest
           storybookTest({ configDir: path.join(dirname, '.storybook') }),
         ],
         test: {
           name: 'storybook',
+          // Software WebGL is CPU-bound; parallel tabs starve each other into timeouts.
+          fileParallelism: false,
+          testTimeout: 30_000,
           browser: {
             enabled: true,
             headless: true,
-            provider: playwright({}),
+            // Software WebGL so stories render on machines without a GPU (CI, WSL).
+            provider: playwright({
+              launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+            }),
             instances: [{ browser: 'chromium' }],
           },
         },

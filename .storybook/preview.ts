@@ -1,6 +1,10 @@
 import type { Preview } from '@storybook/html-vite'
+import { disposeSpecimenStage } from '../src/stage/specimen'
 
 const preview: Preview = {
+  // Each story mounts a live WebGL stage; tear it down when the story ends so
+  // render loops never pile up (matters most for the headless test run).
+  beforeEach: () => disposeSpecimenStage,
   parameters: {
     controls: {
       matchers: {

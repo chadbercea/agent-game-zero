@@ -3,7 +3,7 @@ import { DroneAnimator } from '../animation/DroneAnimator';
 import { TaskAnimator } from '../animation/TaskAnimator';
 import { Drone, type DroneOptions } from '../primitives/drone/Drone';
 import { Task } from '../primitives/task/Task';
-import type { Stage } from './Stage';
+import type { SceneHost } from './Stage';
 import { DRONE_TURN, FACE_CAMERA } from './spawnDrone';
 
 /** Distance from the drone's hover origin down to where the tether meets it. */
@@ -21,7 +21,7 @@ export interface SpawnedAgent {
  * A drone hovering over its task. The drone owns status; the task mirrors it
  * every frame, so status changes only ever go through `drone.status`.
  */
-export function spawnAgent(stage: Stage, x: number, z: number, options: DroneOptions = {}): SpawnedAgent {
+export function spawnAgent(stage: SceneHost, x: number, z: number, options: DroneOptions = {}): SpawnedAgent {
   const unit = new Group();
   unit.position.set(x, 0, z);
   unit.rotation.y = FACE_CAMERA;
