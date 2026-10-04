@@ -1,0 +1,35 @@
+import { type FlightOptions, PacketFlight } from '../animation/PacketFlight';
+import { Packet } from '../primitives/packet/Packet';
+import type { SpawnedAgent } from './spawnAgent';
+import type { Stage } from './Stage';
+
+export interface SentPacket {
+  packet: Packet;
+  /** Resolves once the packet has landed and its trail has faded. */
+  landed: Promise<void>;
+}
+
+/**
+ * Send a packet from one agent's drone to another's. It cleans itself up
+ * after landing.
+ */
+export function sendPacket(
+  stage: Stage,
+  from: SpawnedAgent,
+  to: SpawnedAgent,
+  options: FlightOptions = {},
+): SentPacket {
+  const packet = new Packet();
+  const flight = new PacketFlight(packet, from.drone.rig.hover, to.drone.rig.hover, options);
+  stage.add(packet);
+  const landed = new Promise<void>((resolve) => {
+    const untick = stage.onTick((dt) => {
+      flight.update(dt);
+      if (!flight.done) return;
+      untick();
+      packet.dispose();
+      resolve();
+    });
+  });
+  return { packet, landed };
+}

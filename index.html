@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zero — Sandbox</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      #stage { position: fixed; inset: 0; }
+      #hint {
+        position: fixed; left: 16px; bottom: 14px;
+        font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; color: #8a8c93;
+        pointer-events: none; user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hint">Drag to pan · scroll to zoom · click a drone to select</div>
+    <script type="module" src="/src/sandbox/main.ts"></script>
+  </body>
+</html>
