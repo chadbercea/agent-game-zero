@@ -2,13 +2,8 @@ import { DroneAnimator } from '../animation/DroneAnimator';
 import { Drone, type DroneOptions } from '../primitives/drone/Drone';
 import type { Stage } from './Stage';
 
-/** Units (and their task pads) square up to the isometric camera. */
+/** Drones and their task pads square up to the isometric camera. */
 export const FACE_CAMERA = Math.PI / 4;
-/**
- * Drones turn three-quarters off the camera axis so the hull's swept profile
- * reads instead of foreshortening into an egg; the lens still faces the viewer.
- */
-export const DRONE_TURN = 0.55;
 
 export interface SpawnedDrone {
   drone: Drone;
@@ -20,7 +15,7 @@ export interface SpawnedDrone {
 export function spawnDrone(stage: Stage, x: number, z: number, options: DroneOptions = {}): SpawnedDrone {
   const drone = new Drone(options);
   drone.position.set(x, 0, z);
-  drone.rotation.y = FACE_CAMERA + DRONE_TURN;
+  drone.rotation.y = FACE_CAMERA;
   const animator = new DroneAnimator(drone);
   animator.update(0);
   stage.add(drone);

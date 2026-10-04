@@ -4,7 +4,7 @@ import { TaskAnimator } from '../animation/TaskAnimator';
 import { Drone, type DroneOptions } from '../primitives/drone/Drone';
 import { Task } from '../primitives/task/Task';
 import type { SceneHost } from './Stage';
-import { DRONE_TURN, FACE_CAMERA } from './spawnDrone';
+import { FACE_CAMERA } from './spawnDrone';
 
 /** Distance from the drone's hover origin down to where the tether meets it. */
 const TETHER_ATTACH = 0.42;
@@ -27,7 +27,6 @@ export function spawnAgent(stage: SceneHost, x: number, z: number, options: Dron
   unit.rotation.y = FACE_CAMERA;
 
   const drone = new Drone(options);
-  drone.rotation.y = DRONE_TURN;
   const task = new Task({ status: drone.status, subAgent: options.subAgent });
   unit.add(task, drone);
 
