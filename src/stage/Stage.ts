@@ -247,14 +247,14 @@ export class Stage {
   private addLighting(): void {
     const pmrem = new PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.35;
+    this.scene.environmentIntensity = 0.25;
     pmrem.dispose();
 
-    const hemi = new HemisphereLight(0xffffff, 0xc9ccd4, 0.7);
+    const hemi = new HemisphereLight(0xffffff, 0xb9bdc7, 0.5);
     this.scene.add(hemi);
 
     // Overhead key from camera-left so facets step from lit to shaded across the body.
-    const key = new DirectionalLight(0xffffff, 2.4);
+    const key = new DirectionalLight(0xffffff, 2.9);
     key.position.set(-2, 18, 3);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);

@@ -33,6 +33,17 @@ export const Specimen: Story = {
   },
 };
 
+/** The drone slowly turning, to judge the body's form from every side. */
+export const Turntable: Story = {
+  args: { showLabel: false },
+  render: (args) => {
+    const { root, stage } = specimenStage({ viewSize: 4.2, focusY: 2.1 });
+    const { drone } = spawnDrone(stage, 0, 0, args);
+    stage.onTick((dt) => (drone.rotation.y += dt * 0.6));
+    return root;
+  },
+};
+
 /** Problem / Stopped · Idle / Waiting · Working, side by side as in the reference. */
 export const StatusTrio: Story = {
   args: { showLabel: false },

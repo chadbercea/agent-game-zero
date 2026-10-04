@@ -12,7 +12,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { LINEAGE, type Lineage, NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
 import { at, solid } from '../../core/mesh';
 import { radialGlowTexture } from '../../core/textures';
-import { ARM_REACH, droneGeometry } from './geometry';
+import { ARM_REACH, droneGeometry, NOSE_LEAN, NOSE_Y, NOSE_Z } from './geometry';
 
 export interface DroneOptions {
   name?: string;
@@ -118,10 +118,11 @@ export class Drone extends Group {
     body.name = 'body';
     hover.add(body);
     body.add(solid(g.shell, shell));
-    // Lens sits into the front face, angled down toward an overhead viewer.
+    // Lens sits flush on the hull's raked nose face, which tips up toward an overhead viewer.
     const lens = new Group();
-    lens.position.set(0, -0.01, 0.47);
-    lens.rotation.x = 0.32;
+    lens.position.set(0, NOSE_Y, NOSE_Z - 0.01);
+    lens.rotation.x = -Math.atan(NOSE_LEAN); // tip up to sit flush on the raked nose
+    lens.scale.setScalar(0.72);
     lens.add(solid(g.lensHousing, bezel));
     const glassMesh = solid(g.lensGlass, glass);
     glassMesh.position.z = 0.062;
@@ -141,7 +142,7 @@ export class Drone extends Group {
       pivot.name = 'arm';
       pivot.position.y = -0.06;
       pivot.rotation.y = yaw;
-      pivot.add(solid(g.arm, graphite));
+      pivot.add(solid(g.arm, graphite), solid(g.shoulder, bezel));
 
       const pod = new Group();
       pod.position.x = ARM_REACH;
