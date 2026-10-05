@@ -19,9 +19,10 @@ const scale = new Vector3();
  * that follows the drone's status: a two-way conversation while working, a
  * one-shot into the base on stopping, quiet while waiting. The link only
  * speaks while the drone is actually over the base, so a drone flying in or
- * away stays quiet. Returns a function that removes it.
+ * away stays quiet. Returns the link (e.g. to keep it in Detail view) and a
+ * function that removes it.
  */
-export function attachSignal(stage: SceneHost, drone: Drone, over: Object3D): () => void {
+export function attachSignal(stage: SceneHost, drone: Drone, over: Object3D): { link: SignalLink; detach: () => void } {
   const link = new SignalLink();
   link.rotation.y = FACE_CAMERA;
   const animator = new SignalLinkAnimator(link);
@@ -39,8 +40,11 @@ export function attachSignal(stage: SceneHost, drone: Drone, over: Object3D): ()
     animator.active = Math.hypot(hover.x - base.x, hover.z - base.z) < DOCKED_WITHIN && over.visible;
     animator.update(dt);
   });
-  return () => {
-    untick();
-    link.dispose();
+  return {
+    link,
+    detach: () => {
+      untick();
+      link.dispose();
+    },
   };
 }

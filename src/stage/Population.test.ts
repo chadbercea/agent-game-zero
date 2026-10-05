@@ -39,6 +39,7 @@ function fakeSpawnAgent(_stage: unknown, x: number, z: number, options: SpawnOpt
   unit.add(hover);
   return {
     unit,
+    signal: new Object3D(),
     drone: { name: options.name, status: options.status ?? 'waiting', lineage: options.lineage, subAgent: Boolean(options.subAgent), rig: { hover } },
     despawn: vi.fn(),
   } as unknown as SpawnedAgent;
@@ -365,6 +366,18 @@ describe('Population Detail view', () => {
     stage.tick();
     expect(sent.find((s) => s.from === root)!.packet.trail.visible).toBe(true);
     expect(sent.find((s) => s.from === stranger)!.packet.trail.visible).toBe(false);
+  });
+
+  it("keeps the focused family's signal links in view, and no one else's", () => {
+    const { stage, population, spawn } = setup();
+    const root = spawn();
+    const child = spawn({ parent: root });
+    const stranger = spawn();
+    population.focus(root);
+    const members = stage.detail!();
+    expect(members).toContain(root.signal);
+    expect(members).toContain(child.signal);
+    expect(members).not.toContain(stranger.signal);
   });
 
   it('focus(undefined) returns to Runtime', () => {

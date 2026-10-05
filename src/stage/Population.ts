@@ -171,7 +171,8 @@ export class Population {
     // Membership is re-read every frame so new sub-agents and packets join the view.
     this.stage.setDetail(() => {
       const family = new Set(this.family(agent));
-      const members: Object3D[] = [...family].map((a) => a.unit);
+      // Each agent's unit plus its signal link, which lives outside the unit.
+      const members: Object3D[] = [...family].flatMap((a) => (a.signal ? [a.unit, a.signal] : [a.unit]));
       for (const [packet, { from }] of this.inFlight) if (family.has(from)) members.push(packet);
       for (const { connection, reveal } of this.connections) if (reveal.shown) members.push(connection);
       return members;
