@@ -19,10 +19,26 @@ const scale = new Vector3();
  * that follows the drone's status: a two-way conversation while working, a
  * one-shot into the base on stopping, quiet while waiting. The link only
  * speaks while the drone is actually over the base, so a drone flying in or
- * away stays quiet. Returns the link (e.g. to keep it in Detail view) and a
- * function that removes it.
+ * away stays quiet.
+ *
+ * Rule: where a job animation is showing at the base, the link stays silent;
+ * the job is the working signal there. With no job animation, the dots run.
+ * Pass `showsJob` for bases that can host a job.
+ *
+ * Returns the link (e.g. to keep it in Detail view) and a function that removes it.
  */
-export function attachSignal(stage: SceneHost, drone: Drone, over: Object3D): { link: SignalLink; detach: () => void } {
+export interface SignalOptions {
+  /** True while a job animation is showing at this base; the link is silent then. */
+  showsJob?: () => boolean;
+}
+
+export function attachSignal(
+  stage: SceneHost,
+  drone: Drone,
+  over: Object3D,
+  options: SignalOptions = {},
+): { link: SignalLink; detach: () => void } {
+  const showsJob = options.showsJob ?? (() => false);
   const link = new SignalLink();
   link.rotation.y = FACE_CAMERA;
   const animator = new SignalLinkAnimator(link);
@@ -37,7 +53,8 @@ export function attachSignal(stage: SceneHost, drone: Drone, over: Object3D): { 
     link.scale.setScalar(baseScale);
     link.top = (hover.y - base.y - ATTACH_BELOW_HOVER * scale.y) / baseScale;
     animator.status = drone.status;
-    animator.active = Math.hypot(hover.x - base.x, hover.z - base.z) < DOCKED_WITHIN && over.visible;
+    const docked = Math.hypot(hover.x - base.x, hover.z - base.z) < DOCKED_WITHIN && over.visible;
+    animator.active = docked && !showsJob();
     animator.update(dt);
   });
   return {

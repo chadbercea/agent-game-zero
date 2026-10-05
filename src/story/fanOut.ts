@@ -9,6 +9,7 @@ import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import type { SystemMap } from './SystemMap';
+import { attachSignal } from '../stage/attachSignal';
 import { shoot } from './beam';
 import { fly, tween, wait } from './timeline';
 
@@ -58,10 +59,17 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
 
       // Once arrived, the node mirrors its sub-agent's status; until then it stays off.
       let arrived = false;
-      const stop = stage.onTick((dt) => {
+      const sync = stage.onTick((dt) => {
         if (arrived) node.light = sub.drone.status;
         job.update(dt);
       });
+      // Its link to the node: silent while the job animation shows (the job is
+      // the working signal there), dots otherwise.
+      const signal = attachSignal(stage, sub.drone, node, { showsJob: () => job.visible });
+      const stop = () => {
+        sync();
+        signal.detach();
+      };
 
       // Bud: start at the parent's hover point, small, and settle down to cruise while growing.
       const budHover = HOVER_HEIGHT * SUB_AGENT_SCALE * BUD_SCALE;
