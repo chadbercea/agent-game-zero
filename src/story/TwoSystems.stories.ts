@@ -5,7 +5,7 @@ import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
 import { FACE_CAMERA } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { Stage } from '../stage/Stage';
-import { ACT1_GATE, ATLASSIAN_GATE, ATLASSIAN_MAP, STORY_CENTER } from './layout';
+import { ACT1_GATE, ACT1_MAP, ATLASSIAN_GATE, ATLASSIAN_MAP, STORY_CENTER } from './layout';
 import { SystemMap } from './SystemMap';
 
 const meta: Meta = {
@@ -33,7 +33,7 @@ export const Layout: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 18.5, focusY: 0 });
     stage.centerOn(STORY_CENTER);
-    new SystemMap(stage, gateAt(stage, ACT1_GATE), JOB_KINDS).showAll();
+    new SystemMap(stage, gateAt(stage, ACT1_GATE), JOB_KINDS, ACT1_MAP).showAll();
     new SystemMap(stage, gateAt(stage, ATLASSIAN_GATE), ATLASSIAN_KINDS, ATLASSIAN_MAP).showAll();
     return root;
   },

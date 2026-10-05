@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { GRID } from './grid';
 
-type Axis = 'x' | 'z';
+export type Axis = 'x' | 'z';
 const other = (axis: Axis): Axis => (axis === 'x' ? 'z' : 'x');
 
 /**
@@ -29,13 +29,13 @@ const other = (axis: Axis): Axis => (axis === 'x' ? 'z' : 'x');
  * Assumes all targets lie in the same quadrant from the origin and at
  * different distances along the bus axis (as the system map lays them out).
  */
-export function busRoutes(origin: Vector3, targets: Vector3[], laneSpacing = GRID): Vector3[][] {
+export function busRoutes(origin: Vector3, targets: Vector3[], laneSpacing = GRID, busAxis?: Axis): Vector3[][] {
   if (targets.length === 0) return [];
   const delta = (t: Vector3, axis: Axis) => t[axis] - origin[axis];
 
-  // 1. Bus axis: longest shared run wins; X on a tie.
+  // 1. Bus axis: as asked, else the longest shared run wins; X on a tie.
   const shared = (axis: Axis) => Math.min(...targets.map((t) => Math.abs(delta(t, axis))));
-  const bus: Axis = shared('z') > shared('x') ? 'z' : 'x';
+  const bus: Axis = busAxis ?? (shared('z') > shared('x') ? 'z' : 'x');
   const cross = other(bus);
   /** Which way traces turn off the bus (toward the targets along the cross axis). */
   const turnSign = Math.sign(delta(targets[0], cross)) || -1;

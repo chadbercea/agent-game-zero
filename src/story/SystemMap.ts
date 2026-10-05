@@ -1,6 +1,7 @@
 import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
-import { busRoutes } from '../core/busRoute';
-import { BEND_RADIUS, snapToGrid } from '../core/grid';
+import { type Axis, busRoutes } from '../core/busRoute';
+import { hashSeed, scatterSpots } from '../core/scatter';
+import { BEND_RADIUS, GRID, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
 import { GridPatch } from '../primitives/branch/GridPatch';
@@ -11,10 +12,13 @@ import { FACE_CAMERA } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 
 export interface SystemMapOptions {
-  /** How far behind the gate (on screen: straight above it) the middle node sits, per world axis. */
-  depth?: number;
-  /** How far apart neighbouring nodes sit across the screen, per world axis. */
-  spread?: number;
+  /** Layout seed: same seed, same scatter. Defaults to one derived from the kinds on the map. */
+  seed?: number;
+  /**
+   * Which way the traces leave the gate as a bus: 'x' runs up-left on screen,
+   * 'z' up-right. Point it away from neighbouring gates so maps never cross.
+   */
+  bus?: Axis;
 }
 
 const LINE_FADE = 3;
@@ -23,8 +27,8 @@ const BRANCH_INSET_NODE = 0.7;
 const LINE_OPACITY = 0.8;
 
 /**
- * The system behind a gate: one node per system, fanned out above the gate on
- * screen, each joined to the gate by a branch. Everything sits on the floor's
+ * The system behind a gate: one node per system, scattered in a loose seeded
+ * cluster behind the gate (see scatterSpots), each joined to the gate by a branch. Everything sits on the floor's
  * square grid: nodes snap to grid points, and branches are circuit-board
  * traces (see busRoutes) along the grid axes (the isometric diagonals on
  * screen): shortest routes that run in parallel and peel off one by one, with
@@ -58,15 +62,12 @@ export class SystemMap {
     kinds: readonly SystemKind[],
     options: SystemMapOptions = {},
   ) {
-    const { depth = 6, spread = 3 } = options;
     const origin = snapToGrid(gate.position);
-    // Nodes fan out up and back from the gate on screen (the −X−Z diagonal), spread across it.
-    const spots = kinds.map((_, i) => {
-      const slot = i - (kinds.length - 1) / 2;
-      return snapToGrid(new Vector3(origin.x - depth + slot * spread, 0, origin.z - depth - slot * spread));
-    });
+    const seed = options.seed ?? hashSeed(kinds.join());
+    // Nodes scatter up and back from the gate on screen (the −X−Z quadrant): loose, uneven, never a row.
+    const spots = scatterSpots(origin, kinds.length, { seed, bus: options.bus });
     // Circuit-board traces: shortest routes that share a parallel bus and peel off one by one.
-    const polylines = busRoutes(origin, spots);
+    const polylines = busRoutes(origin, spots, GRID, options.bus);
     kinds.forEach((kind, i) => {
       const polyline = polylines[i];
       const node = new SystemNode({ kind });

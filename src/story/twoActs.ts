@@ -7,7 +7,7 @@ import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
-import { ACT1_GATE, ATLASSIAN_GATE, ATLASSIAN_MAP, HOME } from './layout';
+import { ACT1_GATE, ACT1_MAP, ATLASSIAN_GATE, ATLASSIAN_MAP, HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
@@ -75,7 +75,7 @@ export function twoActScene(stage: SceneHost): TwoActScene {
   const gate2 = gateAt(ATLASSIAN_GATE);
   return {
     drone,
-    act1: { gate: gate1, map: new SystemMap(stage, gate1, JOB_KINDS), signal: attachSignal(stage, drone, gate1) },
+    act1: { gate: gate1, map: new SystemMap(stage, gate1, JOB_KINDS, ACT1_MAP), signal: attachSignal(stage, drone, gate1) },
     act2: {
       gate: gate2,
       map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, ATLASSIAN_MAP),
