@@ -9,15 +9,13 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   OctahedronGeometry,
-  PlaneGeometry,
   SphereGeometry,
   TorusGeometry,
 } from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { at, solid } from '../../core/mesh';
 import { NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
-import { radialGlowTexture } from '../../core/textures';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../drone/Drone';
+import { Pad } from '../pad/Pad';
 
 export interface TaskOptions {
   status?: Status;
@@ -46,12 +44,9 @@ export interface TaskRig {
   tetherMaterial: MeshBasicMaterial;
 }
 
-export const PAD_TOP = 0.28;
+export { FLOOR_GLOW_OPACITY, PAD_TOP, SCREEN_GLOW, SKIRT_GLOW } from '../pad/Pad';
 export const WORK_HEIGHT = 0.95;
 export const TETHER_MAX_DOTS = 32;
-export const SCREEN_GLOW = 1.6;
-export const SKIRT_GLOW = 1.3;
-export const FLOOR_GLOW_OPACITY = 0.42;
 
 const ORBIT_RADIUS = 0.36;
 const ORBIT_ARC = 2.3;
@@ -64,16 +59,7 @@ function buildGeometry() {
   // Seat the arrowhead at the arc's end, pointing along the direction of travel.
   head.rotateZ(ORBIT_ARC);
   head.translate(Math.cos(ORBIT_ARC) * ORBIT_RADIUS, Math.sin(ORBIT_ARC) * ORBIT_RADIUS, 0);
-  const floorGlow = new PlaneGeometry(3.4, 3.4);
-  floorGlow.rotateX(-Math.PI / 2);
-  const screen = new PlaneGeometry(0.46, 0.3);
-  screen.rotateX(-Math.PI / 2);
   return {
-    pad: new RoundedBoxGeometry(1.5, 0.24, 1.1, 3, 0.07),
-    skirt: new RoundedBoxGeometry(1.46, 0.05, 1.06, 2, 0.024),
-    bezel: new BoxGeometry(0.62, 0.02, 0.44),
-    screen,
-    floorGlow,
     cube: new BoxGeometry(0.3, 0.3, 0.3),
     glyphBar: new BoxGeometry(0.05, 0.13, 0.012),
     glyphDot: new BoxGeometry(0.05, 0.045, 0.012),
@@ -91,6 +77,7 @@ function buildGeometry() {
  */
 export class Task extends Group {
   readonly rig: TaskRig;
+  readonly pad: Pad;
   readonly subAgent: boolean;
   /** Top of the tether in local units; defaults to the underside of a hovering drone. */
   tetherTop = HOVER_HEIGHT - 0.42;
@@ -104,13 +91,9 @@ export class Task extends Group {
     this.subAgent = subAgent;
     const g = (shared ??= buildGeometry());
 
-    const shell = this.track(new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05 }));
-    const bezel = this.track(new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.4, metalness: 0.2 }));
-    const screenMaterial = this.track(new MeshStandardMaterial({ color: 0x111111, roughness: 0.3 }));
-    const skirtMaterial = this.track(new MeshStandardMaterial({ color: 0x111111, roughness: 0.3 }));
-    const glowMaterial = this.track(
-      new MeshBasicMaterial({ map: radialGlowTexture(), transparent: true, depthWrite: false, opacity: FLOOR_GLOW_OPACITY }),
-    );
+    this.pad = new Pad();
+    this.add(this.pad);
+    const { screenMaterial, skirtMaterial, glowMaterial } = this.pad;
     const cubeMaterial = this.track(
       new MeshStandardMaterial({ roughness: 0.35, metalness: 0, flatShading: true, transparent: true }),
     );
@@ -122,17 +105,6 @@ export class Task extends Group {
       new MeshStandardMaterial({ color: STATUS_COLOR.working, emissive: STATUS_COLOR.working, emissiveIntensity: 0.8, transparent: true, side: DoubleSide }),
     );
     const tetherMaterial = this.track(new MeshBasicMaterial({ transparent: true }));
-
-    // Floor glow sits just above the shadow catcher.
-    const glow = new Mesh(g.floorGlow, glowMaterial);
-    glow.position.y = 0.006;
-    glow.renderOrder = -1;
-    this.add(glow);
-
-    this.add(at(new Mesh(g.skirt, skirtMaterial), 0.035));
-    this.add(at(solid(g.pad, shell), 0.16));
-    this.add(at(solid(g.bezel, bezel), PAD_TOP + 0.002));
-    this.add(at(new Mesh(g.screen, screenMaterial), PAD_TOP + 0.014));
 
     // Work item.
     const work = new Group();
@@ -190,17 +162,14 @@ export class Task extends Group {
   dispose(): void {
     this.removeFromParent();
     this.rig.tether.dispose();
+    this.pad.dispose();
     for (const m of this.materials) m.dispose();
   }
 
   private applyStatus(): void {
     const color = STATUS_COLOR[this._status];
-    const { cubeMaterial, screenMaterial, skirtMaterial, glowMaterial, tetherMaterial } = this.rig;
-    screenMaterial.emissive.copy(color);
-    screenMaterial.emissiveIntensity = SCREEN_GLOW;
-    skirtMaterial.emissive.copy(color);
-    skirtMaterial.emissiveIntensity = SKIRT_GLOW;
-    glowMaterial.color.copy(color);
+    const { cubeMaterial, tetherMaterial } = this.rig;
+    this.pad.setColor(color);
     tetherMaterial.color.copy(color);
 
     // Stopped: solid alarm block. Waiting: pale translucent. Working: lit and glassy.

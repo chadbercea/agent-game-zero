@@ -34,6 +34,8 @@ export const NEUTRAL = {
   graphite: new Color('#3a3b40'),
   graphiteDark: new Color('#232428'),
   glass: new Color('#0d0e11'),
+  /** An unpowered light: gates that are off. */
+  offLight: new Color('#9aa0aa'),
   /** Packets are neutral: information, not identity. */
   packet: new Color('#8d9099'),
   backdrop: new Color('#ffffff'),
