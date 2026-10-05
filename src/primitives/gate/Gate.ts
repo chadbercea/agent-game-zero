@@ -23,6 +23,8 @@ let sweepGeometry: PlaneGeometry | undefined;
 
 export interface GateOptions {
   state?: GateState;
+  /** Whether the system behind this gate works as expected (green) or not (red). Default true. */
+  works?: boolean;
 }
 
 /**
@@ -36,11 +38,14 @@ export class Gate extends Group {
   /** Scanning bar across the screen (thinking). GateAnimator moves and fades it. */
   readonly sweep: Mesh;
   readonly sweepMaterial: MeshBasicMaterial;
+  /** Whether the system behind this gate works as expected. Access checks read it. */
+  works: boolean;
   private _state: GateState;
 
   constructor(options: GateOptions = {}) {
     super();
     this._state = options.state ?? 'off';
+    this.works = options.works ?? true;
     this.add(this.pad);
 
     if (!sweepGeometry) {
