@@ -30,3 +30,19 @@ export function fly(stage: Pick<SceneHost, 'onTick'>, flight: DroneFlight): Prom
     });
   });
 }
+
+/** Call `fn` with progress 0 → 1 over `seconds` of stage time, then resolve. */
+export function tween(stage: Pick<SceneHost, 'onTick'>, seconds: number, fn: (t: number) => void): Promise<void> {
+  fn(0);
+  return new Promise((resolve) => {
+    let elapsed = 0;
+    const untick = stage.onTick((dt) => {
+      elapsed += dt;
+      const t = Math.min(1, elapsed / seconds);
+      fn(t);
+      if (t < 1) return;
+      untick();
+      resolve();
+    });
+  });
+}
