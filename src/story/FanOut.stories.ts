@@ -45,7 +45,7 @@ export const FanOut: StoryObj = {
         await revealMap(stage, map);
         drone.status = 'waiting';
         const crew = await fanOut(stage, drone, map);
-        await work(stage, crew, drone);
+        await work(stage, crew);
         await wait(stage, 3);
         dismiss(crew);
         map.hide();

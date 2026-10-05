@@ -1,4 +1,4 @@
-import { CurvePath, LineCurve3, QuadraticBezierCurve3, Vector3 } from 'three';
+import { Curve, CurvePath, LineCurve3, QuadraticBezierCurve3, Vector3 } from 'three';
 
 /**
  * Turn an axis-aligned polyline (every segment along world X or Z, i.e. the
@@ -54,4 +54,19 @@ export function distanceToPolyline(x: number, z: number, points: Vector3[]): num
     best = Math.min(best, Math.hypot(x - cx, z - cz));
   }
   return best;
+}
+
+/** The same path traversed end to start (e.g. a branch ridden from node back to gate). */
+export function reversed(curve: Curve<Vector3>): Curve<Vector3> {
+  return new Reversed(curve);
+}
+
+class Reversed extends Curve<Vector3> {
+  constructor(private readonly curve: Curve<Vector3>) {
+    super();
+  }
+
+  override getPoint(t: number, target = new Vector3()): Vector3 {
+    return this.curve.getPoint(1 - t, target);
+  }
 }

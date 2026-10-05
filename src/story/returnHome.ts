@@ -1,21 +1,11 @@
-import { Curve, Mesh, Vector3 } from 'three';
+import { type Curve, Mesh, type Vector3 } from 'three';
 import { DroneFlight, FLIGHT_SPEED } from '../animation/DroneFlight';
 import { type Drone, HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { reversed } from '../primitives/branch/gridPath';
 import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import type { CrewMember } from './fanOut';
 import { fly, tween, wait } from './timeline';
-
-/** A curve traversed end to start, so a sub-agent can ride its branch home. */
-class Reversed extends Curve<Vector3> {
-  constructor(private readonly curve: Curve<Vector3>) {
-    super();
-  }
-
-  override getPoint(t: number, target = new Vector3()): Vector3 {
-    return this.curve.getPoint(1 - t, target);
-  }
-}
 
 /** Sub-agents shrink back to this fraction of their size as they dock into the parent. */
 const DOCK_SCALE = 0.25;
@@ -25,7 +15,7 @@ const CARRY_OFFSET = -0.8;
 /**
  * Return (story step 6): a sub-agent whose job is done picks up its work
  * product, rides its branch back, rises into the parent while shrinking,
- * delivers the product and despawns. Its node goes dark, the job clears and
+ * delivers the product and despawns; its branch line is then released to fade. Its node goes dark, the job clears and
  * the system's emblem comes back.
  */
 export async function returnHome(stage: SceneHost, member: CrewMember, parent: Drone, route: Curve<Vector3>): Promise<void> {
@@ -51,7 +41,7 @@ export async function returnHome(stage: SceneHost, member: CrewMember, parent: D
   })();
 
   // Ride home along the branch, docking up into the parent's body and shrinking on the last stretch.
-  const home = new Reversed(route);
+  const home = reversed(route);
   const seconds = home.getLength() / FLIGHT_SPEED;
   const dockHover = HOVER_HEIGHT * SUB_AGENT_SCALE * DOCK_SCALE;
   await Promise.all([
@@ -64,8 +54,9 @@ export async function returnHome(stage: SceneHost, member: CrewMember, parent: D
     })(),
   ]);
 
-  // Delivered.
+  // Delivered. Its branch line is free to fade now.
   sub.drone.rig.hover.remove(carried);
+  member.release();
   sub.despawn();
   await restore;
   job.dispose();

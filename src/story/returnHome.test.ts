@@ -44,6 +44,7 @@ describe('returnHome', () => {
     const subDrone = drone(nodeAt.x, nodeAt.z, SUB_AGENT_SCALE);
     const despawn = vi.fn();
     const stop = vi.fn();
+    const release = vi.fn();
     const emblem = new Group();
     emblem.visible = false;
     const node = { light: 'waiting' as string, emblem };
@@ -51,7 +52,7 @@ describe('returnHome', () => {
     const job = Object.assign(new Group(), { product, dispose: vi.fn() });
     job.add(product);
     const route = new QuadraticBezierCurve3(gateAt, new Vector3(-1, 0, -4), nodeAt);
-    const member = { sub: { drone: subDrone, despawn }, node, job, stop } as unknown as CrewMember;
+    const member = { sub: { drone: subDrone, despawn }, node, job, stop, release, route } as unknown as CrewMember;
 
     let done = false;
     void returnHome(stage, member, parent as never, route).then(() => (done = true));
@@ -61,6 +62,7 @@ describe('returnHome', () => {
     expect(product.visible).toBe(false);
     expect(node.light).toBe('off');
     expect(stop).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled(); // its line stays drawn while it's out
     expect(subDrone.status).toBe('working');
 
     await stage.run(8);
@@ -71,6 +73,7 @@ describe('returnHome', () => {
     expect(subDrone.scale.x).toBeLessThan(SUB_AGENT_SCALE * 0.5);
     expect(subDrone.rig.hover.children).toHaveLength(0); // product delivered
     expect(despawn).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce(); // home: the line may fade
     expect(job.dispose).toHaveBeenCalledOnce();
     expect(emblem.visible).toBe(true);
     expect(emblem.scale.x).toBeCloseTo(EMBLEM_SCALE);

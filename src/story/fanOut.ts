@@ -1,4 +1,6 @@
 import { DroneFlight } from '../animation/DroneFlight';
+import type { Curve, Vector3 } from 'three';
+import { reversed } from '../primitives/branch/gridPath';
 import type { Drone } from '../primitives/drone/Drone';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Job } from '../primitives/job/Job';
@@ -7,7 +9,7 @@ import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import type { SystemMap } from './SystemMap';
-import { beam } from './beam';
+import { shoot } from './beam';
 import { fly, tween, wait } from './timeline';
 
 /** One sub-agent sent to one system node, and the job it does there. */
@@ -15,8 +17,12 @@ export interface CrewMember {
   sub: SpawnedDrone;
   node: SystemNode;
   job: Job;
+  /** The sub-agent's branch, gate → node. Packets shoot back along it; the sub-agent rides it home. */
+  route: Curve<Vector3>;
   /** Stops the per-frame sync (job motion, node light). Called on return. */
   stop: () => void;
+  /** Let this member's branch line fade (it stays drawn while the sub-agent is out). */
+  release: () => void;
 }
 
 export const FAN_STAGGER = 0.35;
@@ -32,6 +38,8 @@ export const JOB_SECONDS = { figma: 5, github: 6, notion: 4.5 } as const;
  * starts mirroring its sub-agent's status.
  */
 export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): Promise<CrewMember[]> {
+  // Every branch with a sub-agent heading out stays drawn until that sub-agent is home.
+  map.nodes.forEach((_, i) => map.setActive(i, true));
   return Promise.all(
     map.nodes.map(async (node, i) => {
       await wait(stage, i * FAN_STAGGER);
@@ -67,7 +75,7 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
       job.visible = true;
       await tween(stage, 0.4, (t) => node.emblem.scale.setScalar(EMBLEM_SCALE * Math.max(0.001, 1 - t)));
       node.emblem.visible = false;
-      return { sub, node, job, stop };
+      return { sub, node, job, route: map.routes[i], stop, release: () => map.setActive(i, false) };
     }),
   );
 }
@@ -78,17 +86,18 @@ export const PACKET_INTERVAL = 1.4;
 /**
  * Work (story step 5, continued): one crew member does its system's job.
  * The job builds its visual and ends by producing the work product; while
- * working, the sub-agent beams progress packets back to the parent.
+ * working, progress packets shoot back along the branch into the gate.
  */
-export async function workOne(stage: SceneHost, member: CrewMember, parent: Drone): Promise<void> {
+export async function workOne(stage: SceneHost, member: CrewMember): Promise<void> {
   const { sub, job } = member;
   sub.drone.status = 'working';
-  let sinceBeam = PACKET_INTERVAL * 0.5;
+  const backToGate = reversed(member.route);
+  let sinceShot = PACKET_INTERVAL * 0.5;
   const untick = stage.onTick((dt) => {
-    sinceBeam += dt;
-    if (sinceBeam < PACKET_INTERVAL) return;
-    sinceBeam = 0;
-    void beam(stage, sub.drone.rig.hover, parent.rig.hover);
+    sinceShot += dt;
+    if (sinceShot < PACKET_INTERVAL) return;
+    sinceShot = 0;
+    void shoot(stage, backToGate);
   });
   await tween(stage, JOB_SECONDS[job.kind], (t) => (job.progress = t));
   untick();
@@ -96,14 +105,15 @@ export async function workOne(stage: SceneHost, member: CrewMember, parent: Dron
 }
 
 /** Every crew member works at once; resolves when the last job is done. */
-export async function work(stage: SceneHost, crew: CrewMember[], parent: Drone): Promise<void> {
-  await Promise.all(crew.map((member) => workOne(stage, member, parent)));
+export async function work(stage: SceneHost, crew: CrewMember[]): Promise<void> {
+  await Promise.all(crew.map((member) => workOne(stage, member)));
 }
 
 /** Clear a crew without the return trip (story resets). Restores the nodes. */
 export function dismiss(crew: CrewMember[]): void {
-  for (const { sub, node, job, stop } of crew) {
+  for (const { sub, node, job, stop, release } of crew) {
     stop();
+    release();
     sub.despawn();
     job.dispose();
     node.emblem.visible = true;

@@ -45,7 +45,7 @@ export async function runJob(
   onStep('working');
   await Promise.all(
     crew.map(async (member, i) => {
-      await workOne(stage, member, drone);
+      await workOne(stage, member);
       await returnHome(stage, member, drone, map.routes[i]);
     }),
   );
