@@ -64,6 +64,18 @@ describe('busRoutes', () => {
     }
   });
 
+  it('keeps every lane on a grid line, even with four traces', () => {
+    const four = busRoutes(v(11.5, -7.5), [v(1, -3), v(3.5, -5.5), v(6, -8), v(8.5, -10.5)]);
+    for (const route of four) {
+      for (const p of route) {
+        expect(Math.abs(p.x / GRID - Math.round(p.x / GRID))).toBeLessThan(1e-9);
+        expect(Math.abs(p.z / GRID - Math.round(p.z / GRID))).toBeLessThan(1e-9);
+      }
+    }
+    const lanes = four.map((r) => r[1].z).sort((a, b) => a - b);
+    for (let k = 1; k < lanes.length; k++) expect(lanes[k] - lanes[k - 1]).toBeCloseTo(GRID, 9);
+  });
+
   it('picks the axis with the longer shared run for the bus', () => {
     // Targets that all need a long −Z run but little −X: the bus should run along Z.
     const tall = busRoutes(v(0, 0), [v(-1, -8), v(-3, -9)]);

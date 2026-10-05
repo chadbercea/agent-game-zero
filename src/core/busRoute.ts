@@ -46,8 +46,9 @@ export function busRoutes(origin: Vector3, targets: Vector3[], laneSpacing = GRI
     .sort((a, b) => a.peel - b.peel);
   const lanes = new Map<number, number>();
   order.forEach(({ i }, k) => {
-    // Lanes are centered on the origin; k = 0 sits furthest toward the turn side.
-    const centered = (order.length - 1) / 2 - k;
+    // Lanes sit around the origin, on whole lane steps so they stay on grid lines
+    // (an even count leans one lane to the far side); k = 0 is furthest toward the turn side.
+    const centered = Math.floor((order.length - 1) / 2) - k;
     lanes.set(i, turnSign * centered * laneSpacing);
   });
 

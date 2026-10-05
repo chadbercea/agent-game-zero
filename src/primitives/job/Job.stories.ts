@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
-import { SYSTEM_KINDS, type SystemKind } from '../node/emblems';
+import { JOB_KINDS, type JobKind } from '../node/emblems';
 import { SystemNode } from '../node/SystemNode';
 import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { rowPosition, specimenStage } from '../../stage/specimen';
@@ -22,8 +22,8 @@ export default meta;
 export const Jobs: StoryObj<JobArgs> = {
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 4.5, focusY: 0.5 });
-    const jobs = SYSTEM_KINDS.map((kind, i) => {
-      const { x, z } = rowPosition(i, SYSTEM_KINDS.length, 2.4);
+    const jobs = JOB_KINDS.map((kind, i) => {
+      const { x, z } = rowPosition(i, JOB_KINDS.length, 2.4);
       const node = new SystemNode({ kind });
       node.position.set(x, 0, z);
       node.rotation.y = FACE_CAMERA;
@@ -48,8 +48,8 @@ export const Jobs: StoryObj<JobArgs> = {
 };
 
 /** One job up close, looping: pick the system. */
-export const Single: StoryObj<JobArgs & { kind: SystemKind }> = {
-  argTypes: { kind: { control: 'inline-radio', options: SYSTEM_KINDS } },
+export const Single: StoryObj<JobArgs & { kind: JobKind }> = {
+  argTypes: { kind: { control: 'inline-radio', options: JOB_KINDS } },
   args: { kind: 'figma', seconds: 6 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 1.8, focusY: 0.6 });

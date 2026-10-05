@@ -15,10 +15,10 @@ import {
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { at, solid } from '../../core/mesh';
 import { NEUTRAL, STATUS_COLOR } from '../../core/palette';
-import type { SystemKind } from '../node/emblems';
+import type { JobKind } from '../node/emblems';
 
 /** What each system's job is, in words (labels, logs). */
-export const JOB_TITLE: Record<SystemKind, string> = {
+export const JOB_TITLE: Record<JobKind, string> = {
   figma: 'Reference the design → write a report',
   github: 'Create a branch → git init',
   notion: 'Read the PRD',
@@ -36,7 +36,7 @@ export const PRODUCT_OFFSET = { x: 0.42, y: 0.55, z: 0.12 } as const;
  * - Notion: pages stack up, one after another
  */
 export class Job extends Group {
-  readonly kind: SystemKind;
+  readonly kind: JobKind;
   /** The work product: appears when the job completes; carried home on return. */
   readonly product: Mesh;
   private _progress = 0;
@@ -44,7 +44,7 @@ export class Job extends Group {
   private readonly materials: Material[] = [];
   private readonly build: (progress: number, time: number) => void;
 
-  constructor(kind: SystemKind) {
+  constructor(kind: JobKind) {
     super();
     this.kind = kind;
     this.name = `job:${kind}`;

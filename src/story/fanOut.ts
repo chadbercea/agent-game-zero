@@ -4,6 +4,7 @@ import { reversed } from '../primitives/branch/gridPath';
 import type { Drone } from '../primitives/drone/Drone';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Job } from '../primitives/job/Job';
+import { hasJob } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
@@ -51,6 +52,7 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
         status: 'working',
       });
       sub.drone.rotation.y = FACE_CAMERA;
+      if (!hasJob(node.kind)) throw new Error(`fanOut: ${node.kind} has no job animation (Atlassian fan-out is ILI-913)`);
       const job = new Job(node.kind);
       job.position.copy(node.position);
       job.rotation.y = FACE_CAMERA;

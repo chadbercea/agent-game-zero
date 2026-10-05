@@ -102,6 +102,14 @@ export class SystemMap {
     for (const branch of this.branches) branch.drawn = 0;
   }
 
+  /** Show the whole map at once (specimens and layout checks), lines included. */
+  showAll(): void {
+    this.nodes.forEach((_, i) => this.setRise(i, 1));
+    for (const branch of this.branches) branch.drawn = 1;
+    this.revealed = true;
+    this.linesVisible = true;
+  }
+
   /** Set how far node `i` has risen out of the floor (0–1). */
   setRise(i: number, rise: number): void {
     const node = this.nodes[i];

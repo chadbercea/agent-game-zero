@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
-import { SYSTEM_KINDS } from '../primitives/node/emblems';
+import { JOB_KINDS } from '../primitives/node/emblems';
 import { Stage } from '../stage/Stage';
 import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { hoverLines } from '../story/hoverLines';
@@ -28,7 +28,7 @@ const gateAnimator = new GateAnimator(gate);
 stage.add(gate);
 stage.onTick((dt) => gateAnimator.update(dt));
 
-const map = new SystemMap(stage, gate, SYSTEM_KINDS);
+const map = new SystemMap(stage, gate, JOB_KINDS);
 hoverLines(stage, map);
 
 const HOME = new Vector3(-1.8, 0, 5);

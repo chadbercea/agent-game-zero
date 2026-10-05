@@ -3,7 +3,7 @@ import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
-import { SYSTEM_KINDS } from '../primitives/node/emblems';
+import { JOB_KINDS } from '../primitives/node/emblems';
 import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import { hoverLines } from './hoverLines';
@@ -32,7 +32,7 @@ export const Return: StoryObj = {
     const gateAnimator = new GateAnimator(gate);
     stage.add(gate);
     stage.onTick((dt) => gateAnimator.update(dt));
-    const map = new SystemMap(stage, gate, SYSTEM_KINDS);
+    const map = new SystemMap(stage, gate, JOB_KINDS);
     hoverLines(stage, map);
 
     const home = new Vector3(-1.8, 0, 5);
