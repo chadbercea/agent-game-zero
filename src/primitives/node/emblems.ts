@@ -60,13 +60,24 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     place(solid(new TubeGeometry(fork, 12, 0.022, 6), m.graphite), 0, 0);
     place(solid(commit, m.shell), 0.12, 0.17);
   } else {
-    // Docs: a small stack of pages, the top one ruled with lines of text.
-    const page = new BoxGeometry(0.34, 0.42, 0.03);
-    place(solid(page, m.shell), 0.03, -0.02, -0.05);
-    place(solid(page, m.shell), 0, 0, 0);
-    const line = new BoxGeometry(0.22, 0.025, 0.012);
-    for (let i = 0; i < 4; i++) place(solid(line, m.graphite), -0.02 + (i === 3 ? -0.03 : 0), 0.12 - i * 0.075, 0.02);
-    place(solid(new BoxGeometry(0.08, 0.08, 0.012), m.graphite), -0.08, -0.15, 0.02);
+    // Docs: a small stack of ruled pages, the same pages the Notion job stacks up.
+    const stack = new Group();
+    stack.rotation.x = 0.95; // tipped toward the viewer so the top page reads
+    emblem.add(stack);
+    const page = new BoxGeometry(0.34, 0.014, 0.42);
+    [0, 1, 2].forEach((i) => {
+      const sheet = solid(page, m.shell);
+      sheet.position.y = -0.03 + i * 0.026;
+      sheet.rotation.y = (i - 1) * 0.07;
+      stack.add(sheet);
+    });
+    const line = new BoxGeometry(0.22, 0.006, 0.026);
+    for (let i = 0; i < 4; i++) {
+      const rule = solid(line, m.graphite);
+      rule.scale.x = i === 3 ? 0.6 : 1;
+      rule.position.set(i === 3 ? -0.044 : 0, 0.03, -0.12 + i * 0.08);
+      stack.add(rule);
+    }
   }
   return emblem;
 }
