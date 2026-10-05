@@ -44,7 +44,7 @@ interface InFlight {
  * Packets stay inside a lineage, so a standalone agent (no parent, no
  * sub-agents) is silent by design (ILI-874).
  *
- * Dotted lines (task tethers, packet trails, connections) only appear in
+ * Dotted lines (packet trails, connections) only appear in
  * Detail, and only for the focused lineage. Runtime shows no lines.
  */
 export class Population {
@@ -77,7 +77,6 @@ export class Population {
       subAgent: Boolean(parent),
       arrival: parent ? { kind: 'emerge', from: parent.drone.rig.hover } : { kind: 'descend' },
     });
-    agent.task.rig.tether.visible = false; // revealed by tick() if its lineage is focused
     if (parent) this.parents.set(agent, parent);
     this.agents.push(agent);
     this.lastStatus.set(agent, agent.drone.status);
@@ -213,7 +212,6 @@ export class Population {
     }
 
     const family = new Set(this.focused ? this.family(this.focused) : []);
-    for (const agent of this.agents) agent.task.rig.tether.visible = family.has(agent);
     for (const [packet, { from }] of this.inFlight) packet.trail.visible = family.has(from);
 
     for (const live of this.connections) live.reveal.update(dt);

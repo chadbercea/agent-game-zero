@@ -4,18 +4,19 @@ import { MathUtils, type Object3D, Vector3 } from 'three';
 export type Arrival =
   /** Appear immediately (specimens, tests). */
   | { kind: 'instant' }
-  /** Top-level agents: drop in from above while the task pad rises. */
+  /** Top-level agents: drop in from above while their gate rises. */
   | { kind: 'descend' }
   /** Sub-agents: fly out of the parent drone (`from`, tracked live) to their own spot. */
   | { kind: 'emerge'; from: Object3D };
 
-/** The parts of a drone + task pair that an arrival moves. */
+/** The parts of a drone + gate pair that an arrival moves. */
 export interface ArrivalTarget {
   /** Drone root; arrivals offset and scale it. Animators below it are untouched. */
   drone: Object3D;
   /** Point on the drone the emerge path is measured to (its hover rig). */
   hover: Object3D;
-  task: Object3D;
+  /** What the drone stands over (its gate); rises out of the floor on arrival. */
+  base: Object3D;
 }
 
 export const EMERGE_DURATION = 1.1;
@@ -29,15 +30,15 @@ const fromLocal = new Vector3();
 const hoverNow = new Vector3();
 
 /**
- * Plays an agent's arrival by offsetting and scaling the drone and task roots
- * only. DroneAnimator and TaskAnimator keep running underneath, so the drone
+ * Plays an agent's arrival by offsetting and scaling the drone and base roots
+ * only. The drone's and gate's animators keep running underneath, so the drone
  * is already hovering in its status motion as it arrives.
  */
 export class ArrivalAnimator {
   private elapsed = 0;
   private readonly duration: number;
   private readonly droneScale: number;
-  private readonly taskScale: number;
+  private readonly baseScale: number;
   /** Hover point's offset from the drone origin at rest, in the drone's parent space. */
   private readonly hoverRest = new Vector3();
   done = false;
@@ -47,7 +48,7 @@ export class ArrivalAnimator {
     private readonly arrival: Arrival,
   ) {
     this.droneScale = target.drone.scale.x;
-    this.taskScale = target.task.scale.x;
+    this.baseScale = target.base.scale.x;
     this.duration = arrival.kind === 'emerge' ? EMERGE_DURATION : arrival.kind === 'descend' ? DESCEND_DURATION : 0;
     target.drone.updateWorldMatrix(true, true);
     target.hover.getWorldPosition(this.hoverRest);
@@ -60,7 +61,7 @@ export class ArrivalAnimator {
     if (this.done) return;
     this.elapsed += dt;
     const t = this.duration > 0 ? MathUtils.clamp(this.elapsed / this.duration, 0, 1) : 1;
-    const { drone, task } = this.target;
+    const { drone, base } = this.target;
 
     if (this.arrival.kind === 'emerge') {
       // Hover point travels from the parent's current hover point to its own rest
@@ -79,14 +80,14 @@ export class ArrivalAnimator {
 
     // The pad rises out of the floor over the second half, with a little overshoot.
     const pad = this.arrival.kind === 'instant' ? 1 : easeOutBack(MathUtils.clamp((t - 0.35) / 0.65, 0, 1));
-    task.scale.set(this.taskScale, this.taskScale * Math.max(pad, 0.001), this.taskScale);
-    task.visible = pad > 0.001;
+    base.scale.set(this.baseScale, this.baseScale * Math.max(pad, 0.001), this.baseScale);
+    base.visible = pad > 0.001;
 
     if (t >= 1) {
       drone.position.set(0, 0, 0);
       drone.scale.setScalar(this.droneScale);
-      task.scale.setScalar(this.taskScale);
-      task.visible = true;
+      base.scale.setScalar(this.baseScale);
+      base.visible = true;
       this.done = true;
     }
   }

@@ -59,7 +59,7 @@ export const HALO_OPACITY = 0.45;
 
 /**
  * Drone primitive. Its origin sits on the floor directly beneath it, which is
- * where its Task will live; the body hovers above at HOVER_HEIGHT.
+ * on whatever it stands over (a gate or node); the body hovers above at HOVER_HEIGHT.
  *
  * Front of the drone (the lens) faces local +Z.
  */

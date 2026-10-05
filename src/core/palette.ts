@@ -1,6 +1,6 @@
 import { Color } from 'three';
 
-/** Stoplight status. Every status pairs a color with drone + task motion. */
+/** Stoplight status. Every status pairs a color with drone motion and the light of what it stands over. */
 export type Status = 'working' | 'waiting' | 'stopped';
 
 export const STATUSES: readonly Status[] = ['stopped', 'waiting', 'working'];

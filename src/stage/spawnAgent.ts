@@ -1,14 +1,12 @@
 import { Group } from 'three';
 import { type Arrival, ArrivalAnimator } from '../animation/ArrivalAnimator';
 import { DroneAnimator } from '../animation/DroneAnimator';
-import { TaskAnimator } from '../animation/TaskAnimator';
-import { Drone, type DroneOptions } from '../primitives/drone/Drone';
-import { Task } from '../primitives/task/Task';
+import { GateAnimator } from '../animation/GateAnimator';
+import type { Status } from '../core/palette';
+import { Drone, type DroneOptions, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { Gate, type GateState } from '../primitives/gate/Gate';
 import type { SceneHost } from './Stage';
 import { FACE_CAMERA } from './spawnDrone';
-
-/** Distance from the drone's hover origin down to where the tether meets it. */
-const TETHER_ATTACH = 0.42;
 
 export interface SpawnOptions extends DroneOptions {
   /** How the agent enters the scene. Defaults to instant. */
@@ -16,15 +14,26 @@ export interface SpawnOptions extends DroneOptions {
 }
 
 export interface SpawnedAgent {
-  /** Root of the drone + task pair; position and select by this. */
+  /** Root of the drone + gate pair; position and select by this. */
   unit: Group;
   drone: Drone;
-  task: Task;
+  /** The gate the drone is working through (the task box, in the gate model). */
+  gate: Gate;
   despawn: () => void;
 }
 
 /**
- * A drone hovering over its task. The drone owns status; the task mirrors it
+ * How a gate reads the drone over it: working = open (green), waiting = off
+ * (gray, nothing happening), stopped = denied (red).
+ */
+export const GATE_FOR_STATUS: Record<Status, GateState> = {
+  working: 'open',
+  waiting: 'off',
+  stopped: 'denied',
+};
+
+/**
+ * A drone hovering over a gate. The drone owns status; the gate mirrors it
  * every frame, so status changes only ever go through `drone.status`.
  */
 export function spawnAgent(stage: SceneHost, x: number, z: number, options: SpawnOptions = {}): SpawnedAgent {
@@ -33,21 +42,19 @@ export function spawnAgent(stage: SceneHost, x: number, z: number, options: Spaw
   unit.rotation.y = FACE_CAMERA;
 
   const drone = new Drone(options);
-  const task = new Task({ status: drone.status, subAgent: options.subAgent });
-  unit.add(task, drone);
+  const gate = new Gate({ state: GATE_FOR_STATUS[drone.status] });
+  if (options.subAgent) gate.scale.setScalar(SUB_AGENT_SCALE);
+  unit.add(gate, drone);
 
-  // Shared seed: lens and screen blink in step.
-  const seed = Math.random();
-  const droneAnimator = new DroneAnimator(drone, seed);
-  const taskAnimator = new TaskAnimator(task, seed);
+  const droneAnimator = new DroneAnimator(drone);
+  const gateAnimator = new GateAnimator(gate);
   stage.add(unit);
-  const arrival = new ArrivalAnimator({ drone, hover: drone.rig.hover, task }, options.arrival ?? { kind: 'instant' });
+  const arrival = new ArrivalAnimator({ drone, hover: drone.rig.hover, base: gate }, options.arrival ?? { kind: 'instant' });
 
   const tick = (dt: number) => {
     droneAnimator.update(dt);
-    task.status = drone.status;
-    task.tetherTop = drone.rig.hover.position.y - TETHER_ATTACH;
-    taskAnimator.update(dt);
+    gate.state = GATE_FOR_STATUS[drone.status];
+    gateAnimator.update(dt);
     arrival.update(dt);
   };
   tick(0);
@@ -56,11 +63,11 @@ export function spawnAgent(stage: SceneHost, x: number, z: number, options: Spaw
   return {
     unit,
     drone,
-    task,
+    gate,
     despawn: () => {
       untick();
       drone.dispose();
-      task.dispose();
+      gate.dispose();
       unit.removeFromParent();
     },
   };

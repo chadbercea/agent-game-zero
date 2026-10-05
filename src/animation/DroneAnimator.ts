@@ -16,7 +16,7 @@ interface MotionProfile {
 }
 
 const PROFILES: Record<Status, MotionProfile> = {
-  // Spin loop: fast rotors, tight busy bob, arms working in sequence, leaning into the task.
+  // Spin loop: fast rotors, tight busy bob, arms working in sequence, leaning into the work.
   working: { rotorSpeed: 42, hoverOffset: 0, bobAmplitude: 0.035, bobPeriod: 0.7, armFlex: 0.09, armDroop: 0, pitch: 0.1, scan: 0.06 },
   // Hover low → hover high: calm, slow, level. Nothing is wrong.
   waiting: { rotorSpeed: 26, hoverOffset: 0.05, bobAmplitude: 0.16, bobPeriod: 3.2, armFlex: 0.02, armDroop: 0.03, pitch: 0, scan: 0 },

@@ -2,7 +2,7 @@ import { Group, Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { ArrivalAnimator, DESCEND_DURATION, EMERGE_DURATION } from './ArrivalAnimator';
 
-/** A unit like spawnAgent builds: drone (with a hover point above it) and task, both at the unit origin. */
+/** A unit like spawnAgent builds: drone (with a hover point above it) and its gate, both at the unit origin. */
 function unitAt(x: number, z: number, droneScale = 1) {
   const unit = new Group();
   unit.position.set(x, 0, z);
@@ -12,11 +12,11 @@ function unitAt(x: number, z: number, droneScale = 1) {
   const hover = new Object3D();
   hover.position.y = 2;
   drone.add(hover);
-  const task = new Group();
-  task.scale.setScalar(droneScale);
-  unit.add(drone, task);
+  const base = new Group();
+  base.scale.setScalar(droneScale);
+  unit.add(drone, base);
   unit.updateMatrixWorld(true);
-  return { unit, drone, hover, task };
+  return { unit, drone, hover, base };
 }
 
 const world = (o: Object3D) => {
@@ -33,7 +33,7 @@ describe('ArrivalAnimator', () => {
 
     expect(world(child.hover).distanceTo(world(parent.hover))).toBeLessThan(1e-6);
     expect(child.drone.scale.x).toBeLessThan(0.58);
-    expect(child.task.visible).toBe(false);
+    expect(child.base.visible).toBe(false);
 
     anim.update(EMERGE_DURATION / 2);
     const mid = world(child.hover);
@@ -44,8 +44,8 @@ describe('ArrivalAnimator', () => {
     expect(anim.done).toBe(true);
     expect(world(child.hover).distanceTo(rest)).toBeLessThan(1e-6);
     expect(child.drone.scale.x).toBeCloseTo(0.58);
-    expect(child.task.scale.y).toBeCloseTo(0.58);
-    expect(child.task.visible).toBe(true);
+    expect(child.base.scale.y).toBeCloseTo(0.58);
+    expect(child.base.visible).toBe(true);
   });
 
   it('emerge follows a parent that moves mid-flight', () => {
@@ -65,7 +65,7 @@ describe('ArrivalAnimator', () => {
     anim.update(DESCEND_DURATION);
     expect(anim.done).toBe(true);
     expect(agent.drone.position.length()).toBe(0);
-    expect(agent.task.scale.y).toBe(1);
+    expect(agent.base.scale.y).toBe(1);
   });
 
   it('instant is done immediately and leaves everything at rest', () => {
@@ -74,6 +74,6 @@ describe('ArrivalAnimator', () => {
     expect(anim.done).toBe(true);
     expect(agent.drone.position.length()).toBe(0);
     expect(agent.drone.scale.x).toBeCloseTo(0.58);
-    expect(agent.task.visible).toBe(true);
+    expect(agent.base.visible).toBe(true);
   });
 });

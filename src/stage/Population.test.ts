@@ -28,7 +28,7 @@ function fakeStage() {
   return stage satisfies DetailHost;
 }
 
-/** Agents with just the fields Population reads: unit, drone status/lineage/hover, task tether. */
+/** Agents with just the fields Population reads: unit, drone status/lineage/hover. */
 const spawnCalls: SpawnOptions[] = [];
 
 function fakeSpawnAgent(_stage: unknown, x: number, z: number, options: SpawnOptions): SpawnedAgent {
@@ -40,7 +40,6 @@ function fakeSpawnAgent(_stage: unknown, x: number, z: number, options: SpawnOpt
   return {
     unit,
     drone: { name: options.name, status: options.status ?? 'waiting', lineage: options.lineage, subAgent: Boolean(options.subAgent), rig: { hover } },
-    task: { rig: { tether: { visible: true } } },
     despawn: vi.fn(),
   } as unknown as SpawnedAgent;
 }
@@ -353,21 +352,17 @@ describe('Population Detail view', () => {
   it('shows dotted lines only for the focused family', () => {
     const { stage, population, sent, spawn, setStatus } = setup();
     const root = spawn();
-    const child = spawn({ parent: root });
+    spawn({ parent: root });
     const stranger = spawn();
     spawn({ parent: stranger });
 
     setStatus(root, 'working');
     setStatus(stranger, 'working');
     stage.tick();
-    expect([root, child, stranger].every((a) => !a.task.rig.tether.visible)).toBe(true);
     expect(sent.every((s) => !s.packet.trail.visible)).toBe(true);
 
     population.focus(root);
     stage.tick();
-    expect(root.task.rig.tether.visible).toBe(true);
-    expect(child.task.rig.tether.visible).toBe(true);
-    expect(stranger.task.rig.tether.visible).toBe(false);
     expect(sent.find((s) => s.from === root)!.packet.trail.visible).toBe(true);
     expect(sent.find((s) => s.from === stranger)!.packet.trail.visible).toBe(false);
   });

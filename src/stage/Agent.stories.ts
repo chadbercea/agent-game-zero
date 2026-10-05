@@ -25,7 +25,7 @@ export default meta;
 
 type Story = StoryObj<AgentArgs>;
 
-/** A drone hovering over its task. Status flows from the drone to the task. */
+/** A drone hovering over its gate. The gate reads the drone: working = open, waiting = off, stopped = denied. */
 export const Specimen: Story = {
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 4.6, focusY: 1.3 });
@@ -46,7 +46,7 @@ export const StatusTrio: Story = {
   },
 };
 
-/** One agent stepping through every status, drone and task together. */
+/** One agent stepping through every status, drone and gate together. */
 export const Transitions: Story = {
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 4.6, focusY: 1.3 });
