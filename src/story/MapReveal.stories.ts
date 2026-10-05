@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
+import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
@@ -45,6 +46,7 @@ export const Reveal: Story = {
 
     const home = new Vector3(-1.8, 0, 5);
     const { drone } = spawnDrone(stage, home.x, home.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
+    attachSignal(stage, drone, gate);
     void (async () => {
       for (;;) {
         await wait(stage, 1);

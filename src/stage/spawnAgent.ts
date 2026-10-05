@@ -5,6 +5,7 @@ import { GateAnimator } from '../animation/GateAnimator';
 import type { Status } from '../core/palette';
 import { Drone, type DroneOptions, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate, type GateState } from '../primitives/gate/Gate';
+import { attachSignal } from './attachSignal';
 import type { SceneHost } from './Stage';
 import { FACE_CAMERA } from './spawnDrone';
 
@@ -59,6 +60,8 @@ export function spawnAgent(stage: SceneHost, x: number, z: number, options: Spaw
   };
   tick(0);
   const untick = stage.onTick(tick);
+  // The drone ↔ gate signal link: conversation while working, one-shot on stopping, quiet while waiting.
+  const detachSignal = attachSignal(stage, drone, gate);
 
   return {
     unit,
@@ -66,6 +69,7 @@ export function spawnAgent(stage: SceneHost, x: number, z: number, options: Spaw
     gate,
     despawn: () => {
       untick();
+      detachSignal();
       drone.dispose();
       gate.dispose();
       unit.removeFromParent();

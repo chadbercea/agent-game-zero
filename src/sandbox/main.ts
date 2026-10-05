@@ -1,3 +1,4 @@
+import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { DroneFlight } from '../animation/DroneFlight';
@@ -32,6 +33,7 @@ hoverLines(stage, map);
 
 const HOME = new Vector3(-1.8, 0, 5);
 const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
+attachSignal(stage, drone, gate);
 
 // Caption: what the story is doing right now.
 const caption = document.getElementById('caption')!;

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
+import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
@@ -32,6 +33,7 @@ function scene(stage: Stage, works: boolean) {
   stage.add(gate);
   stage.onTick((dt) => gateAnimator.update(dt));
   const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
+  attachSignal(stage, drone, gate);
   return { gate, drone };
 }
 
