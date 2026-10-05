@@ -65,6 +65,8 @@ export class Stage implements DetailHost {
   readonly camera: OrthographicCamera;
   readonly renderer: WebGLRenderer;
   readonly controls: OrbitControls;
+  /** Playback speed for everything driven by the stage clock (1 = real time). */
+  timeScale = 1;
 
   private readonly container: HTMLElement;
   private readonly labels = new CSS2DRenderer();
@@ -189,7 +191,7 @@ export class Stage implements DetailHost {
 
   private loop(): void {
     this.timer.update();
-    const dt = Math.min(this.timer.getDelta(), 1 / 20);
+    const dt = Math.min(this.timer.getDelta(), 1 / 20) * this.timeScale;
     const elapsed = this.timer.getElapsed();
     for (const tick of this.ticks) tick(dt, elapsed);
     this.controls.update();

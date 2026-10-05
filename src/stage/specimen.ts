@@ -19,6 +19,8 @@ export function specimenStage(options: StageOptions & { focusY?: number } = {}):
   const stage = new Stage(root, options);
   stage.centerOn(new Vector3(0, options.focusY ?? 1.7, 0));
   current = stage;
+  // Handy from the browser console (and for automated captures): __stage.timeScale = 4.
+  Object.assign(window, { __stage: stage });
   return { root, stage };
 }
 

@@ -114,6 +114,38 @@ export async function workOne(stage: SceneHost, member: CrewMember): Promise<voi
   sub.drone.status = 'waiting';
 }
 
+/**
+ * Keep working (Act 2): a crew member's job loops instead of finishing for
+ * good. It builds to its work product, holds a beat, and starts again, with
+ * the sub-agent green throughout and packets streaming back along its branch.
+ * Returns a function that ends the loop, leaving the work product showing
+ * (ready to be carried home).
+ */
+export function keepWorking(stage: SceneHost, member: CrewMember): () => void {
+  const { sub, job } = member;
+  sub.drone.status = 'working';
+  const backToGate = reversed(member.route);
+  const seconds = JOB_SECONDS[job.kind];
+  let t = job.progress >= 1 ? -HOLD_SECONDS : 0;
+  let sinceShot = PACKET_INTERVAL * 0.5;
+  const untick = stage.onTick((dt) => {
+    t += dt;
+    if (t > seconds + HOLD_SECONDS) t = 0;
+    job.progress = Math.max(0, t) / seconds;
+    sinceShot += dt;
+    if (sinceShot < PACKET_INTERVAL) return;
+    sinceShot = 0;
+    void shoot(stage, backToGate);
+  });
+  return () => {
+    untick();
+    job.progress = 1;
+  };
+}
+
+/** How long a looping job holds its finished work product before starting over. */
+const HOLD_SECONDS = 1.6;
+
 /** Every crew member works at once; resolves when the last job is done. */
 export async function work(stage: SceneHost, crew: CrewMember[]): Promise<void> {
   await Promise.all(crew.map((member) => workOne(stage, member)));

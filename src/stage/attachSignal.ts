@@ -42,6 +42,8 @@ export interface AttachedSignal {
   link: SignalLink;
   /** No dots on screen right now. */
   quiet: () => boolean;
+  /** Silence the link without changing the drone or its base (e.g. leaving an open gate). */
+  mute: (muted: boolean) => void;
   detach: () => void;
 }
 
@@ -52,6 +54,7 @@ export function attachSignal(
   options: SignalOptions = {},
 ): AttachedSignal {
   const showsJob = options.showsJob ?? (() => false);
+  let muted = false;
   const link = new SignalLink();
   link.rotation.y = FACE_CAMERA;
   const animator = new SignalLinkAnimator(link);
@@ -68,12 +71,13 @@ export function attachSignal(
     animator.status = drone.status;
     const docked = Math.hypot(hover.x - base.x, hover.z - base.z) < DOCKED_WITHIN && over.visible;
     animator.active = docked && !showsJob();
-    animator.conversing = !(over instanceof Gate) || over.state === 'open';
+    animator.conversing = !muted && (!(over instanceof Gate) || over.state === 'open');
     animator.update(dt);
   });
   return {
     link,
     quiet: () => animator.quiet,
+    mute: (value) => (muted = value),
     detach: () => {
       untick();
       link.dispose();
