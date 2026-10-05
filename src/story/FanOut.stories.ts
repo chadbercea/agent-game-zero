@@ -10,6 +10,7 @@ import { accessCheck } from './accessCheck';
 import { dismiss, fanOut, work } from './fanOut';
 import { hoverLines } from './hoverLines';
 import { revealMap } from './revealMap';
+import { showWorkColumn } from './runJob';
 import { SystemMap } from './SystemMap';
 import { fly, wait } from './timeline';
 
@@ -20,7 +21,8 @@ const meta: Meta = {
 export default meta;
 
 /**
- * Access → map → fan-out → work. D3V1N spawns one sub-agent per system;
+ * Access → map → fan-out → work. D3V1N turns green and shows its working
+ * column while it orchestrates. It spawns one sub-agent per system;
  * each rides its branch out, floats over its node and does that system's job
  * (report, branch + git init, read). Nodes light with their sub-agent's status.
  */
@@ -43,11 +45,14 @@ export const FanOut: StoryObj = {
         await wait(stage, 1);
         if (!(await accessCheck(stage, drone, gate))) continue;
         await revealMap(stage, map);
-        drone.status = 'waiting';
+        drone.status = 'working';
+        const column = showWorkColumn(stage, drone);
         const crew = await fanOut(stage, drone, map);
         await work(stage, crew);
         await wait(stage, 3);
         dismiss(crew);
+        drone.status = 'waiting';
+        await column.hide();
         map.hide();
         gate.state = 'off';
         drone.status = 'working';

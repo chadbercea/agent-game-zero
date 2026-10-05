@@ -1,11 +1,18 @@
 import type { Drone } from '../primitives/drone/Drone';
 import type { Gate } from '../primitives/gate/Gate';
 import type { SceneHost } from '../stage/Stage';
+import { WorkColumnAnimator } from '../animation/WorkColumnAnimator';
+import { WorkColumn } from '../primitives/column/WorkColumn';
+import { FACE_CAMERA } from '../stage/spawnDrone';
 import { accessCheck } from './accessCheck';
 import { fanOut, workOne } from './fanOut';
 import { returnHome } from './returnHome';
 import { revealMap } from './revealMap';
 import type { SystemMap } from './SystemMap';
+import { wait } from './timeline';
+
+/** Where the working column's dotted line meets the drone: just under its body. */
+const TETHER_ATTACH = 0.42;
 
 export type JobStep = 'access' | 'denied' | 'mapping' | 'fan-out' | 'working' | 'done';
 
@@ -38,8 +45,11 @@ export async function runJob(
   onStep('mapping');
   await revealMap(stage, map);
 
+  // The parent orchestrates: green, with its working column (spinning cube,
+  // orbit arrows, dotted line to the gate) until the last sub-agent is home.
   onStep('fan-out');
-  drone.status = 'waiting';
+  drone.status = 'working';
+  const column = showWorkColumn(stage, drone);
   const crew = await fanOut(stage, drone, map);
 
   onStep('working');
@@ -50,6 +60,28 @@ export async function runJob(
     }),
   );
   drone.status = 'waiting';
+  await column.hide();
   onStep('done');
   return true;
+}
+
+/** Put a working column under a drone, tracking its height, until hidden. */
+export function showWorkColumn(stage: SceneHost, drone: Drone): { hide: () => Promise<void> } {
+  const column = new WorkColumn();
+  column.position.set(drone.position.x, 0, drone.position.z);
+  column.rotation.y = FACE_CAMERA;
+  const animator = new WorkColumnAnimator(column);
+  stage.add(column);
+  const untick = stage.onTick((dt) => {
+    column.tetherTop = drone.position.y + drone.rig.hover.position.y - TETHER_ATTACH;
+    animator.update(dt);
+  });
+  return {
+    hide: async () => {
+      animator.shown = false;
+      await wait(stage, 0.6);
+      untick();
+      column.dispose();
+    },
+  };
 }
