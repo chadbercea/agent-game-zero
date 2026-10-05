@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
-import { SYSTEM_KINDS } from '../node/emblems';
+import { SYSTEM_KINDS, type SystemKind } from '../node/emblems';
 import { SystemNode } from '../node/SystemNode';
 import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { rowPosition, specimenStage } from '../../stage/specimen';
@@ -42,6 +42,29 @@ export const Jobs: StoryObj<JobArgs> = {
         job.progress = Math.min(1, t);
         job.update(dt);
       }
+    });
+    return root;
+  },
+};
+
+/** One job up close, looping: pick the system. */
+export const Single: StoryObj<JobArgs & { kind: SystemKind }> = {
+  argTypes: { kind: { control: 'inline-radio', options: SYSTEM_KINDS } },
+  args: { kind: 'figma', seconds: 6 },
+  render: (args) => {
+    const { root, stage } = specimenStage({ viewSize: 1.8, focusY: 0.6 });
+    const node = new SystemNode({ kind: args.kind });
+    node.rotation.y = FACE_CAMERA;
+    node.emblem.visible = false;
+    node.light = 'working';
+    const job = new Job(args.kind);
+    job.rotation.y = FACE_CAMERA;
+    stage.add(node, job);
+    let t = 0;
+    stage.onTick((dt) => {
+      t = (t + dt / args.seconds) % 1.25;
+      job.progress = Math.min(1, t);
+      job.update(dt);
     });
     return root;
   },

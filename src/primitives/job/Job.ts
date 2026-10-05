@@ -7,7 +7,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  PlaneGeometry,
   QuadraticBezierCurve3,
   SphereGeometry,
   TubeGeometry,
@@ -32,9 +31,9 @@ export const PRODUCT_OFFSET = { x: 0.42, y: 0.55, z: 0.12 } as const;
  * Job primitive: the visible work a sub-agent does at a system node. `progress`
  * (0–1) builds the job's visual; at 1 the work product (the old work cube)
  * appears, ready to be carried home. Each system has its own visual:
- * - Figma: report sheets stack up, page by page
+ * - Figma: a mini design window: a rectangle traces itself, fills, and gets selected
  * - GitHub: a git graph grows and forks, then an init folder appears
- * - Notion: a page is scanned top to bottom, lines lighting as they're read
+ * - Notion: pages stack up, one after another
  */
 export class Job extends Group {
   readonly kind: SystemKind;
@@ -55,9 +54,9 @@ export class Job extends Group {
       new MeshStandardMaterial({ color: STATUS_COLOR.working, emissive: STATUS_COLOR.working, emissiveIntensity: 0.6 }),
     );
 
-    if (kind === 'figma') this.build = this.buildReport(shell, graphite);
+    if (kind === 'figma') this.build = this.buildWindow(lit);
     else if (kind === 'github') this.build = this.buildBranch(shell, graphite);
-    else this.build = this.buildRead(shell, graphite, lit);
+    else this.build = this.buildReport(shell, graphite);
 
     const productMaterial = this.track(new MeshStandardMaterial({ color: NEUTRAL.packet, roughness: 0.4, flatShading: true }));
     this.product = solid(new RoundedBoxGeometry(0.22, 0.22, 0.22, 2, 0.04), productMaterial);
@@ -96,7 +95,7 @@ export class Job extends Group {
     for (const m of this.materials) m.dispose();
   }
 
-  /** Figma: up to five report sheets settle onto a stack, each ruled with lines of text. */
+  /** Notion: up to five pages settle onto a stack, each ruled with lines of text. */
   private buildReport(shell: Material, graphite: Material) {
     const SHEETS = 5;
     const sheets = Array.from({ length: SHEETS }, (_, i) => {
@@ -166,34 +165,106 @@ export class Job extends Group {
     };
   }
 
-  /** Notion: a standing page with lines of text; a scan bar reads it top to bottom, lighting lines as it passes. */
-  private buildRead(shell: Material, graphite: Material, lit: Material) {
-    const page = new Group();
-    page.position.y = 0.62;
-    this.add(page);
-    page.add(solid(new BoxGeometry(0.44, 0.56, 0.03), shell));
-    const LINES = 6;
-    const lines = Array.from({ length: LINES }, (_, i) => {
-      const line = solid(new BoxGeometry(i % 3 === 2 ? 0.2 : 0.32, 0.03, 0.012), graphite);
-      line.position.set(i % 3 === 2 ? -0.06 : 0, 0.2 - i * 0.075, 0.021);
-      page.add(line);
-      return line;
-    });
-    const scanMaterial = this.track(
-      new MeshBasicMaterial({ color: STATUS_COLOR.working, transparent: true, opacity: 0.55, depthWrite: false }),
-    );
-    const scan = new Mesh(new PlaneGeometry(0.46, 0.035), scanMaterial);
-    scan.position.z = 0.03;
-    page.add(scan);
+  /**
+   * Figma: an abstracted mini design window. The frame stands up, a toolbar
+   * and a layers sidebar slide in, a rectangle traces itself on the canvas
+   * edge by edge and fills, then selection handles and a new layer row light up.
+   */
+  private buildWindow(lit: Material) {
+    // Flat, unlit panels: it should read as a crisp little UI, not a lit object.
+    const canvas = this.track(new MeshBasicMaterial({ color: '#f6f7f9' }));
+    const panel = this.track(new MeshBasicMaterial({ color: '#dcdee3' }));
+    const ink = this.track(new MeshBasicMaterial({ color: NEUTRAL.graphite }));
+    const fillColor = this.track(new MeshBasicMaterial({ color: '#c3c6cd' }));
+    const W = 0.66;
+    const H = 0.46;
+    const BAR = 0.055;
+    const SIDE = 0.15;
+    const T = 0.014;
 
-    return (progress: number, time: number) => {
-      // The scan bar sweeps repeatedly; lines it has fully read stay lit.
-      const read = progress * LINES;
-      lines.forEach((line, i) => (line.material = i < Math.floor(read) ? lit : graphite));
-      const sweeping = progress > 0 && progress < 1;
-      scan.visible = sweeping;
-      const y = 0.25 - ((time * 0.5) % 1) * 0.5;
-      scan.position.y = y;
+    const win = new Group();
+    win.position.y = 0.74;
+    this.add(win);
+    win.add(solid(new BoxGeometry(W, H, 0.025), canvas));
+    const toolbar = solid(new BoxGeometry(W, BAR, 0.03), ink);
+    toolbar.position.set(0, H / 2 - BAR / 2, 0.004);
+    win.add(toolbar);
+    const sidebar = solid(new BoxGeometry(SIDE, H - BAR, 0.03), panel);
+    sidebar.position.set(-W / 2 + SIDE / 2, -BAR / 2, 0.004);
+    win.add(sidebar);
+    const rows = [0, 1, 2].map((i) => {
+      const row = solid(new BoxGeometry(SIDE * 0.66, 0.02, 0.012), i === 2 ? lit : ink);
+      row.position.set(-W / 2 + SIDE / 2, H / 2 - BAR - 0.05 - i * 0.05, 0.024);
+      win.add(row);
+      return row;
+    });
+
+    // The canvas is the area right of the sidebar and below the toolbar.
+    const cx = (-W / 2 + SIDE + W / 2) / 2;
+    const cy = -BAR / 2;
+    const rw = 0.26;
+    const rh = 0.18;
+    const z = 0.024;
+    // Edges grow from their start corner, clockwise from the top-left.
+    const edge = (w: number, h: number, ox: number, oy: number, x: number, y: number) => {
+      const g = new BoxGeometry(w, h, T);
+      g.translate(ox, oy, 0);
+      const m = solid(g, ink);
+      m.position.set(x, y, z);
+      win.add(m);
+      return m;
+    };
+    const edges = [
+      { mesh: edge(rw, T, rw / 2, 0, cx - rw / 2, cy + rh / 2), axis: 'x' as const },
+      { mesh: edge(T, rh, 0, -rh / 2, cx + rw / 2, cy + rh / 2), axis: 'y' as const },
+      { mesh: edge(rw, T, -rw / 2, 0, cx + rw / 2, cy - rh / 2), axis: 'x' as const },
+      { mesh: edge(T, rh, 0, rh / 2, cx - rw / 2, cy - rh / 2), axis: 'y' as const },
+    ];
+    const fill = solid(new BoxGeometry(rw, rh, 0.006), fillColor);
+    fill.position.set(cx, cy, z - 0.004);
+    win.add(fill);
+    const handleGeometry = new BoxGeometry(0.036, 0.036, 0.02);
+    const handles = [
+      [cx - rw / 2, cy + rh / 2],
+      [cx + rw / 2, cy + rh / 2],
+      [cx + rw / 2, cy - rh / 2],
+      [cx - rw / 2, cy - rh / 2],
+    ].map(([x, y]) => {
+      const h = solid(handleGeometry, lit);
+      h.position.set(x, y, z + 0.006);
+      win.add(h);
+      return h;
+    });
+
+    const span = (p: number, a: number, b: number) => MathUtils.clamp((p - a) / (b - a), 0, 1);
+    const grow = (o: { visible: boolean; scale: { setScalar(n: number): void } }, t: number) => {
+      o.visible = t > 0;
+      o.scale.setScalar(Math.max(0.001, easeOut(t)));
+    };
+
+    return (progress: number) => {
+      // 0–0.15: the window stands up.
+      const stand = span(progress, 0, 0.15);
+      win.visible = stand > 0;
+      win.scale.set(1, Math.max(0.001, easeOut(stand)), 1);
+      // 0.15–0.3: toolbar and sidebar slide in, with the existing layers.
+      const chrome = easeOut(span(progress, 0.15, 0.3));
+      toolbar.visible = sidebar.visible = chrome > 0;
+      toolbar.scale.x = Math.max(0.001, chrome);
+      sidebar.scale.y = Math.max(0.001, chrome);
+      rows[0].visible = rows[1].visible = chrome > 0.6;
+      // 0.3–0.66: the rectangle traces itself, one edge after another.
+      edges.forEach(({ mesh, axis }, i) => {
+        const t = span(progress, 0.3 + i * 0.09, 0.39 + i * 0.09);
+        mesh.visible = t > 0;
+        mesh.scale[axis] = Math.max(0.001, t);
+      });
+      // 0.66–0.76: it fills.
+      grow(fill, span(progress, 0.66, 0.76));
+      // 0.76–0.88: selection handles pop on, and its layer row lights up in the sidebar.
+      const select = span(progress, 0.76, 0.88);
+      for (const h of handles) grow(h, select);
+      grow(rows[2], select);
     };
   }
 
