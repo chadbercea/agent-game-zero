@@ -36,6 +36,8 @@ export interface DroneArm {
 export interface DroneRig {
   /** Moves as a unit above the drone's floor anchor (hover, sag, shake). */
   hover: Group;
+  /** Inside hover: leans the whole craft into its direction of travel (flight). */
+  tilt: Group;
   /** Shell + lens; tilts independently of the arms. */
   body: Group;
   arms: DroneArm[];
@@ -112,11 +114,14 @@ export class Drone extends Group {
     hover.name = 'hover';
     hover.position.y = HOVER_HEIGHT;
     this.add(hover);
+    const tilt = new Group();
+    tilt.name = 'tilt';
+    hover.add(tilt);
 
     // Body: shell + forward-facing lens.
     const body = new Group();
     body.name = 'body';
-    hover.add(body);
+    tilt.add(body);
     body.add(solid(g.shell, shell));
     // Lens sits flush on the hull's raked nose face, which tips up toward an overhead viewer.
     const lens = new Group();
@@ -168,11 +173,11 @@ export class Drone extends Group {
       pod.add(rotor);
 
       pivot.add(pod);
-      hover.add(pivot);
+      tilt.add(pivot);
       return { pivot, pod, rotor, yaw };
     });
 
-    this.rig = { hover, body, arms, ringMaterial, haloMaterial: halo.material, accentMaterial, blurMaterial, bladeMaterial };
+    this.rig = { hover, tilt, body, arms, ringMaterial, haloMaterial: halo.material, accentMaterial, blurMaterial, bladeMaterial };
 
     if (showLabel) {
       this.label = makeLabel(name);
