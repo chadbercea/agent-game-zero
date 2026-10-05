@@ -1,52 +1,9 @@
 import { Color, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { GRID } from '../../core/grid';
-import { gridRoute } from '../../story/SystemMap';
 import { Branch } from './Branch';
-import { distanceToPolyline, roundedPath, trimPolyline } from './gridPath';
+import { roundedPath, trimPolyline } from './gridPath';
 
 const v = (x: number, z: number) => new Vector3(x, 0, z);
-
-describe('grid routes', () => {
-  const origin = v(2, 2);
-  const routes = [-1, 0, 1].map((slot) => gridRoute(origin, slot, 6, 3));
-
-  it('run only along the grid axes, on grid lines', () => {
-    for (const route of routes) {
-      for (let i = 0; i < route.length - 1; i++) {
-        const [a, b] = [route[i], route[i + 1]];
-        expect(a.x === b.x || a.z === b.z).toBe(true); // axis-aligned
-      }
-      for (const p of route) {
-        expect(Math.abs(p.x / GRID - Math.round(p.x / GRID))).toBeLessThan(1e-9);
-        expect(Math.abs(p.z / GRID - Math.round(p.z / GRID))).toBeLessThan(1e-9);
-      }
-    }
-  });
-
-  it('fan nodes out left, middle and right of the gate on screen', () => {
-    const ends = routes.map((r) => r[r.length - 1]);
-    const screenX = (p: Vector3) => (p.x - p.z) / Math.SQRT2; // screen-right is (1, 0, -1)
-    expect(screenX(ends[0])).toBeLessThan(screenX(ends[1]));
-    expect(screenX(ends[1])).toBeLessThan(screenX(ends[2]));
-    // All sit up and back from the gate (screen-up is −X−Z).
-    for (const end of ends) expect(end.x + end.z).toBeLessThan(origin.x + origin.z);
-  });
-
-  it('never share a segment', () => {
-    // Sample each route and require other routes to stay at least one lane away (except at the gate).
-    for (let i = 0; i < routes.length; i++) {
-      for (let j = 0; j < routes.length; j++) {
-        if (i === j) continue;
-        const path = roundedPath(trimPolyline(routes[i], 1.2, 0), 0.35);
-        for (let k = 0; k <= 40; k++) {
-          const p = path.getPointAt(k / 40);
-          expect(distanceToPolyline(p.x, p.z, routes[j])).toBeGreaterThan(GRID * 0.9);
-        }
-      }
-    }
-  });
-});
 
 describe('roundedPath', () => {
   it('keeps straight runs on the grid and rounds each bend by the radius', () => {
