@@ -6,11 +6,8 @@ import { Gate } from '../primitives/gate/Gate';
 import { SYSTEM_KINDS } from '../primitives/node/emblems';
 import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
-import { accessCheck } from './accessCheck';
-import { fanOut, workOne } from './fanOut';
 import { hoverLines } from './hoverLines';
-import { returnHome } from './returnHome';
-import { revealMap } from './revealMap';
+import { runJob } from './runJob';
 import { SystemMap } from './SystemMap';
 import { fly, wait } from './timeline';
 
@@ -42,16 +39,7 @@ export const Return: StoryObj = {
     void (async () => {
       for (;;) {
         await wait(stage, 1);
-        if (!(await accessCheck(stage, drone, gate))) continue;
-        await revealMap(stage, map);
-        drone.status = 'waiting';
-        const crew = await fanOut(stage, drone, map);
-        await Promise.all(
-          crew.map(async (member, i) => {
-            await workOne(stage, member, drone);
-            await returnHome(stage, member, drone, map.routes[i]);
-          }),
-        );
+        if (!(await runJob(stage, { drone, gate, map }))) continue;
         drone.status = 'working';
         await wait(stage, 2);
         map.hide();

@@ -5,7 +5,7 @@ Code Name: Zero. Game about agents to teach agents to humans.
 
 ```sh
 npm install
-npm run dev         # Sandbox — the live isometric world (http://localhost:5173)
+npm run dev         # Sandbox — one agent, one gate, the agent story (http://localhost:5173)
 npm run storybook   # Specimens — every primitive in isolation (http://localhost:6006)
 ```
 

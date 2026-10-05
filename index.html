@@ -7,16 +7,19 @@
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
       #stage { position: fixed; inset: 0; }
-      #hint {
-        position: fixed; left: 16px; bottom: 14px;
+      #hint, #caption {
+        position: fixed; left: 16px;
         font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; color: #8a8c93;
         pointer-events: none; user-select: none;
       }
+      #hint { bottom: 14px; }
+      #caption { bottom: 36px; font-size: 14px; color: #3a3b40; }
     </style>
   </head>
   <body>
     <div id="stage"></div>
-    <div id="hint">Drag to pan · scroll to zoom · click a drone to select</div>
+    <div id="caption"></div>
+    <div id="hint">Drag to pan · scroll to zoom · hover the gate or a node to see the system's lines (click to pin)</div>
     <script type="module" src="/src/sandbox/main.ts"></script>
   </body>
 </html>
