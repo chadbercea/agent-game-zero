@@ -1,30 +1,32 @@
 import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
+import { BEND_RADIUS, GRID, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
-import { Branch, branchCurve } from '../primitives/branch/Branch';
+import { Branch } from '../primitives/branch/Branch';
+import { GridPatch } from '../primitives/branch/GridPatch';
+import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
 import { EMBLEM_HEIGHT, EMBLEM_SCALE, SystemNode } from '../primitives/node/SystemNode';
 import { FACE_CAMERA } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 
-/** Screen directions on the floor, as seen from the isometric camera. */
-const SCREEN_RIGHT = new Vector3(1, 0, -1).normalize();
-const SCREEN_AWAY = new Vector3(-1, 0, -1).normalize();
-
 export interface SystemMapOptions {
-  /** How far behind the gate (on screen: above it) the nodes sit. */
+  /** How far behind the gate (on screen: straight above it) the middle node sits, per world axis. */
   depth?: number;
-  /** Spacing between nodes across the screen. */
+  /** How far apart neighbouring nodes sit across the screen, per world axis. */
   spread?: number;
 }
 
 const LINE_FADE = 3;
-const BRANCH_INSET_GATE = 0.7;
-const BRANCH_INSET_NODE = 0.75;
+const BRANCH_INSET_GATE = 1.2;
+const BRANCH_INSET_NODE = 0.7;
 const LINE_OPACITY = 0.8;
 
 /**
  * The system behind a gate: one node per system, fanned out above the gate on
- * screen, each joined to the gate by a branch. Everything starts hidden and
+ * screen, each joined to the gate by a branch. Everything sits on the floor's
+ * square grid: nodes snap to grid points, and branches run only along the
+ * grid axes (the isometric diagonals on screen) with rounded right-angle
+ * bends, over a faint patch of grid that fades to white away from the path. Everything starts hidden and
  * only appears when access is granted (see revealMap). Lines are never
  * persistent: they draw in during the reveal, fade out, and come back only
  * while `linesVisible` is set (hover or click).
@@ -32,6 +34,8 @@ const LINE_OPACITY = 0.8;
 export class SystemMap {
   readonly nodes: SystemNode[] = [];
   readonly branches: Branch[] = [];
+  /** Faint grid under each branch, fading with distance from it. */
+  readonly patches: GridPatch[] = [];
   /** Flight paths from the gate's center to each node's center, along its branch. */
   readonly routes: Curve<Vector3>[] = [];
   /** Show the branch lines (e.g. while the gate or a node is hovered or selected). */
@@ -47,24 +51,24 @@ export class SystemMap {
     kinds: readonly SystemKind[],
     options: SystemMapOptions = {},
   ) {
-    const { depth = 7.5, spread = 5.2 } = options;
-    const origin = gate.position.clone().setY(0);
+    const { depth = 6, spread = 3 } = options;
+    const origin = snapToGrid(gate.position);
     kinds.forEach((kind, i) => {
-      const across = (i - (kinds.length - 1) / 2) * spread;
-      const at = origin.clone().addScaledVector(SCREEN_AWAY, depth).addScaledVector(SCREEN_RIGHT, across);
+      const polyline = gridRoute(origin, i - (kinds.length - 1) / 2, depth, spread);
+      const at = polyline[polyline.length - 1];
       const node = new SystemNode({ kind });
       node.position.copy(at);
       node.rotation.y = FACE_CAMERA;
       node.visible = false;
-      // Branches stop at the edge of the gate and node pads instead of running underneath them.
-      const toward = at.clone().sub(origin).normalize();
-      const start = origin.clone().addScaledVector(toward, BRANCH_INSET_GATE);
-      const end = at.clone().addScaledVector(toward, -BRANCH_INSET_NODE);
-      const branch = new Branch(branchCurve(start, end, i % 2 === 0 ? 0.16 : -0.16), NEUTRAL.packet);
+      // The drawn line stops at the edges of the gate and node pads instead of running underneath them.
+      const drawn = trimPolyline(polyline, BRANCH_INSET_GATE, BRANCH_INSET_NODE);
+      const branch = new Branch(roundedPath(drawn, BEND_RADIUS), NEUTRAL.packet);
+      const patch = new GridPatch(drawn);
       this.nodes.push(node);
       this.branches.push(branch);
-      this.routes.push(branchCurve(origin, at, i % 2 === 0 ? 0.16 : -0.16));
-      stage.add(branch, node);
+      this.patches.push(patch);
+      this.routes.push(roundedPath(polyline, BEND_RADIUS));
+      stage.add(patch, branch, node);
     });
     this.untick = stage.onTick((dt) => this.tick(dt));
   }
@@ -98,6 +102,7 @@ export class SystemMap {
     this.untick();
     for (const node of this.nodes) node.dispose();
     for (const branch of this.branches) branch.dispose();
+    for (const patch of this.patches) patch.dispose();
   }
 
   private tick(dt: number): void {
@@ -111,9 +116,32 @@ export class SystemMap {
       const k = 1 - Math.exp(-LINE_FADE * dt);
       this.lineLevel = MathUtils.lerp(this.lineLevel, this.linesVisible ? 1 : 0, k);
     }
-    for (const branch of this.branches) {
+    this.branches.forEach((branch, i) => {
       branch.material.opacity = LINE_OPACITY * this.lineLevel;
       branch.visible = this.lineLevel > 0.01 && branch.drawn > 0;
-    }
+      // The grid patch comes up with its branch as it draws, and leaves with the lines.
+      this.patches[i].opacity = this.lineLevel * branch.drawn;
+    });
   }
+}
+
+/**
+ * The grid route from the gate to one node, as an axis-aligned polyline.
+ * `slot` is the node's place across the screen (…-1 left, 0 middle, 1 right…).
+ * Nodes sit up and back from the gate along the isometric diagonals. Left
+ * nodes leave along −X and turn into −Z; right nodes leave along −Z and turn
+ * into −X; the middle one leaves along −X. Each route leaves the gate on its
+ * own lane (one grid line apart) so no two branches overlap.
+ */
+export function gridRoute(origin: Vector3, slot: number, depth: number, spread: number): Vector3[] {
+  const at = new Vector3(origin.x - depth + slot * spread, 0, origin.z - depth - slot * spread);
+  const lane = GRID * Math.max(1, Math.abs(slot));
+  if (slot > 0) {
+    // Right: out along −Z on a lane to the +X side, then across in −X.
+    const start = new Vector3(origin.x + lane, 0, origin.z);
+    return [origin.clone(), start, new Vector3(start.x, 0, at.z), at];
+  }
+  // Left and middle: out along −X, on a lane to the +Z side (left) or −Z side (middle).
+  const start = new Vector3(origin.x, 0, origin.z + (slot < 0 ? lane : -lane));
+  return [origin.clone(), start, new Vector3(at.x, 0, start.z), at];
 }

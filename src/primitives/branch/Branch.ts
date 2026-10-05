@@ -6,34 +6,19 @@ import {
   MathUtils,
   Matrix4,
   MeshBasicMaterial,
-  QuadraticBezierCurve3,
   SphereGeometry,
   Vector3,
 } from 'three';
 
 const SPACING = 0.14;
 const DOT_HEIGHT = 0.03;
-/** How far a branch bows sideways, as a fraction of its length. */
-const BEND = 0.18;
 
 let dotGeometry: SphereGeometry | undefined;
 
 /**
- * A gentle floor curve from `from` to `to` (both at floor level), bowing to
- * one side so a fan of branches reads as organic rather than as spokes.
- */
-export function branchCurve(from: Vector3, to: Vector3, bend = BEND): QuadraticBezierCurve3 {
-  const a = from.clone().setY(0);
-  const b = to.clone().setY(0);
-  const mid = a.clone().add(b).multiplyScalar(0.5);
-  const side = new Vector3(-(b.z - a.z), 0, b.x - a.x).multiplyScalar(bend);
-  return new QuadraticBezierCurve3(a, mid.add(side), b);
-}
-
-/**
- * Branch primitive: a dotted line on the floor along a curve, connecting a
- * gate to one of its system nodes. `drawn` (0–1) reveals it from the gate
- * outward; `opacity` fades the whole line.
+ * Branch primitive: a dotted line on the floor along a path (a rounded grid
+ * route, see gridPath), connecting a gate to one of its system nodes.
+ * `drawn` (0–1) reveals it from the gate outward; `opacity` fades the whole line.
  */
 export class Branch extends Group {
   readonly curve: Curve<Vector3>;
