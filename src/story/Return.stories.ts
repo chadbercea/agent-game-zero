@@ -7,24 +7,25 @@ import { SYSTEM_KINDS } from '../primitives/node/emblems';
 import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import { accessCheck } from './accessCheck';
-import { dismiss, fanOut, work } from './fanOut';
+import { fanOut, workOne } from './fanOut';
 import { hoverLines } from './hoverLines';
+import { returnHome } from './returnHome';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
 import { fly, wait } from './timeline';
 
 const meta: Meta = {
-  title: 'Story/05 Fan-out and Work',
+  title: 'Story/06 Return',
   parameters: { layout: 'fullscreen' },
 };
 export default meta;
 
 /**
- * Access → map → fan-out → work. D3V1N spawns one sub-agent per system;
- * each rides its branch out, floats over its node and does that system's job
- * (report, branch + git init, read). Nodes light with their sub-agent's status.
+ * The whole job: access → map → fan-out → work (progress packets stream back
+ * to D3V1N) → each sub-agent, as its job finishes, carries its work product
+ * home along its branch, docks into D3V1N and despawns.
  */
-export const FanOut: StoryObj = {
+export const Return: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 13, focusY: 0 });
     const gate = new Gate();
@@ -45,12 +46,16 @@ export const FanOut: StoryObj = {
         await revealMap(stage, map);
         drone.status = 'waiting';
         const crew = await fanOut(stage, drone, map);
-        await work(stage, crew, drone);
-        await wait(stage, 3);
-        dismiss(crew);
+        await Promise.all(
+          crew.map(async (member, i) => {
+            await workOne(stage, member, drone);
+            await returnHome(stage, member, drone, map.routes[i]);
+          }),
+        );
+        drone.status = 'working';
+        await wait(stage, 2);
         map.hide();
         gate.state = 'off';
-        drone.status = 'working';
         await fly(stage, DroneFlight.to(drone, home));
         drone.status = 'waiting';
       }

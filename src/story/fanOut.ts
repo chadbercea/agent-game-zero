@@ -7,6 +7,7 @@ import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import type { SystemMap } from './SystemMap';
+import { beam } from './beam';
 import { fly, tween, wait } from './timeline';
 
 /** One sub-agent sent to one system node, and the job it does there. */
@@ -71,19 +72,32 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
   );
 }
 
+/** Seconds between progress packets a working sub-agent beams to its parent. */
+export const PACKET_INTERVAL = 1.4;
+
 /**
- * Work (story step 5, continued): every crew member does its system's job at
- * once. Each job builds its visual and ends by producing the work product;
- * the sub-agent then waits with it, ready to go home.
+ * Work (story step 5, continued): one crew member does its system's job.
+ * The job builds its visual and ends by producing the work product; while
+ * working, the sub-agent beams progress packets back to the parent.
  */
-export async function work(stage: SceneHost, crew: CrewMember[]): Promise<void> {
-  await Promise.all(
-    crew.map(async ({ sub, job }) => {
-      sub.drone.status = 'working';
-      await tween(stage, JOB_SECONDS[job.kind], (t) => (job.progress = t));
-      sub.drone.status = 'waiting';
-    }),
-  );
+export async function workOne(stage: SceneHost, member: CrewMember, parent: Drone): Promise<void> {
+  const { sub, job } = member;
+  sub.drone.status = 'working';
+  let sinceBeam = PACKET_INTERVAL * 0.5;
+  const untick = stage.onTick((dt) => {
+    sinceBeam += dt;
+    if (sinceBeam < PACKET_INTERVAL) return;
+    sinceBeam = 0;
+    void beam(stage, sub.drone.rig.hover, parent.rig.hover);
+  });
+  await tween(stage, JOB_SECONDS[job.kind], (t) => (job.progress = t));
+  untick();
+  sub.drone.status = 'waiting';
+}
+
+/** Every crew member works at once; resolves when the last job is done. */
+export async function work(stage: SceneHost, crew: CrewMember[], parent: Drone): Promise<void> {
+  await Promise.all(crew.map((member) => workOne(stage, member, parent)));
 }
 
 /** Clear a crew without the return trip (story resets). Restores the nodes. */

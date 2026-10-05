@@ -15,6 +15,8 @@ export interface FlightOptions {
   lift?: number;
   /** Start this high above the path and settle onto it (e.g. budding off a parent's body). */
   fromHeight?: number;
+  /** Rise this high above the path by the end (e.g. docking back into a parent's body). */
+  toHeight?: number;
 }
 
 export const FLIGHT_SPEED = 2.4;
@@ -44,6 +46,7 @@ export class DroneFlight {
   private readonly speed: number;
   private readonly lift: number;
   private readonly fromHeight: number;
+  private readonly toHeight: number;
   done = false;
 
   private constructor(
@@ -54,6 +57,7 @@ export class DroneFlight {
     this.speed = options.speed ?? FLIGHT_SPEED;
     this.lift = options.lift ?? 0;
     this.fromHeight = options.fromHeight ?? 0;
+    this.toHeight = options.toHeight ?? 0;
     this.length = Math.max(path.getLength(), 1e-6);
     if (this.length < 1e-3) this.finish();
   }
@@ -84,7 +88,7 @@ export class DroneFlight {
     this.distance = Math.min(this.length, this.distance + this.speed * dt);
     const u = easeInOut(this.distance / this.length);
     this.path.getPointAt(u, scratch);
-    const settle = this.fromHeight * (1 - u) ** 2;
+    const settle = this.fromHeight * (1 - u) ** 2 + this.toHeight * u ** 2;
     this.drone.position.set(scratch.x, Math.sin(u * Math.PI) * this.lift + settle, scratch.z);
 
     // Lean into travel, in the drone's own frame (it may be yawed to face the camera).
@@ -101,7 +105,7 @@ export class DroneFlight {
 
   private finish(): void {
     const end = this.path.getPointAt(1, scratch);
-    this.drone.position.set(end.x, 0, end.z);
+    this.drone.position.set(end.x, this.toHeight, end.z);
     this.done = true;
   }
 }
