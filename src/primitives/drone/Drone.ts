@@ -71,6 +71,14 @@ export class Drone extends Group {
   private _lineage: Lineage;
   private readonly label?: CSS2DObject;
   private readonly materials: Material[] = [];
+  /** Each material's own opacity, so fading can scale it back down from there. */
+  private readonly baseOpacity = new Map<Material, number>();
+  private _fade = 1;
+  /**
+   * A brief acknowledgement (0–1), e.g. when work is delivered to this drone.
+   * DroneAnimator brightens the ring and lifts the drone slightly, then decays it.
+   */
+  flash = 0;
 
   constructor(options: DroneOptions = {}) {
     super();
@@ -208,6 +216,27 @@ export class Drone extends Group {
   set lineage(value: Lineage) {
     this._lineage = value;
     this.applyLineage();
+  }
+
+  /**
+   * Overall visibility (0–1) for dissolving in or out at full size. Static
+   * materials fade here; DroneAnimator scales the ones it animates by it.
+   */
+  get fade(): number {
+    return this._fade;
+  }
+
+  set fade(value: number) {
+    this._fade = Math.min(1, Math.max(0, value));
+    const animated = new Set<Material>([this.rig.blurMaterial, this.rig.bladeMaterial, this.rig.haloMaterial]);
+    for (const m of this.materials) {
+      if (animated.has(m)) continue;
+      if (!this.baseOpacity.has(m)) this.baseOpacity.set(m, m.opacity);
+      m.transparent = this._fade < 1 || this.baseOpacity.get(m)! < 1 || m.transparent;
+      m.opacity = this.baseOpacity.get(m)! * this._fade;
+    }
+    if (this.label) this.label.element.style.opacity = String(this._fade);
+    this.traverse((o) => (o.castShadow = this._fade > 0.5));
   }
 
   set labelVisible(visible: boolean) {

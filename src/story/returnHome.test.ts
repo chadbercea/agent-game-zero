@@ -32,11 +32,11 @@ function drone(x: number, z: number, scale = 1) {
   const hover = new Object3D();
   hover.position.y = HOVER_HEIGHT;
   root.add(hover);
-  return Object.assign(root, { status: 'waiting' as Status, rig: { hover, tilt: new Object3D() } });
+  return Object.assign(root, { status: 'waiting' as Status, fade: 1, flash: 0, rig: { hover, tilt: new Object3D() } });
 }
 
 describe('returnHome', () => {
-  it('carries the product home along the branch, docks into the parent, despawns, and restores the node', async () => {
+  it('carries the product home, docks at full size, hands it to the parent, dissolves, and restores the node', async () => {
     const stage = clock();
     const gateAt = new Vector3(0, 0, 0);
     const nodeAt = new Vector3(-4, 0, -6);
@@ -67,11 +67,16 @@ describe('returnHome', () => {
 
     await stage.run(8);
     expect(done).toBe(true);
-    // Docked: over the gate, raised into the parent's body, shrunk.
+    // Docked over the gate, just under the parent, never shrinking.
     expect(Math.hypot(subDrone.position.x - gateAt.x, subDrone.position.z - gateAt.z)).toBeLessThan(1e-6);
-    expect(subDrone.position.y).toBeGreaterThan(1);
-    expect(subDrone.scale.x).toBeLessThan(SUB_AGENT_SCALE * 0.5);
-    expect(subDrone.rig.hover.children).toHaveLength(0); // product delivered
+    expect(subDrone.position.y).toBeGreaterThan(0.2);
+    expect(subDrone.position.y).toBeLessThan(0.8);
+    expect(subDrone.scale.x).toBeCloseTo(SUB_AGENT_SCALE);
+    // Product handed to the parent, which acknowledged it; the sub-agent dissolved.
+    expect(subDrone.rig.hover.children).toHaveLength(0);
+    expect(stage.add).toHaveBeenCalledWith(expect.any(Mesh));
+    expect(parent.flash).toBe(1);
+    expect(subDrone.fade).toBe(0);
     expect(despawn).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce(); // home: the line may fade
     expect(job.dispose).toHaveBeenCalledOnce();

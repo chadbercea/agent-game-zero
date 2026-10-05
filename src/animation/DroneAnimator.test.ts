@@ -9,6 +9,8 @@ function fakeDrone(status: Status) {
   const material = () => ({ emissiveIntensity: 1, opacity: 1 });
   return {
     status,
+    fade: 1,
+    flash: 0,
     rig: {
       hover: new Object3D(),
       body: new Object3D(),

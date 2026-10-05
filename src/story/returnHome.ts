@@ -1,22 +1,33 @@
-import { type Curve, Mesh, type Vector3 } from 'three';
-import { DroneFlight, FLIGHT_SPEED } from '../animation/DroneFlight';
-import { type Drone, HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { type Curve, type Material, Mesh, Vector3 } from 'three';
+import { DroneFlight } from '../animation/DroneFlight';
+import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { reversed } from '../primitives/branch/gridPath';
 import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import type { CrewMember } from './fanOut';
-import { fly, tween, wait } from './timeline';
+import { fly, tween } from './timeline';
 
-/** Sub-agents shrink back to this fraction of their size as they dock into the parent. */
-const DOCK_SCALE = 0.25;
 /** Where the carried work product hangs under the sub-agent, in its (scaled) local units. */
 const CARRY_OFFSET = -0.8;
+/**
+ * How far the sub-agent rises above its normal hover height to dock: its top
+ * settles just under the parent's body, at full size (never shrinking).
+ */
+const DOCK_RISE = 0.25;
+const HANDOFF_SECONDS = 0.5;
+const DISSOLVE_SECONDS = 0.8;
+const DISSOLVE_DRIFT = 0.25;
+
+const handoffFrom = new Vector3();
+const handoffTo = new Vector3();
 
 /**
  * Return (story step 6): a sub-agent whose job is done picks up its work
- * product, rides its branch back, rises into the parent while shrinking,
- * delivers the product and despawns; its branch line is then released to fade. Its node goes dark, the job clears and
- * the system's emblem comes back.
+ * product and rides its branch back to the gate, docking just under the
+ * parent at full size. It hands the product up into the parent (which flashes
+ * and lifts slightly to acknowledge it), then dissolves in place, drifting
+ * up, and despawns. Its node goes dark, the job clears, the emblem comes back,
+ * and its branch line is released to fade.
  */
 export async function returnHome(stage: SceneHost, member: CrewMember, parent: Drone, route: Curve<Vector3>): Promise<void> {
   const { sub, node, job, stop } = member;
@@ -40,22 +51,35 @@ export async function returnHome(stage: SceneHost, member: CrewMember, parent: D
     await tween(stage, 0.5, (t) => node.emblem.scale.setScalar(EMBLEM_SCALE * Math.max(0.001, t)));
   })();
 
-  // Ride home along the branch, docking up into the parent's body and shrinking on the last stretch.
-  const home = reversed(route);
-  const seconds = home.getLength() / FLIGHT_SPEED;
-  const dockHover = HOVER_HEIGHT * SUB_AGENT_SCALE * DOCK_SCALE;
-  await Promise.all([
-    fly(stage, DroneFlight.along(sub.drone, home, { toHeight: parent.position.y + HOVER_HEIGHT - dockHover })),
-    (async () => {
-      await wait(stage, seconds * 0.55);
-      await tween(stage, seconds * 0.45, (t) =>
-        sub.drone.scale.setScalar(SUB_AGENT_SCALE * (1 - (1 - DOCK_SCALE) * t)),
-      );
-    })(),
-  ]);
+  // Ride home along the branch and dock just under the parent, at full size.
+  await fly(stage, DroneFlight.along(sub.drone, reversed(route), { toHeight: DOCK_RISE }));
+  sub.drone.status = 'waiting';
 
-  // Delivered. Its branch line is free to fade now.
+  // Hand off: the product lifts out of the sub-agent and up into the parent's body.
+  carried.getWorldPosition(handoffFrom);
   sub.drone.rig.hover.remove(carried);
+  carried.position.copy(handoffFrom);
+  carried.scale.setScalar(1);
+  stage.add(carried);
+  const material = job.product.material as Material;
+  material.transparent = true;
+  await tween(stage, HANDOFF_SECONDS, (t) => {
+    parent.rig.hover.getWorldPosition(handoffTo);
+    const e = t * t * (3 - 2 * t);
+    carried.position.lerpVectors(handoffFrom, handoffTo, e);
+    carried.rotation.y = t * 4;
+    material.opacity = 1 - Math.max(0, (t - 0.6) / 0.4);
+  });
+  carried.removeFromParent();
+  parent.flash = 1;
+
+  // Dissolve in place: fade out at full size, drifting gently up.
+  await tween(stage, DISSOLVE_SECONDS, (t) => {
+    sub.drone.fade = 1 - t;
+    sub.drone.position.y = DOCK_RISE + DISSOLVE_DRIFT * t;
+  });
+
+  // Gone. Its branch line is free to fade now.
   member.release();
   sub.despawn();
   await restore;

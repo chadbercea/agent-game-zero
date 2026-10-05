@@ -27,6 +27,8 @@ const PROFILES: Record<Status, MotionProfile> = {
 /** How fast continuous parameters converge on a new status (per second). */
 const EASE = 2;
 const SHAKE_DURATION = 0.9;
+/** How fast an acknowledgement flash fades (per second). */
+const FLASH_DECAY = 1.6;
 const START_KICK_DURATION = 0.5;
 
 /**
@@ -74,7 +76,10 @@ export class DroneAnimator {
     this.bobPhase = (this.bobPhase + (dt / c.bobPeriod) * Math.PI * 2) % (Math.PI * 2);
     const bob = Math.sin(this.bobPhase + this.phase) * c.bobAmplitude;
     const kick = Math.sin((1 - this.kick / START_KICK_DURATION) * Math.PI) * 0.05 * Number(this.kick > 0);
-    hover.position.y = HOVER_HEIGHT + c.hoverOffset + bob + kick;
+    // Acknowledgement (e.g. work delivered): a small lift that decays with the flash.
+    drone.flash = Math.max(0, drone.flash - dt * FLASH_DECAY);
+    const ack = Math.sin(drone.flash * Math.PI) * 0.06;
+    hover.position.y = HOVER_HEIGHT + c.hoverOffset + bob + kick + ack;
 
     // Shake / error: a brief, decaying wobble on entering Stopped. Kept small and
     // slow enough to read as "something's wrong", not as violence.
@@ -96,12 +101,13 @@ export class DroneAnimator {
 
     // Fast rotors read as a blurred disc; slow rotors show their blades.
     const spin = MathUtils.clamp(c.rotorSpeed / 40, 0, 1);
-    blurMaterial.opacity = 0.05 + spin * 0.2;
-    bladeMaterial.opacity = 1 - spin * 0.85;
+    blurMaterial.opacity = (0.05 + spin * 0.2) * drone.fade;
+    bladeMaterial.opacity = (1 - spin * 0.85) * drone.fade;
 
     const glow = statusSignal(status, t, this.phase);
-    ringMaterial.emissiveIntensity = RING_GLOW * glow;
-    haloMaterial.opacity = HALO_OPACITY * glow;
+    const boost = 1 + drone.flash * 1.4;
+    ringMaterial.emissiveIntensity = RING_GLOW * glow * boost;
+    haloMaterial.opacity = Math.min(1, HALO_OPACITY * glow * boost) * drone.fade;
   }
 
   private enter(status: Status): void {
