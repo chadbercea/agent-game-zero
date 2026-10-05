@@ -99,3 +99,43 @@ describe('SignalLinkAnimator', () => {
     expect(link.rising.count).toBe(0);
   });
 });
+
+describe('SignalLinkAnimator timing (ILI-909)', () => {
+  it('no conversation unless the base allows it (a gate must be open)', () => {
+    const { link, animator, run } = setup('working');
+    animator.conversing = false;
+    run(1);
+    expect(link.rising.count).toBe(0);
+    animator.conversing = true;
+    run(1);
+    expect(link.rising.count).toBeGreaterThan(0);
+  });
+
+  it('off its base, everything cuts on the very next frame', () => {
+    const { link, animator, run } = setup('working');
+    run(1);
+    expect(link.rising.count).toBeGreaterThan(0);
+    animator.active = false;
+    run(1 / 60);
+    expect(link.rising.count).toBe(0);
+    expect(animator.quiet).toBe(true);
+  });
+
+  it('closing the conversation clears the dots quickly (well under half a second)', () => {
+    const { link, animator, run } = setup('working');
+    run(1);
+    animator.conversing = false;
+    run(0.4);
+    expect(link.rising.count).toBe(0);
+    expect(animator.quiet).toBe(true);
+  });
+
+  it('a one-shot in flight is cut if the drone leaves', () => {
+    const { link, animator, run } = setup('stopped');
+    run(0.1);
+    expect(animator.bursting).toBe(true);
+    animator.active = false;
+    run(1 / 60);
+    expect(link.burst.count).toBe(0);
+  });
+});

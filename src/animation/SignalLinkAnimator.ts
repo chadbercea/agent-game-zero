@@ -5,7 +5,9 @@ import { BURST_DOTS, LANE_OFFSET, LINK_MAX_DOTS, type SignalLink } from '../prim
 const SPACING = 0.1;
 /** Stream speed, units per second. */
 const FLOW = 0.6;
-const EASE = 4;
+/** Streams ease in gently and clear quickly, so a departing drone never trails dots. */
+const EASE_IN = 4;
+const EASE_OUT = 12;
 /** The stopped one-shot: dots leave this far apart in time and fall this fast. */
 const BURST_GAP = 0.12;
 const BURST_SPEED = 2.2;
@@ -22,11 +24,14 @@ const ZERO = new Vector3(0, 0, 0);
  *   the base, and nothing comes back. Fires once per entry into Stopped.
  * - waiting: quiet.
  *
- * Set `status` (and `active`: the drone is over the base) every frame before `update`.
+ * Set `status`, `active` (the drone is over its base) and `conversing` (the
+ * base allows a conversation, e.g. a gate is open) every frame before `update`.
+ * Off the base, everything cuts at once.
  */
 export class SignalLinkAnimator {
   status: Status = 'waiting';
   active = true;
+  conversing = true;
   private lastStatus: Status | undefined;
   private level = 0;
   private upOffset = 0;
@@ -41,6 +46,11 @@ export class SignalLinkAnimator {
     return this.burstTime !== undefined;
   }
 
+  /** No dots on screen: safe for the drone to move. */
+  get quiet(): boolean {
+    return this.level < 0.01 && !this.bursting;
+  }
+
   update(dt: number): void {
     const { link } = this;
     const status = this.active ? this.status : 'waiting';
@@ -48,11 +58,19 @@ export class SignalLinkAnimator {
       if (status === 'stopped') this.burstTime = 0;
       this.lastStatus = status;
     }
+    // Off its base, the drone isn't connected: cut everything immediately.
+    if (!this.active) {
+      this.level = 0;
+      this.burstTime = undefined;
+    }
 
     const span = Math.max(0, link.top - link.bottom);
 
-    // Working: the two-way conversation fades in and out.
-    this.level = MathUtils.lerp(this.level, status === 'working' ? 1 : 0, 1 - Math.exp(-EASE * dt));
+    // Working: the two-way conversation, only where the base allows it (a gate must be open).
+    const talking = status === 'working' && this.conversing;
+    const ease = talking ? EASE_IN : EASE_OUT;
+    this.level = MathUtils.lerp(this.level, talking ? 1 : 0, 1 - Math.exp(-ease * dt));
+    if (this.level < 0.01 && !talking) this.level = 0;
     const count = this.level > 0.01 ? Math.min(LINK_MAX_DOTS, Math.floor(span / SPACING)) : 0;
     this.upOffset = (this.upOffset + FLOW * dt) % SPACING;
     this.downOffset = (this.downOffset + FLOW * dt) % SPACING;

@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
-import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { SYSTEM_KINDS } from '../primitives/node/emblems';
@@ -12,7 +11,8 @@ import { dismiss, fanOut, work } from './fanOut';
 import { hoverLines } from './hoverLines';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
-import { fly, wait } from './timeline';
+import { leaveBase } from './leaveBase';
+import { wait } from './timeline';
 
 const meta: Meta = {
   title: 'Story/05 Fan-out and Work',
@@ -40,7 +40,7 @@ export const FanOut: StoryObj = {
 
     const home = new Vector3(-1.8, 0, 5);
     const { drone } = spawnDrone(stage, home.x, home.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
-    attachSignal(stage, drone, gate);
+    const signal = attachSignal(stage, drone, gate);
     void (async () => {
       for (;;) {
         await wait(stage, 1);
@@ -53,10 +53,7 @@ export const FanOut: StoryObj = {
         dismiss(crew);
         drone.status = 'waiting';
         map.hide();
-        gate.state = 'off';
-        drone.status = 'working';
-        await fly(stage, DroneFlight.to(drone, home));
-        drone.status = 'waiting';
+        await leaveBase(stage, { drone, gate, signal }, home);
       }
     })();
     return root;

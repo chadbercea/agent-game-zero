@@ -1,7 +1,6 @@
 import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { SYSTEM_KINDS } from '../primitives/node/emblems';
@@ -10,7 +9,8 @@ import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { hoverLines } from '../story/hoverLines';
 import { JOB_STEP_CAPTION, type JobStep, runJob } from '../story/runJob';
 import { SystemMap } from '../story/SystemMap';
-import { fly, wait } from '../story/timeline';
+import { leaveBase } from '../story/leaveBase';
+import { wait } from '../story/timeline';
 
 /**
  * Sandbox: one agent and one gate. The agent story plays from there: access
@@ -33,7 +33,7 @@ hoverLines(stage, map);
 
 const HOME = new Vector3(-1.8, 0, 5);
 const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
-attachSignal(stage, drone, gate);
+const signal = attachSignal(stage, drone, gate);
 
 // Caption: what the story is doing right now.
 const caption = document.getElementById('caption')!;
@@ -46,13 +46,13 @@ let deniedAtGate = false;
 /** Put the scene back to its opening state: map hidden, gate off, drone home. */
 async function reset(): Promise<void> {
   map.hide();
-  gate.state = 'off';
   deniedAtGate = false;
   if (Math.hypot(drone.position.x - HOME.x, drone.position.z - HOME.z) > 1e-3) {
     say('Heading home…');
-    drone.status = 'working';
-    await fly(stage, DroneFlight.to(drone, HOME));
+    // Close the gate and let the dots clear before the drone moves.
+    await leaveBase(stage, { drone, gate, signal }, HOME);
   }
+  gate.state = 'off';
   drone.status = 'waiting';
   say('Ready.');
 }

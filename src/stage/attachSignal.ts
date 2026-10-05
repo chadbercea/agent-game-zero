@@ -1,6 +1,7 @@
 import { type Object3D, Vector3 } from 'three';
 import { SignalLinkAnimator } from '../animation/SignalLinkAnimator';
 import type { Drone } from '../primitives/drone/Drone';
+import { Gate } from '../primitives/gate/Gate';
 import { SignalLink } from '../primitives/signal/SignalLink';
 import { FACE_CAMERA } from './spawnDrone';
 import type { SceneHost } from './Stage';
@@ -21,15 +22,27 @@ const scale = new Vector3();
  * speaks while the drone is actually over the base, so a drone flying in or
  * away stays quiet.
  *
- * Rule: where a job animation is showing at the base, the link stays silent;
- * the job is the working signal there. With no job animation, the dots run.
- * Pass `showsJob` for bases that can host a job.
+ * Rules:
+ * - Over a gate, the two-way conversation only runs while the gate is open
+ *   (green): never while it's off or thinking. A red gate gets the stopped
+ *   one-shot, never two streams.
+ * - Where a job animation is showing at the base, the link stays silent; the
+ *   job is the working signal there. Pass `showsJob` for bases that can host one.
+ * - Off the base, the link cuts at once. Before moving a drone off its base,
+ *   wait for `quiet()` (see leaveBase) so no dots trail behind it.
  *
- * Returns the link (e.g. to keep it in Detail view) and a function that removes it.
+ * Returns the link (e.g. to keep it in Detail view), `quiet()`, and a function that removes it.
  */
 export interface SignalOptions {
   /** True while a job animation is showing at this base; the link is silent then. */
   showsJob?: () => boolean;
+}
+
+export interface AttachedSignal {
+  link: SignalLink;
+  /** No dots on screen right now. */
+  quiet: () => boolean;
+  detach: () => void;
 }
 
 export function attachSignal(
@@ -37,7 +50,7 @@ export function attachSignal(
   drone: Drone,
   over: Object3D,
   options: SignalOptions = {},
-): { link: SignalLink; detach: () => void } {
+): AttachedSignal {
   const showsJob = options.showsJob ?? (() => false);
   const link = new SignalLink();
   link.rotation.y = FACE_CAMERA;
@@ -55,10 +68,12 @@ export function attachSignal(
     animator.status = drone.status;
     const docked = Math.hypot(hover.x - base.x, hover.z - base.z) < DOCKED_WITHIN && over.visible;
     animator.active = docked && !showsJob();
+    animator.conversing = !(over instanceof Gate) || over.state === 'open';
     animator.update(dt);
   });
   return {
     link,
+    quiet: () => animator.quiet,
     detach: () => {
       untick();
       link.dispose();

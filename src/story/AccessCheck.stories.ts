@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
-import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
-import { fly, wait } from './timeline';
+import { leaveBase } from './leaveBase';
+import { wait } from './timeline';
 
 interface CheckArgs {
   /** Does the system behind the gate work as expected? */
@@ -33,8 +33,8 @@ function scene(stage: Stage, works: boolean) {
   stage.add(gate);
   stage.onTick((dt) => gateAnimator.update(dt));
   const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
-  attachSignal(stage, drone, gate);
-  return { gate, drone };
+  const signal = attachSignal(stage, drone, gate);
+  return { gate, drone, signal };
 }
 
 /**
@@ -44,16 +44,13 @@ function scene(stage: Stage, works: boolean) {
 export const Check: Story = {
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 7, focusY: 0.6 });
-    const { gate, drone } = scene(stage, args.works);
+    const { gate, drone, signal } = scene(stage, args.works);
     void (async () => {
       for (;;) {
         await wait(stage, 1);
         await accessCheck(stage, drone, gate);
         await wait(stage, 2.5);
-        gate.state = 'off';
-        drone.status = 'working';
-        await fly(stage, DroneFlight.to(drone, HOME));
-        drone.status = 'waiting';
+        await leaveBase(stage, { drone, gate, signal }, HOME);
       }
     })();
     return root;
@@ -64,7 +61,7 @@ export const Check: Story = {
 export const Retry: Story = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 7, focusY: 0.6 });
-    const { gate, drone } = scene(stage, false);
+    const { gate, drone, signal } = scene(stage, false);
     void (async () => {
       for (;;) {
         gate.works = false;
@@ -74,10 +71,7 @@ export const Retry: Story = {
         gate.works = true;
         await accessCheck(stage, drone, gate); // retry: green
         await wait(stage, 2.5);
-        gate.state = 'off';
-        drone.status = 'working';
-        await fly(stage, DroneFlight.to(drone, HOME));
-        drone.status = 'waiting';
+        await leaveBase(stage, { drone, gate, signal }, HOME);
       }
     })();
     return root;
