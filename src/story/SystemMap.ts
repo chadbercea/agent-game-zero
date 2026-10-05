@@ -1,4 +1,4 @@
-import { MathUtils, type Object3D, Vector3 } from 'three';
+import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
 import { NEUTRAL } from '../core/palette';
 import { Branch, branchCurve } from '../primitives/branch/Branch';
 import type { SystemKind } from '../primitives/node/emblems';
@@ -32,6 +32,8 @@ const LINE_OPACITY = 0.8;
 export class SystemMap {
   readonly nodes: SystemNode[] = [];
   readonly branches: Branch[] = [];
+  /** Flight paths from the gate's center to each node's center, along its branch. */
+  readonly routes: Curve<Vector3>[] = [];
   /** Show the branch lines (e.g. while the gate or a node is hovered or selected). */
   linesVisible = false;
   revealed = false;
@@ -61,6 +63,7 @@ export class SystemMap {
       const branch = new Branch(branchCurve(start, end, i % 2 === 0 ? 0.16 : -0.16), NEUTRAL.packet);
       this.nodes.push(node);
       this.branches.push(branch);
+      this.routes.push(branchCurve(origin, at, i % 2 === 0 ? 0.16 : -0.16));
       stage.add(branch, node);
     });
     this.untick = stage.onTick((dt) => this.tick(dt));
