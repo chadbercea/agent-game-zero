@@ -62,13 +62,15 @@ export interface GraphLink {
  * The Teamwork Graph: a web of grid-routed edges across the whole floor,
  * linking system nodes from every gate (see graphLinks). Each edge is an L-shaped grid route
  * (along the isometric axes, one rounded bend) on the same plane as everything
- * else, drawn as a solid ribbon so it reads apart from the dotted access traces.
+ * else, drawn as blue marching dots so it reads apart from the still, gray access traces.
  */
 export class TeamworkGraph {
   readonly links: GraphLink[] = [];
+  private readonly untick: () => void;
 
   /** `groups`: the nodes around each gate, one cluster per system; `obstacles`: gates, which edges keep clear of. */
   constructor(stage: SceneHost, groups: readonly (readonly SystemNode[])[], obstacles: readonly Vector3[] = []) {
+    this.untick = stage.onTick((dt) => this.links.forEach(({ edge }) => edge.update(dt)));
     const nodes = groups.flat();
     graphLinks(
       nodes.map((n) => n.position),
@@ -118,6 +120,7 @@ export class TeamworkGraph {
   }
 
   dispose(): void {
+    this.untick();
     for (const { edge } of this.links) edge.dispose();
   }
 }

@@ -13,8 +13,8 @@ export default meta;
 
 /**
  * Both systems on the grid, and the Teamwork Graph drawing in across them:
- * solid ribbons on the same floor plane, linking the Atlassian tools to each
- * other and to Figma, GitHub and Notion. Loops: draw in, hold, fade.
+ * lines of blue dots marching along the same floor plane, linking every
+ * system by the shortest wiring. Loops: draw in, hold, fade.
  */
 export const Web: StoryObj = {
   render: () => {
