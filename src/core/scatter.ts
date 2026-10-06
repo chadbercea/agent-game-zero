@@ -78,6 +78,12 @@ const LINE_GAP = GRID - 1e-6;
 export const visible = (route: Vector3[]) => trimPolyline(route, GATE_FOOTPRINT / 2, 0);
 /** Each node walks out from the gate on its own ray; when a ray is blocked it turns by the golden angle. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+/**
+ * The drone docked over the gate hovers high, so on screen it covers a column
+ * straight up from the gate. Nodes stay out of that column (this half-width
+ * across the screen, this far back) so their sub-agents are never hidden behind it.
+ */
+const DRONE_COLUMN = { halfWidth: 1.25, depth: 5 };
 
 /**
  * Procedural radial node map. One pass, no searching over whole layouts:
@@ -90,6 +96,8 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
  *   `clearance` from every other node, and no other line runs within
  *   `clearance` of it;
  * - each leg of its line is zero or long enough to read;
+ * - it is out of the screen column above the gate, where the docked drone
+ *   would hide its sub-agent (see DRONE_COLUMN);
  * - its line is its own all the way to the gate: it never touches, crosses or
  *   shares a run with another line (no junctions but the gate). Lines leaving
  *   the same side start from neighbouring ports, a lane apart.
@@ -110,6 +118,7 @@ export function radialMap(origin: Vector3, count: number, options: RadialOptions
     route.slice(1).every((p, i) => p.distanceTo(route[i]) >= MIN_LEG || p.distanceTo(route[i]) < 1e-6);
   const fits = (spot: Vector3, route: Vector3[]) => {
     if (!legsReadable(route)) return false;
+    if (inDroneColumn(spot.x - center.x, spot.z - center.z)) return false;
     if (spots.some((s) => s.distanceTo(spot) < spacing)) return false;
     if (spots.some((s) => distanceToPolyline(s.x, s.z, route) < clearance)) return false;
     if (routes.some((r) => distanceToPolyline(spot.x, spot.z, r) < clearance)) return false;
@@ -156,4 +165,15 @@ export function radialMap(origin: Vector3, count: number, options: RadialOptions
     if (!placed) throw new Error(`radialMap: no room for node ${n + 1} of ${count}`);
   }
   return { spots, routes };
+}
+
+/**
+ * Whether a floor offset from the gate sits in the docked drone's screen
+ * column: across the screen is (Δx − Δz)/√2, and back (up the screen) is
+ * −(Δx + Δz)/√2, for the isometric camera.
+ */
+export function inDroneColumn(dx: number, dz: number): boolean {
+  const across = (dx - dz) / Math.SQRT2;
+  const back = -(dx + dz) / Math.SQRT2;
+  return Math.abs(across) < DRONE_COLUMN.halfWidth && back > 0 && back < DRONE_COLUMN.depth;
 }

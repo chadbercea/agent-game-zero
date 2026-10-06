@@ -37,12 +37,20 @@ export interface WorkingCrew {
  * come home: each finishes its first job, then keeps working (the job loops),
  * all green. Resolves with the working crew, or null if access is denied.
  */
-export async function act1(stage: SceneHost, scene: TwoActScene): Promise<WorkingCrew | null> {
+export async function act1(
+  stage: SceneHost,
+  scene: TwoActScene,
+  onStep: (step: 'access' | 'mapping' | 'fan-out' | 'working') => void = () => {},
+): Promise<WorkingCrew | null> {
   const { drone, act1: system } = scene;
+  onStep('access');
   if (!(await accessCheck(stage, drone, system.gate))) return null;
+  onStep('mapping');
   await revealMap(stage, system.map);
   drone.status = 'working';
+  onStep('fan-out');
   const crew = await fanOut(stage, drone, system.map);
+  onStep('working');
   await Promise.all(crew.map((member) => workOne(stage, member)));
   const stops = crew.map((member) => keepWorking(stage, member));
   return { crew, stop: () => stops.forEach((stop) => stop()) };

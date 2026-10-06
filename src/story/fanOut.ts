@@ -14,11 +14,12 @@ import { attachSignal } from '../stage/attachSignal';
 import { shoot } from './beam';
 import { fly, tween, wait } from './timeline';
 
-/** One sub-agent sent to one system node, and the job it does there. */
+/** One sub-agent sent to one system node, and the job it does there (if the system has a job animation). */
 export interface CrewMember {
   sub: SpawnedDrone;
   node: SystemNode;
-  job: Job;
+  /** Absent on systems without a job animation (the Atlassian tools): their work flows through the graph. */
+  job?: Job;
   /** The sub-agent's branch, gate → node. Packets shoot back along it; the sub-agent rides it home. */
   route: Curve<Vector3>;
   /** Stops the per-frame sync (job motion, node light). Called on return. */
@@ -36,8 +37,10 @@ export const JOB_SECONDS = { figma: 5, github: 6, notion: 4.5 } as const;
 /**
  * Fan-out (story step 5): the parent spawns one sub-agent per system node.
  * Each buds off the parent's body, grows as it rides its branch out, and
- * floats over its node; the node's emblem tucks away and the node's light
- * starts mirroring its sub-agent's status.
+ * floats over its node, and the node's light starts mirroring its
+ * sub-agent's status. Where the system has a job animation, the job appears
+ * and the emblem tucks away; where it doesn't (the Atlassian tools), the
+ * emblem stays and the sub-agent's signal dots show the work instead.
  */
 export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): Promise<CrewMember[]> {
   // Every branch with a sub-agent heading out stays drawn until that sub-agent is home.
@@ -52,22 +55,23 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
         status: 'working',
       });
       sub.drone.rotation.y = FACE_CAMERA;
-      if (!hasJob(node.kind)) throw new Error(`fanOut: ${node.kind} has no job animation (Atlassian fan-out is ILI-913)`);
-      const job = new Job(node.kind);
-      job.position.copy(node.position);
-      job.rotation.y = FACE_CAMERA;
-      job.visible = false;
-      stage.add(job);
+      const job = hasJob(node.kind) ? new Job(node.kind) : undefined;
+      if (job) {
+        job.position.copy(node.position);
+        job.rotation.y = FACE_CAMERA;
+        job.visible = false;
+        stage.add(job);
+      }
 
       // Once arrived, the node mirrors its sub-agent's status; until then it stays off.
       let arrived = false;
       const sync = stage.onTick((dt) => {
         if (arrived) node.light = sub.drone.status;
-        job.update(dt);
+        job?.update(dt);
       });
       // Its link to the node: silent while the job animation shows (the job is
       // the working signal there), dots otherwise.
-      const signal = attachSignal(stage, sub.drone, node, { showsJob: () => job.visible });
+      const signal = attachSignal(stage, sub.drone, node, { showsJob: () => job?.visible ?? false });
       const stop = () => {
         sync();
         signal.detach();
@@ -80,11 +84,13 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
         tween(stage, 0.8, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD_SCALE + (1 - BUD_SCALE) * t))),
       ]);
 
-      // Arrive: the node lights up, and the emblem tucks away to make room for the work.
+      // Arrive: the node lights up; where there's a job, the emblem tucks away to make room for it.
       arrived = true;
-      job.visible = true;
-      await tween(stage, 0.4, (t) => node.emblem.scale.setScalar(EMBLEM_SCALE * Math.max(0.001, 1 - t)));
-      node.emblem.visible = false;
+      if (job) {
+        job.visible = true;
+        await tween(stage, 0.4, (t) => node.emblem.scale.setScalar(EMBLEM_SCALE * Math.max(0.001, 1 - t)));
+        node.emblem.visible = false;
+      }
       return { sub, node, job, route: map.routes[i], stop, release: () => map.setActive(i, false) };
     }),
   );
@@ -100,6 +106,7 @@ export const PACKET_INTERVAL = 1.4;
  */
 export async function workOne(stage: SceneHost, member: CrewMember): Promise<void> {
   const { sub, job } = member;
+  if (!job) throw new Error(`workOne: ${member.node.kind} has no job animation`);
   sub.drone.status = 'working';
   const backToGate = reversed(member.route);
   let sinceShot = PACKET_INTERVAL * 0.5;
@@ -118,20 +125,23 @@ export async function workOne(stage: SceneHost, member: CrewMember): Promise<voi
  * Keep working (Act 2): a crew member's job loops instead of finishing for
  * good. It builds to its work product, holds a beat, and starts again, with
  * the sub-agent green throughout and packets streaming back along its branch.
- * Returns a function that ends the loop, leaving the work product showing
- * (ready to be carried home).
+ * A member without a job just works (green, its signal dots running) and
+ * streams packets. Returns a function that ends the loop, leaving any work
+ * product showing (ready to be carried home).
  */
 export function keepWorking(stage: SceneHost, member: CrewMember): () => void {
   const { sub, job } = member;
   sub.drone.status = 'working';
   const backToGate = reversed(member.route);
-  const seconds = JOB_SECONDS[job.kind];
-  let t = job.progress >= 1 ? -HOLD_SECONDS : 0;
+  const seconds = job ? JOB_SECONDS[job.kind] : 0;
+  let t = job && job.progress >= 1 ? -HOLD_SECONDS : 0;
   let sinceShot = PACKET_INTERVAL * 0.5;
   const untick = stage.onTick((dt) => {
-    t += dt;
-    if (t > seconds + HOLD_SECONDS) t = 0;
-    job.progress = Math.max(0, t) / seconds;
+    if (job) {
+      t += dt;
+      if (t > seconds + HOLD_SECONDS) t = 0;
+      job.progress = Math.max(0, t) / seconds;
+    }
     sinceShot += dt;
     if (sinceShot < PACKET_INTERVAL) return;
     sinceShot = 0;
@@ -139,7 +149,7 @@ export function keepWorking(stage: SceneHost, member: CrewMember): () => void {
   });
   return () => {
     untick();
-    job.progress = 1;
+    if (job) job.progress = 1;
   };
 }
 
@@ -157,7 +167,7 @@ export function dismiss(crew: CrewMember[]): void {
     stop();
     release();
     sub.despawn();
-    job.dispose();
+    job?.dispose();
     node.emblem.visible = true;
     node.emblem.scale.setScalar(EMBLEM_SCALE);
     node.light = 'off';

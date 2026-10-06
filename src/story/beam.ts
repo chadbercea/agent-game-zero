@@ -32,7 +32,7 @@ const SHOT_HEIGHT = 0.16;
  * riding just above the line, and resolve when it lands. It pops in at the
  * start and shrinks into the far end.
  */
-export function shoot(stage: SceneHost, path: Curve<Vector3>): Promise<void> {
+export function shoot(stage: SceneHost, path: Curve<Vector3>, speed = SHOT_SPEED): Promise<void> {
   const packet = new Packet();
   packet.trail.visible = false;
   stage.add(packet);
@@ -40,7 +40,7 @@ export function shoot(stage: SceneHost, path: Curve<Vector3>): Promise<void> {
   let travelled = 0;
   return new Promise((resolve) => {
     const untick = stage.onTick((dt) => {
-      travelled = Math.min(length, travelled + SHOT_SPEED * dt);
+      travelled = Math.min(length, travelled + speed * dt);
       const t = travelled / length;
       path.getPointAt(t, packet.cube.position);
       packet.cube.position.y = SHOT_HEIGHT;

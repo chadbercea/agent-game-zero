@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import { GRID } from './grid';
-import { gridRoute, radialMap, visible } from './scatter';
+import { gridRoute, inDroneColumn, radialMap, visible } from './scatter';
 
 const origin = new Vector3(2, 0, 2);
 /** Which way a route bends: +1 / −1 by handedness, 0 when straight. */
@@ -41,6 +41,7 @@ describe('radialMap', () => {
         spots.forEach((p, i) => {
           expect(Number.isInteger(p.x / GRID) && Number.isInteger(p.z / GRID)).toBe(true);
           expect(p.distanceTo(origin)).toBeGreaterThanOrEqual(2.5 - GRID);
+          expect(inDroneColumn(p.x - origin.x, p.z - origin.z)).toBe(false);
           spots.forEach((q, j) => j > i && expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2));
           routes.forEach((r, j) => i !== j && expect(distanceToPolyline(p.x, p.z, r)).toBeGreaterThanOrEqual(1));
           // Its own line: starts at a port on the gate, shortest from there, and never touches another line.

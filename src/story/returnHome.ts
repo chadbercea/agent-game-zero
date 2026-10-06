@@ -28,23 +28,36 @@ const handoffTo = new Vector3();
  * and lifts slightly to acknowledge it), then dissolves in place, drifting
  * up, and despawns. Its node goes dark, the job clears, the emblem comes back,
  * and its branch line is released to fade.
+ *
+ * With `carry: false` (or no job) it comes home empty-handed, e.g. after its
+ * work already flowed home through the Teamwork Graph: it docks, the parent
+ * acknowledges, and it dissolves.
  */
-export async function returnHome(stage: SceneHost, member: CrewMember, parent: Drone, route: Curve<Vector3>): Promise<void> {
+export async function returnHome(
+  stage: SceneHost,
+  member: CrewMember,
+  parent: Drone,
+  route: Curve<Vector3>,
+  options: { carry?: boolean } = {},
+): Promise<void> {
   const { sub, node, job, stop } = member;
 
   // Pick up the work product: it now travels under the sub-agent.
-  const carried = new Mesh(job.product.geometry, job.product.material);
-  carried.castShadow = true;
-  carried.position.y = CARRY_OFFSET;
-  carried.scale.setScalar(1 / SUB_AGENT_SCALE);
-  job.product.visible = false;
-  sub.drone.rig.hover.add(carried);
+  const carried = job && (options.carry ?? true) ? new Mesh(job.product.geometry, job.product.material) : undefined;
+  if (carried && job) {
+    carried.castShadow = true;
+    carried.position.y = CARRY_OFFSET;
+    carried.scale.setScalar(1 / SUB_AGENT_SCALE);
+    sub.drone.rig.hover.add(carried);
+  }
+  if (job) job.product.visible = false;
   stop();
   sub.drone.status = 'working';
   node.light = 'off';
 
   // The node clears behind it: the job sinks away and the emblem returns.
   const restore = (async () => {
+    if (!job) return;
     await tween(stage, 0.5, (t) => job.scale.setScalar(Math.max(0.001, 1 - t)));
     job.visible = false;
     node.emblem.visible = true;
@@ -56,21 +69,23 @@ export async function returnHome(stage: SceneHost, member: CrewMember, parent: D
   sub.drone.status = 'waiting';
 
   // Hand off: the product lifts out of the sub-agent and up into the parent's body.
-  carried.getWorldPosition(handoffFrom);
-  sub.drone.rig.hover.remove(carried);
-  carried.position.copy(handoffFrom);
-  carried.scale.setScalar(1);
-  stage.add(carried);
-  const material = job.product.material as Material;
-  material.transparent = true;
-  await tween(stage, HANDOFF_SECONDS, (t) => {
-    parent.rig.hover.getWorldPosition(handoffTo);
-    const e = t * t * (3 - 2 * t);
-    carried.position.lerpVectors(handoffFrom, handoffTo, e);
-    carried.rotation.y = t * 4;
-    material.opacity = 1 - Math.max(0, (t - 0.6) / 0.4);
-  });
-  carried.removeFromParent();
+  if (carried && job) {
+    carried.getWorldPosition(handoffFrom);
+    sub.drone.rig.hover.remove(carried);
+    carried.position.copy(handoffFrom);
+    carried.scale.setScalar(1);
+    stage.add(carried);
+    const material = job.product.material as Material;
+    material.transparent = true;
+    await tween(stage, HANDOFF_SECONDS, (t) => {
+      parent.rig.hover.getWorldPosition(handoffTo);
+      const e = t * t * (3 - 2 * t);
+      carried.position.lerpVectors(handoffFrom, handoffTo, e);
+      carried.rotation.y = t * 4;
+      material.opacity = 1 - Math.max(0, (t - 0.6) / 0.4);
+    });
+    carried.removeFromParent();
+  }
   parent.flash = 1;
 
   // Dissolve in place: fade out at full size, drifting gently up.
@@ -83,5 +98,5 @@ export async function returnHome(stage: SceneHost, member: CrewMember, parent: D
   member.release();
   sub.despawn();
   await restore;
-  job.dispose();
+  job?.dispose();
 }
