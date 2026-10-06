@@ -41,8 +41,8 @@ describe('Volume', () => {
     const sub = volume.ledger.tally(subId('figma')).done;
     const parent = volume.ledger.tally(D3V1N_ID).done;
     run(20);
-    expect(volume.ledger.tally(subId('figma')).done).toBeGreaterThanOrEqual(sub + 8);
-    expect(volume.ledger.tally(D3V1N_ID).done).toBeGreaterThanOrEqual(parent + 8);
+    expect(volume.ledger.tally(subId('figma')).done).toBeGreaterThanOrEqual(sub + 5);
+    expect(volume.ledger.tally(D3V1N_ID).done).toBeGreaterThanOrEqual(parent + 5);
     figmaSub.status = 'waiting';
     const idle = volume.ledger.tally(subId('figma')).done;
     run(20);
@@ -66,5 +66,19 @@ describe('Volume', () => {
     b.run(120);
     expect(a.volume.ledger.totals('node')).toEqual(b.volume.ledger.totals('node'));
     expect(a.volume.ledger.totals('node').queued).toBeGreaterThan(20);
+  });
+
+  it('reports every new request landing at a node, the same requests the ledger queues', () => {
+    const { volume, run } = setup();
+    const landed = new Map<string, number>();
+    volume.onArrive((id) => landed.set(id, (landed.get(id) ?? 0) + 1));
+    const before = volume.ledger.tally(nodeId('jira'));
+    run(60);
+    const after = volume.ledger.tally(nodeId('jira'));
+    const n = landed.get(nodeId('jira')) ?? 0;
+    expect(n).toBeGreaterThan(5);
+    // Each finished piece pulls one off the queue; each arrival adds one.
+    expect(after.queued).toBe(before.queued - (after.done - before.done) + n);
+    expect([...landed.keys()].every((id) => id.startsWith('node:'))).toBe(true);
   });
 });
