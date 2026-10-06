@@ -20,8 +20,8 @@ export type StoryStep =
   | 'transition'
   | 'access-2'
   | 'mapping-2'
-  | 'graph'
   | 'fan-out-2'
+  | 'graph'
   | 'connected'
   | 'converge'
   | 'shipped'
@@ -37,8 +37,8 @@ export const STORY_CAPTION: Record<StoryStep, string> = {
   transition: 'Taking the work to Atlassian…',
   'access-2': 'Checking access to Atlassian…',
   'mapping-2': 'Access granted. Mapping Atlassian…',
-  graph: 'The Teamwork Graph already knows every system on the grid',
   'fan-out-2': 'Spawning sub-agents for Atlassian…',
+  graph: 'The Teamwork Graph connects every system on the grid',
   connected: 'Act 2 · Teamwork Graph: 7 agents, one connected system',
   converge: 'Converging on one result…',
   shipped: 'Shipped.',
@@ -59,8 +59,9 @@ const DELIVERABLE_OFFSET = new Vector3(Math.cos(FACE_CAMERA), 0, -Math.sin(FACE_
  * The whole two-act story, start to finish, on one grid:
  * Act 1: access → map → three sub-agents, three isolated jobs.
  * Transition: D3V1N leaves them working and takes the work to Atlassian.
- * Act 2: access → map → the Teamwork Graph draws in across every node →
- * four more sub-agents → work changes hands node to node along the graph.
+ * Act 2: access → map → four more sub-agents → once everyone is working, the
+ * Teamwork Graph draws in between every node → work changes hands node to
+ * node along the graph.
  * Converge: every product flows across the graph into one shipped
  * deliverable at D3V1N; all seven sub-agents come home; the graph fades.
  *

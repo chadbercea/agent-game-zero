@@ -57,7 +57,7 @@ export const Full: StoryObj = {
   },
 };
 
-/** Both systems open, D3V1N at the Atlassian gate, all seven sub-agents out and working, the graph drawn. */
+/** Both systems open, D3V1N at the Atlassian gate, all seven sub-agents out and working, then the graph draws in. */
 async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: TeamworkGraph) {
   const { drone, act1, act2 } = scene;
   act1.gate.state = act2.gate.state = 'open';
@@ -68,9 +68,10 @@ async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: Teamw
     map.showAll();
     map.linesVisible = false;
   }
-  graph.showAll();
   const crew = (await Promise.all([fanOut(stage, drone, act1.map), fanOut(stage, drone, act2.map)])).flat();
   const stops = crew.map((member) => keepWorking(stage, member));
+  // Everyone's working: now the graph draws in between them.
+  await graph.reveal(stage);
   return { crew, stop: () => stops.forEach((stop) => stop()) };
 }
 

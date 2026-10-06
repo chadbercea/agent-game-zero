@@ -26,9 +26,10 @@ const RISE_SECONDS = 0.45;
 
 /**
  * Act 2, once D3V1N is through the Atlassian gate: the Atlassian system maps
- * out, the Teamwork Graph draws in across every node on the grid, and D3V1N
- * fans out four sub-agents. The Atlassian tools have no job animations, so
- * their sub-agents show signal dots. Resolves with the working crew.
+ * out and D3V1N fans out four sub-agents (the Atlassian tools have no job
+ * animations, so their sub-agents show signal dots). Once D3V1N and every
+ * sub-agent is working, the Teamwork Graph draws in between the nodes across
+ * the grid, highways and all. Resolves with the working crew.
  */
 export async function act2(
   stage: SceneHost,
@@ -39,12 +40,12 @@ export async function act2(
   const { drone, act2: system } = scene;
   onStep('mapping');
   await revealMap(stage, system.map);
-  onStep('graph');
-  await graph.reveal(stage);
   onStep('fan-out');
   drone.status = 'working';
   const crew = await fanOut(stage, drone, system.map);
   const stops = crew.map((member) => keepWorking(stage, member));
+  onStep('graph');
+  await graph.reveal(stage);
   return { crew, stop: () => stops.forEach((stop) => stop()) };
 }
 
