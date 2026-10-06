@@ -1,4 +1,5 @@
-import { Vector3 } from 'three';
+import { type Curve, CurvePath, LineCurve3, Vector3 } from 'three';
+import { reversed } from '../primitives/branch/gridPath';
 import { DroneFlight } from '../animation/DroneFlight';
 import { hashSeed } from '../core/scatter';
 import { Deliverable } from '../primitives/deliverable/Deliverable';
@@ -15,7 +16,7 @@ import { GATEWAY, HOME, ROVO_HOME, SECURITY_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { assignRoles, type Role } from './roles';
 import { TEAMWORK_LINKS } from './systemLayout';
-import type { TeamworkGraph } from './TeamworkGraph';
+import type { GraphLink, TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 import { act1, teamworkGraph, type TwoActScene, type WorkingCrew } from './twoActs';
 
@@ -77,6 +78,10 @@ interface Cast {
   role: Role;
   stopLoop: () => void;
   visiting?: SystemNode;
+  /** The graph link a traveler rides to its visit (feeder → tunnel → feeder). */
+  via?: GraphLink;
+  /** Where a traveler is hovering now, if beside the node's own sub-agent rather than over the node. */
+  beside?: Vector3;
   gone?: boolean;
 }
 
@@ -278,6 +283,10 @@ export class TeamworkStory {
         const free = otherSide(member.node).filter((n) => !visited.has(n));
         cast.visiting = free[0] ?? otherSide(member.node)[0];
         visited.add(cast.visiting);
+        cast.via = this.graph.links.find(
+          (l) =>
+            (l.from === member.node && l.to === cast.visiting) || (l.to === member.node && l.from === cast.visiting),
+        );
       }
       return cast;
     });
@@ -291,7 +300,16 @@ export class TeamworkStory {
     await Promise.all([
       ...travelers.map(async (c, k) => {
         await wait(stage, TRAVEL_START + k * TRAVEL_APART);
-        await crossGateway(stage, c.member.sub.drone, gateway, visitSpot(c.visiting!));
+        // Ride the link out: its feeder, through the tunnel, the partner's feeder. Hover over the
+        // node, or beside its own sub-agent if that one's still there working.
+        const resident = this.cast.find((o) => o.member.node === c.visiting && !o.gone && o.role !== 'travel');
+        const path = new CurvePath<Vector3>();
+        path.add(this.rideOut(c));
+        if (resident) {
+          c.beside = visitSpot(c.visiting!);
+          path.add(new LineCurve3(c.visiting!.position.clone(), c.beside.clone()));
+        }
+        await crossGateway(stage, c.member.sub.drone, gateway, path);
         c.member.sub.drone.status = 'working';
         c.member.sub.drone.flash = 1;
       }),
@@ -313,11 +331,23 @@ export class TeamworkStory {
         .map(async (c, i) => {
           // Travelers leave one at a time so they don't bunch at the tunnel.
           await wait(stage, c.role === 'travel' ? 0.4 + i * 0.9 : i * 0.25);
-          if (c.role === 'travel') await crossGateway(stage, c.member.sub.drone, gateway, c.member.node.position);
+          if (c.role === 'travel') {
+            // Back the way it came: off to the node, the partner's feeder, the tunnel, its own feeder.
+            const path = new CurvePath<Vector3>();
+            if (c.beside) path.add(new LineCurve3(c.beside.clone(), c.visiting!.position.clone()));
+            path.add(reversed(this.rideOut(c)));
+            await crossGateway(stage, c.member.sub.drone, gateway, path);
+          }
           c.gone = true;
           await goHome(stage, c.member, c.parent, { carry: false });
         }),
     );
+  }
+
+  /** A traveler's way out: its link's route from its own node to the node it visits. */
+  private rideOut(c: Cast): Curve<Vector3> {
+    const link = c.via!;
+    return link.from === c.member.node ? link.route : reversed(link.route);
   }
 
   /** The shipped product rises a little and fades into D3V1N's keeping. */

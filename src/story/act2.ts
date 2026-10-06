@@ -1,6 +1,7 @@
 import { type Curve, CurvePath, LineCurve3, MathUtils, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { seededRandom } from '../core/scatter';
+import { inRun } from '../core/sharedRuns';
 import { reversed } from '../primitives/branch/gridPath';
 import type { Deliverable } from '../primitives/deliverable/Deliverable';
 import type { Drone } from '../primitives/drone/Drone';
@@ -77,21 +78,20 @@ export async function securityGateway(stage: SceneHost, gateway: Gateway, home: 
 }
 
 /**
- * Cross between systems through the secure gateway: fly to the gateway's
- * nearer end, pass along the tunnel (access granted: tunnel and lock flash
- * green, the agent acknowledges), and out to `to`.
+ * Cross between systems through the secure gateway, riding `path` (for a
+ * sub-agent: its link's route, feeder → tunnel → feeder, like any sub-agent
+ * riding its lines). The moment it enters the tunnel, access is granted:
+ * tunnel and lock flash green and the agent acknowledges.
  */
-export async function crossGateway(stage: SceneHost, drone: Drone, gateway: Gateway, to: Vector3): Promise<void> {
-  const here = drone.position.clone().setY(0);
-  const [a, b] = gateway.ends;
-  const [enter, exit] = here.distanceTo(a) <= here.distanceTo(b) ? [a, b] : [b, a];
-  const path = new CurvePath<Vector3>();
-  path.add(new LineCurve3(here, enter.clone()));
-  path.add(new LineCurve3(enter.clone(), exit.clone()));
-  path.add(new LineCurve3(exit.clone(), to.clone().setY(0)));
+export async function crossGateway(
+  stage: SceneHost,
+  drone: Drone,
+  gateway: Gateway,
+  path: Curve<Vector3>,
+): Promise<void> {
   let granted = false;
   const watch = stage.onTick(() => {
-    if (granted || Math.hypot(drone.position.x - enter.x, drone.position.z - enter.z) > 0.3) return;
+    if (granted || !inRun(gateway.run, drone.position)) return;
     granted = true;
     gateway.grant();
     drone.flash = 1;
@@ -101,7 +101,19 @@ export async function crossGateway(stage: SceneHost, drone: Drone, gateway: Gate
   watch();
 }
 
-/** Where a visiting sub-agent hovers at another system's node: beside the resident, to its right on screen. */
+/** A straight crossing for a free agent: to the gateway's nearer end, along the tunnel, out to `to`. */
+export function gatewayCrossing(from: Vector3, gateway: Gateway, to: Vector3): Curve<Vector3> {
+  const here = from.clone().setY(0);
+  const [a, b] = gateway.ends;
+  const [enter, exit] = here.distanceTo(a) <= here.distanceTo(b) ? [a, b] : [b, a];
+  const path = new CurvePath<Vector3>();
+  path.add(new LineCurve3(here, enter.clone()));
+  path.add(new LineCurve3(enter.clone(), exit.clone()));
+  path.add(new LineCurve3(exit.clone(), to.clone().setY(0)));
+  return path;
+}
+
+/** Where a visiting sub-agent hovers when the node's own sub-agent is there: beside it, to its right on screen. */
 export function visitSpot(node: SystemNode): Vector3 {
   return node.position.clone().add(new Vector3(Math.cos(FACE_CAMERA), 0, -Math.sin(FACE_CAMERA)).multiplyScalar(0.85));
 }

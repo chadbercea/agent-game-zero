@@ -5,7 +5,7 @@ import { Gateway } from '../primitives/gateway/Gateway';
 import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { SceneHost } from '../stage/Stage';
-import { converge, crossGateway, goHome, graphTraffic, securityGateway } from './act2';
+import { converge, crossGateway, gatewayCrossing, goHome, graphTraffic, securityGateway } from './act2';
 import { type CrewMember, fanOut, keepWorking } from './fanOut';
 import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, SECURITY_HOME, STORY_CENTER } from './layout';
 import type { TeamworkGraph } from './TeamworkGraph';
@@ -142,9 +142,9 @@ export const SecureGateway: StoryObj = {
       for (;;) {
         await securityGateway(stage, gateway, SECURITY_HOME);
         for (let k = 0; k < 2; k++) {
-          await crossGateway(stage, traveler, gateway, b);
+          await crossGateway(stage, traveler, gateway, gatewayCrossing(traveler.position, gateway, b));
           await wait(stage, 1);
-          await crossGateway(stage, traveler, gateway, a);
+          await crossGateway(stage, traveler, gateway, gatewayCrossing(traveler.position, gateway, a));
           await wait(stage, 1);
         }
         await tween(stage, 0.8, (t) => {
