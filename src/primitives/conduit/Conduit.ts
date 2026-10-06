@@ -5,15 +5,20 @@ import {
   DoubleSide,
   EdgesGeometry,
   Group,
+  InstancedMesh,
   Line,
   LineBasicMaterial,
   LineSegments,
   MathUtils,
+  Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Vector3,
 } from 'three';
 import { GRID } from '../../core/grid';
+import { STATUS_COLOR } from '../../core/palette';
+import { hashSeed, seededRandom } from '../../core/scatter';
 import type { SharedRun } from '../../core/sharedRuns';
 import { GRAPH_COLOR } from '../graph/GraphEdge';
 
@@ -30,11 +35,31 @@ const WAVE_PERIOD = 2.2;
 const WAVE_WIDTH = 0.35;
 
 /**
+ * Streams: lanes of short dashes flowing through the glass, each lane at its
+ * own height and offset across, its own speed, alternating direction. The
+ * dashes carry the system's colors: mostly green (working) and blue (the
+ * graph), some yellow (waiting), a little red (stopped).
+ */
+const STREAM_MIX: readonly [Color, number][] = [
+  [STATUS_COLOR.working, 0.42],
+  [GRAPH_COLOR, 0.4],
+  [STATUS_COLOR.waiting, 0.13],
+  [STATUS_COLOR.stopped, 0.05],
+];
+const LANES_PER_SQUARE = 3;
+const DASHES_PER_UNIT = 5;
+const STREAM_SPEED = { min: 1.3, max: 2.8 };
+const DASH = { length: 0.09, thick: 0.022 };
+let dashGeometry: BoxGeometry | undefined;
+const dashMatrix = new Matrix4();
+
+/**
  * Conduit primitive: an information highway. A low glass box on the floor
  * enclosing a shared run (see sharedRuns): one grid square wide, or wider
  * when its lines run a lane apart, with square ends on grid lines. Thin ribs
  * stand at every grid square inside it and light up in a running wave along
- * the run. `level` (0–1) fades the whole thing in and out.
+ * the run, and several streams of colored dashes flow through it (see
+ * STREAM_MIX). `level` (0–1) fades the whole thing in and out.
  */
 export class Conduit extends Group {
   readonly run: SharedRun;
@@ -42,6 +67,11 @@ export class Conduit extends Group {
   private readonly edges: LineBasicMaterial;
   private readonly ribs: { material: LineBasicMaterial; at: number }[] = [];
   private readonly disposables: { dispose(): void }[] = [];
+  private readonly streams: InstancedMesh;
+  private readonly streamMaterial: MeshBasicMaterial;
+  /** Per dash: lane height and offset across, speed (signed), and where it starts along the run. */
+  private readonly dashes: { y: number; z: number; speed: number; start: number }[] = [];
+  private readonly length: number;
   private _level = 0;
   private time = 0;
 
@@ -92,7 +122,30 @@ export class Conduit extends Group {
       this.add(line);
       this.ribs.push({ material, at: s });
     }
-    this.disposables.push(box, outline, rib, this.glass, this.edges, ...this.ribs.map((r) => r.material));
+    // Streams through the glass, seeded by where the run is, so the same run always flows the same way.
+    this.length = length;
+    const random = seededRandom(hashSeed(`${run.along}:${run.from}:${run.to}:${run.low}:${run.high}`));
+    const lanes = Math.max(3, Math.round((width / GRID) * LANES_PER_SQUARE));
+    for (let lane = 0; lane < lanes; lane++) {
+      const z = ((lane + 0.5) / lanes - 0.5) * (width - 0.1);
+      const y = 0.05 + random() * (HEIGHT - 0.1);
+      const speed = MathUtils.lerp(STREAM_SPEED.min, STREAM_SPEED.max, random()) * (lane % 2 ? -1 : 1);
+      const count = Math.max(2, Math.round(length * DASHES_PER_UNIT * (0.6 + random() * 0.8)));
+      for (let k = 0; k < count; k++) this.dashes.push({ y, z, speed, start: random() * length });
+    }
+    this.streamMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    this.streams = new InstancedMesh(
+      (dashGeometry ??= new BoxGeometry(DASH.length, DASH.thick, DASH.thick)),
+      this.streamMaterial,
+      this.dashes.length,
+    );
+    this.streams.frustumCulled = false;
+    this.dashes.forEach((_, i) => this.streams.setColorAt(i, pick(random())));
+    this.add(this.streams);
+    this.placeDashes();
+
+    this.disposables.push(box, outline, rib, this.glass, this.edges, this.streamMaterial, this.streams);
+    this.disposables.push(...this.ribs.map((r) => r.material));
     this.visible = false;
   }
 
@@ -106,6 +159,7 @@ export class Conduit extends Group {
     this.visible = this._level > 0.001;
     this.glass.opacity = GLASS_OPACITY * this._level;
     this.edges.opacity = EDGE_OPACITY * this._level;
+    this.streamMaterial.opacity = 0.95 * this._level;
     this.paintRibs();
   }
 
@@ -113,6 +167,21 @@ export class Conduit extends Group {
     if (!this.visible) return;
     this.time += dt;
     this.paintRibs();
+    this.placeDashes();
+  }
+
+  /** Each dash flows along its lane and wraps at the ends, shrinking in and out so it never pokes past the glass. */
+  private placeDashes(): void {
+    const half = this.length / 2;
+    this.dashes.forEach(({ y, z, speed, start }, i) => {
+      const s = (((start + speed * this.time) % this.length) + this.length) % this.length;
+      const edge = Math.min(s, this.length - s);
+      const scale = MathUtils.smoothstep(edge, 0, 0.25);
+      dashMatrix.makeScale(Math.max(0.001, scale), Math.max(0.001, scale), Math.max(0.001, scale));
+      dashMatrix.setPosition(s - half, y, z);
+      this.streams.setMatrixAt(i, dashMatrix);
+    });
+    this.streams.instanceMatrix.needsUpdate = true;
   }
 
   dispose(): void {
@@ -130,4 +199,14 @@ export class Conduit extends Group {
       material.opacity = (RIB_REST + (RIB_PEAK - RIB_REST) * glow) * this._level;
     }
   }
+}
+
+/** A stream color from the mix, by a 0–1 draw. */
+function pick(draw: number): Color {
+  let acc = 0;
+  for (const [color, share] of STREAM_MIX) {
+    acc += share;
+    if (draw < acc) return color;
+  }
+  return STREAM_MIX[0][0];
 }
