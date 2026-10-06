@@ -2,23 +2,23 @@ import { type Curve, CurvePath, LineCurve3, Vector3 } from 'three';
 import { reversed } from '../primitives/branch/gridPath';
 import { DroneFlight } from '../animation/DroneFlight';
 import { hashSeed } from '../core/scatter';
-import { Deliverable } from '../primitives/deliverable/Deliverable';
 import type { Drone } from '../primitives/drone/Drone';
 import { Gateway } from '../primitives/gateway/Gateway';
-import { DEFAULT_REQUEST, Ticket } from '../primitives/ticket/Ticket';
+import { Ticket } from '../primitives/ticket/Ticket';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { attachSignal } from '../stage/attachSignal';
-import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
+import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
-import { act2, converge, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
+import { act2, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
 import { type CrewMember, dismiss } from './fanOut';
-import { GATEWAY, HOME, REQUEST_SPOT, ROVO_HOME, SECURITY_HOME } from './layout';
+import { D3V1N_REQUEST, GATEWAY, HOME, ROVO_HOME, ROVO_REQUEST, SECURITY_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { DEMO_1 } from './ledger';
 import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
 import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, subId, TOOLS, Volume, type Worker } from './volume';
-import { dropTicket, handOff, liftTicket } from './request';
+import { takeRequest } from './request';
+import { SMALL_TICKET, Trickle } from './trickle';
 import { assignRoles, type Role } from './roles';
 import { TEAMWORK_LINKS } from './systemLayout';
 import type { GraphLink, TeamworkGraph } from './TeamworkGraph';
@@ -39,13 +39,12 @@ export type StoryStep =
   | 'security'
   | 'graph'
   | 'connected'
-  | 'converge'
   | 'shipped'
   | 'home'
   | 'done';
 
 export const STORY_CAPTION: Record<StoryStep, string> = {
-  request: `A request arrives: ${DEFAULT_REQUEST.title}`,
+  request: `A request arrives for D3V1N: ${DEMO_1.key} ${DEMO_1.title}`,
   access: 'Checking access…',
   denied: 'Access denied. The system isn’t working as expected.',
   mapping: 'Access granted. Mapping the system…',
@@ -58,20 +57,17 @@ export const STORY_CAPTION: Record<StoryStep, string> = {
   security: 'Security bot sets up a secure gateway between the systems',
   graph: 'The Teamwork Graph connects every system on the grid',
   connected: 'Act 2 · Teamwork Graph: agents cross securely, one connected system',
-  converge: 'Converging on one result…',
-  shipped: 'Shipped.',
+  shipped: `${DEMO_1.key} shipped: one change among everything done on the grid today`,
   home: 'Sub-agents heading home…',
   done: 'Done.',
 };
 
 /** How long Act 1 runs on its own before Rovo arrives. */
 export const ACT1_HOLD = 4;
-/** How long the connected system runs (handoffs, crossings, comings and goings) before converging. */
+/** How long the connected system runs (handoffs, crossings, comings and goings) before DEMO-1 ships. */
 export const CONNECTED_SECONDS = 14;
-/** How long the shipped deliverable holds before everyone heads home. */
+/** How long the moment DEMO-1 ships holds before everyone heads home. */
 const SHIPPED_HOLD = 2.5;
-/** The deliverable floats beside D3V1N: to its right on screen, about body height. */
-const DELIVERABLE_OFFSET = new Vector3(Math.cos(FACE_CAMERA), 0, -Math.sin(FACE_CAMERA)).multiplyScalar(1.6).setY(1.6);
 /** When travelers set off and despawners leave during the connected phase (seconds in, then apart). */
 const TRAVEL_START = 1;
 const TRAVEL_APART = 1.6;
@@ -93,16 +89,20 @@ interface Cast {
 }
 
 /**
- * The whole story, start to finish, on one grid. It opens with a request: a
- * ticket drops onto the grid, and the same request starts both acts.
- * Act 1: D3V1N gets access → map → three sub-agents, three isolated jobs.
- * Act 2: Rovo arrives and gets access to Atlassian → map → four sub-agents →
+ * The whole story, start to finish, on one grid. It follows one request,
+ * DEMO-1, through a system that's busy with hundreds of others: small
+ * tickets trickle into every open system the whole time (see Trickle), and
+ * hover cards report everyone's volume of work (see Volume). DEMO-1 is just
+ * one small ticket, dropped in front of D3V1N and, later, Rovo.
+ * Act 1: D3V1N takes DEMO-1, gets access → map → three sub-agents, three
+ * isolated jobs.
+ * Act 2: Rovo takes the same request and gets access to Atlassian → map → four sub-agents →
  * a security bot builds the secure gateway (glass tunnel, lock) → the
  * Teamwork Graph draws in between every node → work changes hands along the
  * graph; some sub-agents stay, some finish and go home, some cross to the
  * other system through the gateway (access granted, green, as they pass).
- * Converge: every product flows across the graph into one shipped
- * deliverable at D3V1N; everyone comes home; the graph fades.
+ * DEMO-1 ships, one change among everything done on the grid today;
+ * everyone comes home, carrying their work; the graph fades.
  *
  * `play()` runs from wherever the story stands: from the top, or (after a
  * denial) a retry at the gate that said no. `reset()` puts the scene back.
@@ -110,9 +110,11 @@ interface Cast {
 export class TeamworkStory {
   readonly graph: TeamworkGraph;
   readonly gateway = new Gateway(GATEWAY);
-  readonly deliverable = new Deliverable();
-  readonly ticket = new Ticket();
-  /** The request is on the grid and D3V1N has it (a retry at the first gate doesn't drop it again). */
+  /** DEMO-1's ticket: small and unlabeled like every other request. */
+  readonly ticket = new Ticket(undefined, { label: false });
+  /** Requests arriving in every open system, one small ticket per request the ledger takes in. */
+  readonly trickle: Trickle;
+  /** D3V1N has DEMO-1 (a retry at the first gate doesn't drop it again). */
   private requested = false;
   private act1Crew: WorkingCrew | null = null;
   private act2Crew: WorkingCrew | null = null;
@@ -129,14 +131,13 @@ export class TeamworkStory {
   ) {
     this.graph = teamworkGraph(stage, scene);
     this.volume = new Volume(stage, scene, () => this.workers(), hashSeed('volume'));
-    this.deliverable.position.copy(scene.act1.gate.position).add(DELIVERABLE_OFFSET);
-    this.deliverable.visible = false;
-    this.ticket.position.copy(REQUEST_SPOT);
+    this.trickle = new Trickle(stage, [scene.act1, scene.act2]);
+    this.volume.onArrive((id) => this.trickle.land(id));
+    this.ticket.scale.setScalar(SMALL_TICKET);
     this.ticket.visible = false;
-    stage.add(this.deliverable, this.gateway, this.ticket);
+    stage.add(this.gateway, this.ticket);
     stage.onTick((dt) => {
       this.ticket.update(dt);
-      this.deliverable.update(dt);
       this.gateway.update(dt);
     });
   }
@@ -152,8 +153,7 @@ export class TeamworkStory {
 
     if (!this.requested) {
       onStep('request');
-      await dropTicket(stage, this.ticket);
-      await handOff(stage, this.ticket, scene.drone);
+      await takeRequest(stage, this.ticket, D3V1N_REQUEST, scene.drone);
       this.requested = true;
     }
 
@@ -175,8 +175,8 @@ export class TeamworkStory {
         status: 'waiting',
       });
       scene.act2.signal = attachSignal(stage, this.rovo.drone, scene.act2.gate);
-      // The same ticket that started Act 1 starts Act 2.
-      await handOff(stage, this.ticket, this.rovo.drone);
+      // The same request lands in front of Rovo.
+      await takeRequest(stage, this.ticket, ROVO_REQUEST, this.rovo.drone);
       // Rovo flies in to its gate.
       this.rovo.drone.status = 'working';
       await fly(stage, DroneFlight.to(this.rovo.drone, scene.act2.gate.position));
@@ -200,16 +200,21 @@ export class TeamworkStory {
 
     onStep('connected');
     this.cast = this.castRoles(rovo);
-    const allCrew = this.cast.map((c) => c.member);
-    const stopTraffic = graphTraffic(stage, this.graph, allCrew, this.runs);
+    const stopTraffic = graphTraffic(
+      stage,
+      this.graph,
+      this.cast.map((c) => c.member),
+      this.runs,
+    );
     await Promise.all([wait(stage, CONNECTED_SECONDS), this.playRoles()]);
     stopTraffic();
 
-    onStep('converge');
     for (const c of this.cast) c.stopLoop();
     await wait(stage, 0.6);
-    await converge(stage, scene, this.graph, allCrew, this.deliverable);
+    // DEMO-1 is done: both agents that worked it acknowledge, and the work goes on.
     this.volume.ledger.finish(DEMO_1.key);
+    scene.drone.flash = 1;
+    rovo.flash = 1;
     onStep('shipped');
     await wait(stage, SHIPPED_HOLD);
 
@@ -220,7 +225,6 @@ export class TeamworkStory {
         await wait(stage, 1);
         await this.graph.fade(stage, 1.6);
       })(),
-      this.putAwayDeliverable(),
     ]);
     await tween(stage, 0.8, (t) => {
       this.gateway.built = 1 - t;
@@ -250,8 +254,8 @@ export class TeamworkStory {
     this.gateway.built = 0;
     this.gateway.lockDrop = 0;
     this.gateway.conduit.streams = 0;
-    this.deliverable.reset();
-    this.deliverable.visible = false;
+    this.trickle.clear();
+    this.ticket.visible = false;
     scene.act1.map.hide();
     scene.act2.map.hide();
     scene.act1.gate.state = scene.act2.gate.state = 'off';
@@ -274,7 +278,6 @@ export class TeamworkStory {
     scene.act2.signal = null;
     this.requested = false;
     this.volume.followRequest();
-    leaving.push(liftTicket(stage, this.ticket));
     await Promise.all(leaving);
     scene.drone.status = 'waiting';
   }
@@ -396,7 +399,7 @@ export class TeamworkStory {
     ]);
   }
 
-  /** Everyone still out comes home empty-handed; travelers cross back through the gateway first. */
+  /** Everyone still out comes home with its work; travelers cross back through the gateway first. */
   private async everyoneHome(): Promise<void> {
     const { stage, gateway } = this;
     await Promise.all(
@@ -413,7 +416,7 @@ export class TeamworkStory {
             await crossGateway(stage, c.member.sub.drone, gateway, path);
           }
           c.gone = true;
-          await goHome(stage, c.member, c.parent, { carry: false });
+          await goHome(stage, c.member, c.parent);
         }),
     );
   }
@@ -422,21 +425,5 @@ export class TeamworkStory {
   private rideOut(c: Cast): Curve<Vector3> {
     const link = c.via!;
     return link.from === c.member.node ? link.route : reversed(link.route);
-  }
-
-  /** The shipped product rises a little and fades into D3V1N's keeping. */
-  private async putAwayDeliverable(): Promise<void> {
-    const { stage, deliverable } = this;
-    const y = deliverable.position.y;
-    deliverable.material.transparent = true;
-    await tween(stage, 1.2, (t) => {
-      deliverable.position.y = y + t * 0.4;
-      deliverable.material.opacity = 1 - t;
-    });
-    deliverable.visible = false;
-    deliverable.reset();
-    deliverable.position.y = y;
-    deliverable.material.opacity = 1;
-    deliverable.material.transparent = false;
   }
 }
