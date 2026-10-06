@@ -7,19 +7,21 @@
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
       #stage { position: fixed; inset: 0; }
-      #hint, #caption {
+      #hint, #caption, #totals {
         position: fixed; left: 16px;
         font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; color: #8a8c93;
         pointer-events: none; user-select: none;
       }
       #hint { bottom: 14px; }
       #caption { bottom: 36px; font-size: 14px; color: #3a3b40; }
+      #totals { top: 14px; font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <div id="stage"></div>
+    <div id="totals"></div>
     <div id="caption"></div>
-    <div id="hint">Drag to pan · scroll to zoom · hover a gate or a node to see its system's lines (click to pin)</div>
+    <div id="hint">Drag to pan · scroll to zoom · hover anything to see its work · hover a gate or node for its lines (click to pin)</div>
     <script type="module" src="/src/sandbox/main.ts"></script>
   </body>
 </html>
