@@ -12,6 +12,12 @@ The sandbox plays one story in two acts on a single isometric grid. It opens wit
 
 A caption at the bottom of the screen names each step as it plays.
 
+The one request is one item among many. A work ledger simulates today's volume across the grid: every node keeps busy with everyone else's work, and whoever is working in the scene finishes pieces at their own pace. **Hover anything** for its volume of work:
+- a node, agent or sub-agent shows its own counts (done, in progress, queued), what's under way (DEMO-1 among the rest), its share of the whole, and who it works with
+- a gate shows its whole system, node by node
+
+The grand total sits in the top-left corner.
+
 ## Running
 
 ```sh
@@ -35,7 +41,7 @@ The panel in the top right:
 | Pause between runs | Seconds between auto-runs |
 | Reset | Sends everyone home and clears the stage |
 
-Hover over a gate or node to see its system's lines, and click to pin them. For debugging, `window.sandbox` exposes `stage`, `scene`, `story`, `run`, `retry`, `reset` and `settings`.
+Hover over anything for its hover card. Hovering a gate or node also shows its system's lines, and clicking pins them. For debugging, `window.sandbox` exposes `stage`, `scene`, `story`, `run`, `retry`, `reset` and `settings`.
 
 ## Tests
 
@@ -62,7 +68,7 @@ Layering: **Primitive → Animation → Stage → Story.**
 | `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Deliverable, Ticket (the request) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
-| `src/story/` | The story as chained steps on the stage clock. The request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
+| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
 | `src/sandbox/` | Sandbox app: the stage, the caption, and the control panel |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 
