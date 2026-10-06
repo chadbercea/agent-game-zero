@@ -4,7 +4,7 @@ import { Vector3 } from 'three';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { JOB_KINDS } from '../primitives/node/emblems';
-import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
+import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import { accessCheck } from './accessCheck';
 import { dismiss, fanOut, work } from './fanOut';
@@ -31,7 +31,6 @@ export const FanOut: StoryObj = {
     const { root, stage } = specimenStage({ viewSize: 13, focusY: 0 });
     const gate = new Gate();
     gate.position.set(2, 0, 2);
-    gate.rotation.y = FACE_CAMERA;
     const gateAnimator = new GateAnimator(gate);
     stage.add(gate);
     stage.onTick((dt) => gateAnimator.update(dt));

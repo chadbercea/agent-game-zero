@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { distanceToPolyline } from '../primitives/branch/gridPath';
-import { GRID, snapToGrid } from './grid';
+import { distanceToPolyline, trimPolyline } from '../primitives/branch/gridPath';
+import { GATE_FOOTPRINT, GRID, snapToGrid } from './grid';
 
 /** A small seeded random generator (mulberry32): same seed, same sequence. */
 export function seededRandom(seed: number): () => number {
@@ -71,8 +71,11 @@ const MAX_REACH = 10;
 const PORTS = [0, GRID, -GRID];
 /** Lines never touch: every point of one keeps at least a lane from every other. */
 const LINE_GAP = GRID - 1e-6;
-/** Under the gate pad (lines are drawn from its edge), where every line meets at the gate. */
-const GATE_PAD = 1.2;
+/**
+ * The visible part of a gate line: from the gate pad's edge out. Pads sit square on the grid and every
+ * line leaves along an axis from a port inside the pad, so the edge is exactly half a footprint along it.
+ */
+export const visible = (route: Vector3[]) => trimPolyline(route, GATE_FOOTPRINT / 2, 0);
 /** Each node walks out from the gate on its own ray; when a ray is blocked it turns by the golden angle. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
@@ -115,13 +118,14 @@ export function radialMap(origin: Vector3, count: number, options: RadialOptions
   };
   // Every point of the new line beyond the gate pad keeps at least a lane from the other line.
   const apart = (route: Vector3[], other: Vector3[]) => {
-    for (let i = 1; i < route.length; i++) {
-      const [a, b] = [route[i - 1], route[i]];
+    // Only what's drawn counts: each line from where it leaves the gate pad's edge.
+    const [mine, theirs] = [visible(route), visible(other)];
+    for (let i = 1; i < mine.length; i++) {
+      const [a, b] = [mine[i - 1], mine[i]];
       const steps = Math.ceil(a.distanceTo(b) / (GRID / 4));
       for (let s = 0; s <= steps; s++) {
         const p = a.clone().lerp(b, s / steps);
-        if (p.distanceTo(center) < GATE_PAD) continue;
-        if (distanceToPolyline(p.x, p.z, other) < LINE_GAP) return false;
+        if (distanceToPolyline(p.x, p.z, theirs) < LINE_GAP) return false;
       }
     }
     return true;

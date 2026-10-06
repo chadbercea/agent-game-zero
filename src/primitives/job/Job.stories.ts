@@ -26,7 +26,6 @@ export const Jobs: StoryObj<JobArgs> = {
       const { x, z } = rowPosition(i, JOB_KINDS.length, 2.4);
       const node = new SystemNode({ kind });
       node.position.set(x, 0, z);
-      node.rotation.y = FACE_CAMERA;
       node.emblem.visible = false;
       node.light = 'working';
       const job = new Job(kind);
@@ -54,7 +53,6 @@ export const Single: StoryObj<JobArgs & { kind: JobKind }> = {
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 1.8, focusY: 0.6 });
     const node = new SystemNode({ kind: args.kind });
-    node.rotation.y = FACE_CAMERA;
     node.emblem.visible = false;
     node.light = 'working';
     const job = new Job(args.kind);

@@ -3,7 +3,7 @@ import type { Drone } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
 import { type AttachedSignal, attachSignal } from '../stage/attachSignal';
-import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
+import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
@@ -64,7 +64,6 @@ export function twoActScene(stage: SceneHost): TwoActScene {
   const gateAt = (position: typeof ACT1_GATE) => {
     const gate = new Gate();
     gate.position.copy(position);
-    gate.rotation.y = FACE_CAMERA;
     const animator = new GateAnimator(gate);
     stage.add(gate);
     stage.onTick((dt) => animator.update(dt));

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
-import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { SYSTEM_KINDS } from './emblems';
 import { SystemNode } from './SystemNode';
@@ -22,7 +21,6 @@ export const Emblems: StoryObj = {
       const { x, z } = rowPosition(i, SYSTEM_KINDS.length, 1.9);
       const node = new SystemNode({ kind });
       node.position.set(x, 0, z);
-      node.rotation.y = FACE_CAMERA;
       stage.add(node);
     });
     return root;

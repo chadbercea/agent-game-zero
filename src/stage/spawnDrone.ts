@@ -2,8 +2,9 @@ import { DroneAnimator } from '../animation/DroneAnimator';
 import { Drone, type DroneOptions } from '../primitives/drone/Drone';
 import type { SceneHost } from './Stage';
 
-/** Drones (and the gates and nodes they stand over) square up to the isometric camera. */
-export const FACE_CAMERA = Math.PI / 4;
+import { FACE_CAMERA } from '../core/grid';
+
+export { FACE_CAMERA };
 
 export interface SpawnedDrone {
   drone: Drone;

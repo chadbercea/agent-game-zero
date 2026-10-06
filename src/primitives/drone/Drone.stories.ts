@@ -3,7 +3,6 @@ import { Matrix4, QuadraticBezierCurve3, Vector3 } from 'three';
 import { DroneFlight } from '../../animation/DroneFlight';
 import { GateAnimator } from '../../animation/GateAnimator';
 import { LINEAGES, type Lineage, STATUSES, type Status } from '../../core/palette';
-import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { Connection } from '../connection/Connection';
 import { Gate } from '../gate/Gate';
 import { rowPosition, specimenStage } from '../../stage/specimen';
@@ -105,7 +104,6 @@ export const Flight: Story = {
     for (const spot of spots) {
       const gate = new Gate({ state: 'open' });
       gate.position.copy(spot);
-      gate.rotation.y = FACE_CAMERA;
       const animator = new GateAnimator(gate);
       stage.add(gate);
       stage.onTick((dt) => animator.update(dt));

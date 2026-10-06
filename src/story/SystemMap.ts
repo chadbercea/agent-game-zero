@@ -1,13 +1,12 @@
 import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
 import { hashSeed, radialMap } from '../core/scatter';
-import { BEND_RADIUS, snapToGrid } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
 import { GridPatch } from '../primitives/branch/GridPatch';
 import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
 import { EMBLEM_HEIGHT, EMBLEM_SCALE, SystemNode } from '../primitives/node/SystemNode';
-import { FACE_CAMERA } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 
 export interface SystemMapOptions {
@@ -18,8 +17,9 @@ export interface SystemMapOptions {
 }
 
 const LINE_FADE = 3;
-const BRANCH_INSET_GATE = 1.2;
-const BRANCH_INSET_NODE = 0.7;
+/** Lines end exactly at the pad edges: pads are square on the grid, so that's half a footprint. */
+const BRANCH_INSET_GATE = GATE_FOOTPRINT / 2;
+const BRANCH_INSET_NODE = NODE_FOOTPRINT / 2;
 const LINE_OPACITY = 0.8;
 
 /**
@@ -65,7 +65,6 @@ export class SystemMap {
       const polyline = polylines[i];
       const node = new SystemNode({ kind });
       node.position.copy(spots[i]);
-      node.rotation.y = FACE_CAMERA;
       node.visible = false;
       // The drawn line stops at the edges of the gate and node pads instead of running underneath them.
       const drawn = trimPolyline(polyline, BRANCH_INSET_GATE, BRANCH_INSET_NODE);
@@ -135,7 +134,7 @@ export class SystemMap {
     // Emblems idle: a slow bob and a gentle sway, desynchronized per node.
     this.nodes.forEach((node, i) => {
       node.emblem.position.y = EMBLEM_HEIGHT + Math.sin(this.time * 1.4 + i * 2) * 0.03;
-      node.emblem.rotation.y = Math.sin(this.time * 0.5 + i) * 0.35;
+      node.emblem.rotation.y = FACE_CAMERA + Math.sin(this.time * 0.5 + i) * 0.35;
     });
     const k = 1 - Math.exp(-LINE_FADE * dt);
     if (this.revealed) {

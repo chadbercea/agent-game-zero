@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { GateAnimator } from '../../animation/GateAnimator';
 import type { Stage } from '../../stage/Stage';
-import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { GATE_STATES, Gate, type GateState } from './Gate';
 
@@ -22,7 +21,6 @@ type Story = StoryObj<GateArgs>;
 function placeGate(stage: Stage, x: number, z: number, state: GateState): Gate {
   const gate = new Gate({ state });
   gate.position.set(x, 0, z);
-  gate.rotation.y = FACE_CAMERA;
   const animator = new GateAnimator(gate);
   stage.add(gate);
   stage.onTick((dt) => animator.update(dt));

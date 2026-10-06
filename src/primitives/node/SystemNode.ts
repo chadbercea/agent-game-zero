@@ -1,5 +1,6 @@
 import { Group, type Material, Mesh, MeshStandardMaterial } from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { FACE_CAMERA, NODE_FOOTPRINT } from '../../core/grid';
 import { NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
 import { Pad } from '../pad/Pad';
 import { buildEmblem, SYSTEM_NAME, type SystemKind } from './emblems';
@@ -22,11 +23,12 @@ export interface SystemNodeOptions {
 /**
  * System node primitive: one system behind a gate (Figma, GitHub, Notion).
  * A small Pad whose screen shows the node's light, a floating emblem that
- * says which system it is, and a name label. Front faces local +Z.
+ * says which system it is, and a name label. The pad sits square on the
+ * grid (2 × 2 cells, never rotated); the emblem and label face the camera.
  */
 export class SystemNode extends Group {
   readonly kind: SystemKind;
-  readonly pad = new Pad();
+  readonly pad = new Pad({ width: NODE_FOOTPRINT / NODE_SCALE, depth: NODE_FOOTPRINT / NODE_SCALE });
   /** Floating emblem; animators bob and turn it. */
   readonly emblem: Group;
   private _light: NodeLight = 'off';
@@ -46,6 +48,7 @@ export class SystemNode extends Group {
     this.emblem = buildEmblem(options.kind, { shell, graphite });
     this.emblem.position.y = EMBLEM_HEIGHT;
     this.emblem.scale.setScalar(EMBLEM_SCALE);
+    this.emblem.rotation.y = FACE_CAMERA;
     this.add(this.emblem);
 
     if (options.showLabel ?? true) {
@@ -59,7 +62,9 @@ export class SystemNode extends Group {
         userSelect: 'none',
       } satisfies Partial<CSSStyleDeclaration>);
       this.label = new CSS2DObject(el);
-      this.label.position.set(0, -0.05, 0.62);
+      // Just past the pad's front corner, straight below it on screen.
+      const front = NODE_FOOTPRINT * 0.62;
+      this.label.position.set(Math.sin(FACE_CAMERA) * front, -0.05, Math.cos(FACE_CAMERA) * front);
       this.add(this.label);
     }
 

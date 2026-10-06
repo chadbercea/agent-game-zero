@@ -5,7 +5,7 @@ import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { JOB_KINDS } from '../primitives/node/emblems';
 import { Stage } from '../stage/Stage';
-import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
+import { spawnDrone } from '../stage/spawnDrone';
 import { hoverLines } from '../story/hoverLines';
 import { JOB_STEP_CAPTION, type JobStep, runJob } from '../story/runJob';
 import { SystemMap } from '../story/SystemMap';
@@ -23,7 +23,6 @@ stage.centerOn(new Vector3(0, 0, 0));
 
 const gate = new Gate();
 gate.position.set(2, 0, 2);
-gate.rotation.y = FACE_CAMERA;
 const gateAnimator = new GateAnimator(gate);
 stage.add(gate);
 stage.onTick((dt) => gateAnimator.update(dt));

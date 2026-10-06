@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import { GRID } from './grid';
-import { gridRoute, radialMap } from './scatter';
+import { gridRoute, radialMap, visible } from './scatter';
 
 const origin = new Vector3(2, 0, 2);
 /** Which way a route bends: +1 / −1 by handedness, 0 when straight. */
@@ -48,13 +48,12 @@ describe('radialMap', () => {
           expect(routes[i]).toEqual(gridRoute(routes[i][0], p));
           routes.forEach((r, j) => {
             if (j === i) return;
-            for (let t = 0; t <= 1; t += 0.05) {
-              for (let k = 1; k < routes[i].length; k++) {
-                const q = routes[i][k - 1].clone().lerp(routes[i][k], t);
-                if (q.distanceTo(origin) >= 1.2)
-                  expect(distanceToPolyline(q.x, q.z, r)).toBeGreaterThanOrEqual(GRID - 1e-6);
+            const [mine, theirs] = [visible(routes[i]), visible(r)];
+            for (let k = 1; k < mine.length; k++)
+              for (let t = 0; t <= 1; t += 0.05) {
+                const q = mine[k - 1].clone().lerp(mine[k], t);
+                expect(distanceToPolyline(q.x, q.z, theirs)).toBeGreaterThanOrEqual(GRID - 1e-6);
               }
-            }
           });
         });
       });

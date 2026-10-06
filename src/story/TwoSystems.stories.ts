@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/html-vite';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
 import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
-import { FACE_CAMERA } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { Stage } from '../stage/Stage';
 import { Vector3 } from 'three';
@@ -18,7 +17,6 @@ export default meta;
 function gateAt(stage: Stage, position: typeof ACT1_GATE): Gate {
   const gate = new Gate({ state: 'open' });
   gate.position.copy(position);
-  gate.rotation.y = FACE_CAMERA;
   const animator = new GateAnimator(gate);
   stage.add(gate);
   stage.onTick((dt) => animator.update(dt));

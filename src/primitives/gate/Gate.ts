@@ -1,5 +1,6 @@
 import { Group, Mesh, MeshBasicMaterial, PlaneGeometry } from 'three';
 import { NEUTRAL, STATUS_COLOR } from '../../core/palette';
+import { GATE_FOOTPRINT } from '../../core/grid';
 import { PAD_TOP, Pad, SCREEN_DEPTH } from '../pad/Pad';
 
 /**
@@ -31,10 +32,10 @@ export interface GateOptions {
  * Gate primitive: the access point to a system. A fixed object in the world
  * (it belongs to no drone), built on the Pad. While thinking, a bright bar
  * sweeps across its screen so it never reads as an idle drone's yellow.
- * Front faces local +Z.
+ * Square on the grid: a 3 × 3 cell footprint, never rotated.
  */
 export class Gate extends Group {
-  readonly pad = new Pad();
+  readonly pad = new Pad({ width: GATE_FOOTPRINT, depth: GATE_FOOTPRINT });
   /** Scanning bar across the screen (thinking). GateAnimator moves and fades it. */
   readonly sweep: Mesh;
   readonly sweepMaterial: MeshBasicMaterial;

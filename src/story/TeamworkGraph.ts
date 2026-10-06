@@ -1,5 +1,5 @@
 import { type Curve, MathUtils, Vector3 } from 'three';
-import { BEND_RADIUS, snapToGrid } from '../core/grid';
+import { BEND_RADIUS, NODE_FOOTPRINT, snapToGrid } from '../core/grid';
 import { gridRoute } from '../core/scatter';
 import { distanceToPolyline, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
@@ -43,7 +43,7 @@ export function graphLinks(points: readonly Vector3[], obstacles: readonly Vecto
 const DRAW_SECONDS = 1.1;
 const STAGGER_SECONDS = 0.28;
 /** Edges stop just short of node pads so their ports sit at the pad edge. */
-const NODE_INSET = 0.62;
+const NODE_INSET = NODE_FOOTPRINT / 2;
 /** How far an edge keeps from node pads it doesn't connect. */
 const NODE_CLEARANCE = 0.9;
 /** How far an edge keeps from gates. */

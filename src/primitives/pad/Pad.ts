@@ -20,16 +20,16 @@ export const SCREEN_GLOW = 1.6;
 export const SKIRT_GLOW = 1.3;
 export const FLOOR_GLOW_OPACITY = 0.42;
 
-let shared: ReturnType<typeof buildGeometry> | undefined;
+const shared = new Map<string, ReturnType<typeof buildGeometry>>();
 
-function buildGeometry() {
+function buildGeometry(width: number, depth: number) {
   const floorGlow = new PlaneGeometry(3.4, 3.4);
   floorGlow.rotateX(-Math.PI / 2);
   const screen = new PlaneGeometry(SCREEN_WIDTH, SCREEN_DEPTH);
   screen.rotateX(-Math.PI / 2);
   return {
-    slab: new RoundedBoxGeometry(1.5, 0.24, 1.1, 3, 0.07),
-    skirt: new RoundedBoxGeometry(1.46, 0.05, 1.06, 2, 0.024),
+    slab: new RoundedBoxGeometry(width, 0.24, depth, 3, 0.07),
+    skirt: new RoundedBoxGeometry(width - 0.04, 0.05, depth - 0.04, 2, 0.024),
     bezel: new BoxGeometry(0.62, 0.02, 0.44),
     screen,
     floorGlow,
@@ -41,15 +41,24 @@ function buildGeometry() {
  * bottom edge, and a soft glow on the floor. Tasks and gates are built on it;
  * whoever owns the pad decides what color it shows and animates its lights.
  */
+export interface PadOptions {
+  /** Footprint along local X (before any scale). */
+  width?: number;
+  /** Footprint along local Z (before any scale). */
+  depth?: number;
+}
+
 export class Pad extends Group {
   readonly screenMaterial: MeshStandardMaterial;
   readonly skirtMaterial: MeshStandardMaterial;
   readonly glowMaterial: MeshBasicMaterial;
   private readonly materials: Material[];
 
-  constructor() {
+  constructor(options: PadOptions = {}) {
     super();
-    const g = (shared ??= buildGeometry());
+    const { width = 1.5, depth = 1.1 } = options;
+    const key = `${width}x${depth}`;
+    const g = shared.get(key) ?? shared.set(key, buildGeometry(width, depth)).get(key)!;
     const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05 });
     const bezel = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.4, metalness: 0.2 });
     this.screenMaterial = new MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });

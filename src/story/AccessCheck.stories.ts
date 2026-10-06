@@ -3,7 +3,7 @@ import { attachSignal } from '../stage/attachSignal';
 import { Vector3 } from 'three';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
-import { FACE_CAMERA, spawnDrone } from '../stage/spawnDrone';
+import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
@@ -28,7 +28,6 @@ const HOME = new Vector3(-3.4, 0, 2.2);
 
 function scene(stage: Stage, works: boolean) {
   const gate = new Gate({ works });
-  gate.rotation.y = FACE_CAMERA;
   const gateAnimator = new GateAnimator(gate);
   stage.add(gate);
   stage.onTick((dt) => gateAnimator.update(dt));
