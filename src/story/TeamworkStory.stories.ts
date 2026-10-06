@@ -1,13 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { Deliverable } from '../primitives/deliverable/Deliverable';
+import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { Gateway } from '../primitives/gateway/Gateway';
+import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { SceneHost } from '../stage/Stage';
-import { comeHome, converge, graphTraffic } from './act2';
-import { fanOut, keepWorking } from './fanOut';
-import { ATLASSIAN_GATE, STORY_CENTER } from './layout';
+import { converge, crossGateway, goHome, graphTraffic, securityGateway } from './act2';
+import { type CrewMember, fanOut, keepWorking } from './fanOut';
+import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, SECURITY_HOME, STORY_CENTER } from './layout';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { STORY_CAPTION, TeamworkStory } from './teamworkStory';
-import { wait } from './timeline';
+import { tween, wait } from './timeline';
 import { type TwoActScene, twoActScene, teamworkGraph } from './twoActs';
 
 const meta: Meta = {
@@ -57,22 +60,34 @@ export const Full: StoryObj = {
   },
 };
 
-/** Both systems open, D3V1N at the Atlassian gate, all seven sub-agents out and working, then the graph draws in. */
-async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: TeamworkGraph) {
+/**
+ * Both systems open, D3V1N at its gate and Rovo at Atlassian's, all seven
+ * sub-agents out and working, then the graph draws in. Returns the crew and
+ * each sub-agent's parent.
+ */
+async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: TeamworkGraph, rovo: Drone) {
   const { drone, act1, act2 } = scene;
   act1.gate.state = act2.gate.state = 'open';
-  drone.position.copy(ATLASSIAN_GATE);
-  drone.status = 'working';
-  act1.signal.mute(true);
+  drone.position.copy(ACT1_GATE);
+  rovo.position.copy(ATLASSIAN_GATE);
+  drone.status = rovo.status = 'working';
   for (const map of [act1.map, act2.map]) {
     map.showAll();
     map.linesVisible = false;
   }
-  const crew = (await Promise.all([fanOut(stage, drone, act1.map), fanOut(stage, drone, act2.map)])).flat();
+  const [crew1, crew2] = await Promise.all([fanOut(stage, drone, act1.map), fanOut(stage, rovo, act2.map)]);
+  const crew = [...crew1, ...crew2];
   const stops = crew.map((member) => keepWorking(stage, member));
   // Everyone's working: now the graph draws in between them.
   await graph.reveal(stage);
-  return { crew, stop: () => stops.forEach((stop) => stop()) };
+  const parentOf = (m: CrewMember) => (crew1.includes(m) ? drone : rovo);
+  return { crew, parentOf, stop: () => stops.forEach((stop) => stop()) };
+}
+
+/** Rovo, parked at the Atlassian gate for the staged stories. */
+function stagedRovo(stage: SceneHost): Drone {
+  return spawnDrone(stage, ATLASSIAN_GATE.x, ATLASSIAN_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true })
+    .drone;
 }
 
 /** Act 2's handoffs on their own: work products changing hands node to node along the graph, nonstop. */
@@ -82,36 +97,82 @@ export const Handoffs: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
     const graph = teamworkGraph(stage, scene);
+    const rovo = stagedRovo(stage);
     void (async () => {
-      const { crew } = await connectedScene(stage, scene, graph);
+      const { crew } = await connectedScene(stage, scene, graph, rovo);
       graphTraffic(stage, graph, crew);
     })();
     return root;
   },
 };
 
-/** The payoff on its own: every product converges across the graph into one shipped deliverable, then everyone comes home. Loops. */
+/**
+ * The secure gateway on its own: the security bot flies in, the glass tunnel
+ * scales up, and it drops the lock. Then a sub-agent crosses back and forth
+ * between the systems through it, the tunnel and lock flashing green each
+ * time it passes. Loops.
+ */
+export const SecureGateway: StoryObj = {
+  render: () => {
+    const { root, stage } = specimenStage(VIEW);
+    stage.centerOn(STORY_CENTER);
+    const scene = twoActScene(stage);
+    const gateway = new Gateway(GATEWAY);
+    stage.add(gateway);
+    stage.onTick((dt) => gateway.update(dt));
+    const traveler = spawnDrone(stage, ACT1_GATE.x, ACT1_GATE.z, {
+      name: 'D3V1N.1',
+      subAgent: true,
+      status: 'working',
+    }).drone;
+    traveler.scale.setScalar(SUB_AGENT_SCALE);
+    const [a, b] = [scene.act1.gate.position.clone(), scene.act2.gate.position.clone()];
+    void (async () => {
+      for (;;) {
+        await securityGateway(stage, gateway, SECURITY_HOME);
+        for (let k = 0; k < 2; k++) {
+          await crossGateway(stage, traveler, gateway, b);
+          await wait(stage, 1);
+          await crossGateway(stage, traveler, gateway, a);
+          await wait(stage, 1);
+        }
+        await tween(stage, 0.8, (t) => {
+          gateway.built = 1 - t;
+          gateway.lockDrop = 1 - t;
+        });
+        await wait(stage, 1);
+      }
+    })();
+    return root;
+  },
+};
+
+/** The payoff on its own: every product converges across the graph into one shipped deliverable at D3V1N, then everyone comes home. Loops. */
 export const Converge: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage(VIEW);
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
     const graph = teamworkGraph(stage, scene);
+    const rovo = stagedRovo(stage);
     const deliverable = new Deliverable();
-    deliverable.position.copy(ATLASSIAN_GATE).add({ x: 1.13, y: 1.6, z: -1.13 });
+    deliverable.position.copy(ACT1_GATE).add({ x: 1.13, y: 1.6, z: -1.13 });
     deliverable.visible = false;
     stage.add(deliverable);
     stage.onTick((dt) => deliverable.update(dt));
     void (async () => {
       for (;;) {
-        const working = await connectedScene(stage, scene, graph);
+        const working = await connectedScene(stage, scene, graph, rovo);
         await wait(stage, 2);
         working.stop();
         await converge(stage, scene, graph, working.crew, deliverable);
         await wait(stage, 2);
-        const act1Crew = working.crew.filter((m) => scene.act1.map.nodes.includes(m.node));
-        const act2Crew = working.crew.filter((m) => scene.act2.map.nodes.includes(m.node));
-        await Promise.all([comeHome(stage, scene, act1Crew, act2Crew), graph.fade(stage, 1.6)]);
+        await Promise.all([
+          ...working.crew.map((m, i) =>
+            wait(stage, i * 0.25).then(() => goHome(stage, m, working.parentOf(m), { carry: false })),
+          ),
+          graph.fade(stage, 1.6),
+        ]);
         deliverable.reset();
         deliverable.visible = false;
         scene.act1.map.hide();

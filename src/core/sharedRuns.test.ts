@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { inRun, sharedRuns } from './sharedRuns';
+import { inRun, runsOverlap, sharedRuns } from './sharedRuns';
 
 const v = (x: number, z: number) => new Vector3(x, 0, z);
 
@@ -61,5 +61,11 @@ describe('sharedRuns', () => {
     expect(inRun(run, v(2, 0.2))).toBe(true);
     expect(inRun(run, v(5, 0))).toBe(false);
     expect(inRun(run, v(2, 1))).toBe(false);
+  });
+
+  it('knows when two runs overlap', () => {
+    const a = { along: 'x' as const, from: 0, to: 4, low: 0, high: 0 };
+    expect(runsOverlap(a, { along: 'z', from: -2, to: 2, low: 2, high: 2 })).toBe(true);
+    expect(runsOverlap(a, { along: 'z', from: 1, to: 3, low: 2, high: 2 })).toBe(false);
   });
 });

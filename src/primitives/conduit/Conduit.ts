@@ -33,6 +33,8 @@ const RIB_PEAK = 0.9;
 const WAVE_SPEED = 2.6;
 const WAVE_PERIOD = 2.2;
 const WAVE_WIDTH = 0.35;
+/** How fast an access-granted flash fades (per second). */
+const FLASH_DECAY = 1.4;
 
 /**
  * Streams: lanes of short dashes flowing through the glass, each lane at its
@@ -74,6 +76,8 @@ export class Conduit extends Group {
   private readonly length: number;
   private _level = 0;
   private time = 0;
+  /** Access-granted flash (0–1): edges and ribs light green, decaying. */
+  private flashLevel = 0;
 
   constructor(run: SharedRun) {
     super();
@@ -163,9 +167,17 @@ export class Conduit extends Group {
     this.paintRibs();
   }
 
+  /** Signal access granted: the whole tunnel flashes green, then settles back to blue. */
+  grant(): void {
+    this.flashLevel = 1;
+  }
+
   update(dt: number): void {
     if (!this.visible) return;
     this.time += dt;
+    this.flashLevel = Math.max(0, this.flashLevel - dt * FLASH_DECAY);
+    this.edges.color.copy(GRAPH_COLOR).lerp(STATUS_COLOR.working, this.flashLevel);
+    this.edges.opacity = (EDGE_OPACITY + (1 - EDGE_OPACITY) * this.flashLevel) * this._level;
     this.paintRibs();
     this.placeDashes();
   }
@@ -196,7 +208,8 @@ export class Conduit extends Group {
       const phase = (((head - at) % WAVE_PERIOD) + WAVE_PERIOD) % WAVE_PERIOD;
       const crest = Math.min(phase, WAVE_PERIOD - phase);
       const glow = Math.exp(-((crest / WAVE_WIDTH) ** 2));
-      material.opacity = (RIB_REST + (RIB_PEAK - RIB_REST) * glow) * this._level;
+      material.color.copy(GRAPH_COLOR).lerp(STATUS_COLOR.working, this.flashLevel);
+      material.opacity = Math.max(RIB_REST + (RIB_PEAK - RIB_REST) * glow, this.flashLevel) * this._level;
     }
   }
 }

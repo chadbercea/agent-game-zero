@@ -1,6 +1,6 @@
 import { type Curve, MathUtils, Vector3 } from 'three';
 import { BEND_RADIUS, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
-import { inRun, sharedRuns } from '../core/sharedRuns';
+import { inRun, runsOverlap, type SharedRun, sharedRuns } from '../core/sharedRuns';
 import { Conduit } from '../primitives/conduit/Conduit';
 import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
@@ -44,6 +44,8 @@ export interface TeamworkGraphOptions {
   gateLines?: readonly (readonly Vector3[])[];
   /** Gate centers, so highways stop at the gate pads. */
   gates?: readonly Vector3[];
+  /** Runs already spoken for (the secure gateway): no plain highway overlaps them. */
+  reserved?: readonly SharedRun[];
 }
 
 export class TeamworkGraph {
@@ -58,7 +60,7 @@ export class TeamworkGraph {
    * encloses it.
    */
   constructor(stage: SceneHost, groups: readonly (readonly SystemNode[])[], options: TeamworkGraphOptions = {}) {
-    const { lines = new Map(), links = TEAMWORK_LINKS, gateLines = [], gates = [] } = options;
+    const { lines = new Map(), links = TEAMWORK_LINKS, gateLines = [], gates = [], reserved = [] } = options;
     this.untick = stage.onTick((dt) => {
       for (const { edge } of this.links) edge.update(dt);
       for (const conduit of this.conduits) conduit.update(dt);
@@ -87,7 +89,7 @@ export class TeamworkGraph {
     ];
     // Only runs a graph link takes part in: gate lines alongside each other never meet (each node has its own).
     const all = [...polylines, ...gateLines];
-    for (const run of sharedRuns(all, keepouts)) {
+    for (const run of sharedRuns(all, keepouts).filter((r) => !reserved.some((g) => runsOverlap(r, g)))) {
       const conduit = new Conduit(run);
       stage.add(conduit);
       this.conduits.push(conduit);

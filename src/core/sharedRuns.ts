@@ -112,3 +112,14 @@ export function inRun(run: SharedRun, p: Vector3): boolean {
   const across = run.along === 'x' ? p.z : p.x;
   return along >= run.from && along <= run.to && across >= run.low - GRID / 2 && across <= run.high + GRID / 2;
 }
+
+/** Whether two runs' footprints (half a lane of margin across each) overlap on the floor. */
+export function runsOverlap(a: SharedRun, b: SharedRun): boolean {
+  const box = (r: SharedRun) => {
+    const [x0, x1] = r.along === 'x' ? [r.from, r.to] : [r.low - GRID / 2, r.high + GRID / 2];
+    const [z0, z1] = r.along === 'x' ? [r.low - GRID / 2, r.high + GRID / 2] : [r.from, r.to];
+    return { x0, x1, z0, z1 };
+  };
+  const [p, q] = [box(a), box(b)];
+  return p.x0 < q.x1 && q.x0 < p.x1 && p.z0 < q.z1 && q.z0 < p.z1;
+}

@@ -8,13 +8,13 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
 import { ACT1_GATE, ATLASSIAN_GATE, HOME, storyLayout } from './layout';
-import { leaveBase } from './leaveBase';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
 import { TeamworkGraph } from './TeamworkGraph';
+import type { SharedRun } from '../core/sharedRuns';
 import type { SystemsLayout } from './systemLayout';
 
-/** One gate's system: the gate, its map, and the parent's signal link to it. */
+/** One gate's system: the gate, its map, and its parent agent's signal link to it. */
 export interface GateSystem {
   gate: Gate;
   map: SystemMap;
@@ -22,17 +22,20 @@ export interface GateSystem {
 }
 
 export interface TwoActScene {
+  /** D3V1N: Act 1's parent agent, at the first gate. */
   drone: Drone;
   /** The Teamwork Graph's link lines, as the layout chose them. */
   graphLines: SystemsLayout['lines'];
   act1: GateSystem;
-  act2: GateSystem;
+  /** The Atlassian system. Its parent agent (Rovo) arrives mid-story, so its signal link comes with it. */
+  act2: Omit<GateSystem, 'signal'> & { signal: AttachedSignal | null };
 }
 
-/** A crew that keeps working, and how to stop each member's loop. */
+/** A crew that keeps working, and how to stop the loops: all at once, or one member's. */
 export interface WorkingCrew {
   crew: CrewMember[];
   stop: () => void;
+  stopEach: (() => void)[];
 }
 
 /**
@@ -57,31 +60,21 @@ export async function act1(
   onStep('working');
   await Promise.all(crew.map((member) => workOne(stage, member)));
   const stops = crew.map((member) => keepWorking(stage, member));
-  return { crew, stop: () => stops.forEach((stop) => stop()) };
-}
-
-/**
- * The transition: with the Act 1 crew still working and its gate still green,
- * D3V1N mutes its own link (the dots clear first), flies across the grid to the
- * Atlassian gate, and authenticates. Resolves with whether access was granted.
- */
-export async function toAtlassian(stage: SceneHost, scene: TwoActScene): Promise<boolean> {
-  const { drone, act1: from, act2: to } = scene;
-  await leaveBase(stage, { drone, gate: from.gate, signal: from.signal }, ATLASSIAN_GATE, { keepOpen: true });
-  return accessCheck(stage, drone, to.gate);
+  return { crew, stop: () => stops.forEach((stop) => stop()), stopEach: stops };
 }
 
 /** The Teamwork Graph across both systems of a scene, with its highways. */
-export function teamworkGraph(stage: SceneHost, scene: TwoActScene): TeamworkGraph {
+export function teamworkGraph(stage: SceneHost, scene: TwoActScene, gateway?: SharedRun): TeamworkGraph {
   const { act1, act2 } = scene;
   return new TeamworkGraph(stage, [act1.map.nodes, act2.map.nodes], {
     lines: scene.graphLines,
     gateLines: [...act1.map.polylines, ...act2.map.polylines],
     gates: [act1.gate.position, act2.gate.position],
+    reserved: gateway ? [gateway] : [],
   });
 }
 
-/** Build the two-gate scene: both gates and maps on the grid, D3V1N at home, linked to both gates. */
+/** Build the two-gate scene: both gates and maps on the grid, D3V1N at home, linked to its gate. */
 export function twoActScene(stage: SceneHost): TwoActScene {
   const gateAt = (position: typeof ACT1_GATE) => {
     const gate = new Gate();
@@ -106,10 +99,6 @@ export function twoActScene(stage: SceneHost): TwoActScene {
       map: new SystemMap(stage, gate1, JOB_KINDS, { layout: layout1 }),
       signal: attachSignal(stage, drone, gate1),
     },
-    act2: {
-      gate: gate2,
-      map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, { layout: layout2 }),
-      signal: attachSignal(stage, drone, gate2),
-    },
+    act2: { gate: gate2, map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, { layout: layout2 }), signal: null },
   };
 }
