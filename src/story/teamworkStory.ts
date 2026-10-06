@@ -81,7 +81,7 @@ export class TeamworkStory {
     private readonly onStep: (step: StoryStep) => void = () => {},
   ) {
     const { act1: a, act2: b } = scene;
-    this.graph = new TeamworkGraph(stage, [a.map.nodes, b.map.nodes], [a.gate.position, b.gate.position]);
+    this.graph = new TeamworkGraph(stage, [a.map.nodes, b.map.nodes], scene.graphLines);
     this.deliverable.position.copy(b.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
     stage.add(this.deliverable);

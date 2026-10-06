@@ -7,10 +7,11 @@ import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
-import { ACT1_GATE, ACT1_MAP, ATLASSIAN_GATE, ATLASSIAN_MAP, HOME } from './layout';
+import { ACT1_GATE, ATLASSIAN_GATE, HOME, storyLayout } from './layout';
 import { leaveBase } from './leaveBase';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
+import type { SystemsLayout } from './systemLayout';
 
 /** One gate's system: the gate, its map, and the parent's signal link to it. */
 export interface GateSystem {
@@ -21,6 +22,8 @@ export interface GateSystem {
 
 export interface TwoActScene {
   drone: Drone;
+  /** The Teamwork Graph's link lines, as the layout chose them. */
+  graphLines: SystemsLayout['lines'];
   act1: GateSystem;
   act2: GateSystem;
 }
@@ -80,14 +83,22 @@ export function twoActScene(stage: SceneHost): TwoActScene {
   const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
   const gate1 = gateAt(ACT1_GATE);
   const gate2 = gateAt(ATLASSIAN_GATE);
+  const {
+    maps: [layout1, layout2],
+    lines,
+  } = storyLayout();
   return {
     drone,
-    act1: { gate: gate1, map: new SystemMap(stage, gate1, JOB_KINDS, ACT1_MAP), signal: attachSignal(stage, drone, gate1) },
+    graphLines: lines,
+    act1: {
+      gate: gate1,
+      map: new SystemMap(stage, gate1, JOB_KINDS, { layout: layout1 }),
+      signal: attachSignal(stage, drone, gate1),
+    },
     act2: {
       gate: gate2,
-      map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, ATLASSIAN_MAP),
+      map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, { layout: layout2 }),
       signal: attachSignal(stage, drone, gate2),
     },
   };
 }
-

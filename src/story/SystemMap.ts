@@ -1,5 +1,5 @@
 import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
-import { hashSeed, radialMap } from '../core/scatter';
+import { hashSeed, type RadialMap, radialMap } from '../core/scatter';
 import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
@@ -14,6 +14,8 @@ export interface SystemMapOptions {
   seed?: number;
   /** Other things on the floor (other gates, home) the map keeps clear of. */
   avoid?: readonly Vector3[];
+  /** A layout worked out ahead (e.g. layoutSystems, for several gates together); otherwise this map lays itself out. */
+  layout?: RadialMap;
 }
 
 const LINE_FADE = 3;
@@ -60,7 +62,8 @@ export class SystemMap {
     const origin = snapToGrid(gate.position);
     const seed = options.seed ?? hashSeed(kinds.join());
     // Nodes radiate around the gate in seeded directions, each as close as it fits, each on its shortest line.
-    const { spots, routes: polylines } = radialMap(origin, kinds.length, { seed, avoid: options.avoid });
+    const { spots, routes: polylines } =
+      options.layout ?? radialMap(origin, kinds.length, { seed, avoid: options.avoid });
     kinds.forEach((kind, i) => {
       const polyline = polylines[i];
       const node = new SystemNode({ kind });

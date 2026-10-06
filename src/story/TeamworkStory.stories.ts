@@ -80,11 +80,7 @@ export const Handoffs: StoryObj = {
     const { root, stage } = specimenStage(VIEW);
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
-    const graph = new TeamworkGraph(
-      stage,
-      [scene.act1.map.nodes, scene.act2.map.nodes],
-      [scene.act1.gate.position, scene.act2.gate.position],
-    );
+    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], scene.graphLines);
     void (async () => {
       const { crew } = await connectedScene(stage, scene, graph);
       graphTraffic(stage, graph, crew);
@@ -99,11 +95,7 @@ export const Converge: StoryObj = {
     const { root, stage } = specimenStage(VIEW);
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
-    const graph = new TeamworkGraph(
-      stage,
-      [scene.act1.map.nodes, scene.act2.map.nodes],
-      [scene.act1.gate.position, scene.act2.gate.position],
-    );
+    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], scene.graphLines);
     const deliverable = new Deliverable();
     deliverable.position.copy(ATLASSIAN_GATE).add({ x: 1.13, y: 1.6, z: -1.13 });
     deliverable.visible = false;

@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import { GRID } from './grid';
-import { gridRoute, inDroneColumn, radialMap, visible } from './scatter';
+import { gridRoute, inDroneColumn, pinwheelFree, radialMap, visible } from './scatter';
 
 const origin = new Vector3(2, 0, 2);
 /** Which way a route bends: +1 / −1 by handedness, 0 when straight. */
@@ -64,5 +64,20 @@ describe('radialMap', () => {
   it('is deterministic per seed and different across seeds', () => {
     expect(radialMap(origin, 4, { seed: 5 })).toEqual(radialMap(origin, 4, { seed: 5 }));
     expect(radialMap(origin, 4, { seed: 5 }).spots).not.toEqual(radialMap(origin, 4, { seed: 6 }).spots);
+  });
+});
+
+describe('pinwheelFree', () => {
+  const o = new Vector3(0, 0, 0);
+  // An arm from o: out along one axis, then a quarter turn.
+  const arm = (x1: number, z1: number, x2: number, z2: number) => [o, new Vector3(x1, 0, z1), new Vector3(x2, 0, z2)];
+  it('rejects a swastika: four arms in four quadrants all turning the same way', () => {
+    expect(pinwheelFree(o, [arm(2, 0, 2, 2), arm(0, 2, -2, 2), arm(-2, 0, -2, -2), arm(0, -2, 2, -2)])).toBe(false);
+  });
+  it('rejects a triskelion-like three of them', () => {
+    expect(pinwheelFree(o, [arm(2, 0, 2, 2), arm(0, 2, -2, 2), arm(-2, 0, -2, -2)])).toBe(false);
+  });
+  it('allows arms that bend the fixed X-then-Z way (neighbouring quadrants turn opposite ways)', () => {
+    expect(pinwheelFree(o, [arm(2, 0, 2, 2), arm(-2, 0, -2, 2), arm(-2, 0, -2, -2), arm(2, 0, 2, -2)])).toBe(true);
   });
 });

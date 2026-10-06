@@ -1,4 +1,7 @@
 import { Vector3 } from 'three';
+import { hashSeed } from '../core/scatter';
+import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
+import { layoutSystems, type SystemsLayout, TEAMWORK_LINKS } from './systemLayout';
 
 /**
  * Where everything sits on the one isometric grid for the two-act story.
@@ -11,6 +14,18 @@ export const ATLASSIAN_GATE = new Vector3(8, 0, -4);
 export const HOME = new Vector3(-1.8, 0, 5);
 /** Screen-space middle of both maps, for framing the whole story. */
 export const STORY_CENTER = new Vector3(5, 0, -1);
-/** Each map keeps clear of the other gate and of D3V1N's home. */
-export const ACT1_MAP = { avoid: [ATLASSIAN_GATE, HOME] } as const;
-export const ATLASSIAN_MAP = { avoid: [ACT1_GATE, HOME] } as const;
+/**
+ * Both systems laid out together, meaning first (see layoutSystems): the
+ * third-party tools behind the first gate, Atlassian's behind the second, each
+ * node aimed at the systems the Teamwork Graph links it to, then the seed.
+ */
+export function storyLayout(seed = hashSeed('teamwork-graph')): SystemsLayout {
+  return layoutSystems(
+    [
+      { gate: ACT1_GATE, kinds: JOB_KINDS, avoid: [ATLASSIAN_GATE, HOME] },
+      { gate: ATLASSIAN_GATE, kinds: ATLASSIAN_KINDS, avoid: [ACT1_GATE, HOME] },
+    ],
+    TEAMWORK_LINKS,
+    seed,
+  );
+}
