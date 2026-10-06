@@ -5,10 +5,10 @@ Code Name: Zero. A Three.js game about agents, made to teach humans how agents w
 
 ## The story
 
-The sandbox plays one story in two acts on a single isometric grid.
+The sandbox plays one story in two acts on a single isometric grid. It opens with a request: a ticket (*DEMO-1 · Add dark mode*) drops onto the grid between the two systems, and that same request starts both acts.
 
-- **Act 1 — isolated work.** D3V1N, the parent agent, checks access at a gate (yellow while checking, green on success, red on denial). Once it's in, D3V1N maps the system's tool nodes (Figma, GitHub, Notion) and spawns three sub-agents. Each one works its own job, cut off from the others.
-- **Act 2 — the Teamwork Graph.** Rovo arrives to work on the Atlassian side, gets through its own gate, and spawns its own crew. A security bot then builds a secure gateway between the two systems. The Teamwork Graph draws in, linking every system on the grid. Every cross-system link goes through the gateway: agents ride their links through it and hover over the node they're visiting. The work converges into one deliverable, which ships, and then everyone heads home.
+- **Act 1 — isolated work.** D3V1N, the parent agent, takes the request and checks access at a gate (yellow while checking, green on success, red on denial). Once it's in, D3V1N maps the system's tool nodes (Figma, GitHub, Notion) and spawns three sub-agents. Each one works its own job, cut off from the others.
+- **Act 2 — the Teamwork Graph.** Rovo picks up the same request to work on the Atlassian side, gets through its own gate, and spawns its own crew. A security bot then builds a secure gateway between the two systems. The Teamwork Graph draws in, linking every system on the grid. Every cross-system link goes through the gateway: agents ride their links through it and hover over the node they're visiting. The work converges into one deliverable, which ships, and then everyone heads home.
 
 A caption at the bottom of the screen names each step as it plays.
 
@@ -59,10 +59,10 @@ Layering: **Primitive → Animation → Stage → Story.**
 | Path | Role |
 |---|---|
 | `src/core/` | Palette, grid, shared textures and mesh helpers, seeded scatter, and shared runs (lines that bus together) |
-| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Deliverable |
+| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Deliverable, Ticket (the request) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
-| `src/story/` | The story as chained steps on the stage clock. Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
+| `src/story/` | The story as chained steps on the stage clock. The request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
 | `src/sandbox/` | Sandbox app: the stage, the caption, and the control panel |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 

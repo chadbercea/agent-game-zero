@@ -5,6 +5,7 @@ import { hashSeed } from '../core/scatter';
 import { Deliverable } from '../primitives/deliverable/Deliverable';
 import type { Drone } from '../primitives/drone/Drone';
 import { Gateway } from '../primitives/gateway/Gateway';
+import { DEFAULT_REQUEST, Ticket } from '../primitives/ticket/Ticket';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { attachSignal } from '../stage/attachSignal';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
@@ -12,8 +13,9 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { act2, converge, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
 import { type CrewMember, dismiss } from './fanOut';
-import { GATEWAY, HOME, ROVO_HOME, SECURITY_HOME } from './layout';
+import { GATEWAY, HOME, REQUEST_SPOT, ROVO_HOME, SECURITY_HOME } from './layout';
 import { leaveBase } from './leaveBase';
+import { dropTicket, handOff, liftTicket } from './request';
 import { assignRoles, type Role } from './roles';
 import { TEAMWORK_LINKS } from './systemLayout';
 import type { GraphLink, TeamworkGraph } from './TeamworkGraph';
@@ -21,6 +23,7 @@ import { fly, tween, wait } from './timeline';
 import { act1, teamworkGraph, type TwoActScene, type WorkingCrew } from './twoActs';
 
 export type StoryStep =
+  | 'request'
   | 'access'
   | 'denied'
   | 'mapping'
@@ -39,12 +42,13 @@ export type StoryStep =
   | 'done';
 
 export const STORY_CAPTION: Record<StoryStep, string> = {
+  request: `A request arrives: ${DEFAULT_REQUEST.title}`,
   access: 'Checking access…',
   denied: 'Access denied. The system isn’t working as expected.',
   mapping: 'Access granted. Mapping the system…',
   'fan-out': 'Spawning sub-agents…',
   working: 'Act 1 · 3 agents, 3 isolated jobs',
-  rovo: 'Rovo arrives to work the Atlassian side…',
+  rovo: 'Rovo picks up the same request for the Atlassian side…',
   'access-2': 'Rovo checking access to Atlassian…',
   'mapping-2': 'Access granted. Mapping Atlassian…',
   'fan-out-2': 'Rovo spawning sub-agents…',
@@ -86,7 +90,8 @@ interface Cast {
 }
 
 /**
- * The whole story, start to finish, on one grid:
+ * The whole story, start to finish, on one grid. It opens with a request: a
+ * ticket drops onto the grid, and the same request starts both acts.
  * Act 1: D3V1N gets access → map → three sub-agents, three isolated jobs.
  * Act 2: Rovo arrives and gets access to Atlassian → map → four sub-agents →
  * a security bot builds the secure gateway (glass tunnel, lock) → the
@@ -103,6 +108,9 @@ export class TeamworkStory {
   readonly graph: TeamworkGraph;
   readonly gateway = new Gateway(GATEWAY);
   readonly deliverable = new Deliverable();
+  readonly ticket = new Ticket();
+  /** The request is on the grid and D3V1N has it (a retry at the first gate doesn't drop it again). */
+  private requested = false;
   private act1Crew: WorkingCrew | null = null;
   private act2Crew: WorkingCrew | null = null;
   private rovo: SpawnedDrone | null = null;
@@ -117,8 +125,11 @@ export class TeamworkStory {
     this.graph = teamworkGraph(stage, scene);
     this.deliverable.position.copy(scene.act1.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
-    stage.add(this.deliverable, this.gateway);
+    this.ticket.position.copy(REQUEST_SPOT);
+    this.ticket.visible = false;
+    stage.add(this.deliverable, this.gateway, this.ticket);
     stage.onTick((dt) => {
+      this.ticket.update(dt);
       this.deliverable.update(dt);
       this.gateway.update(dt);
     });
@@ -132,6 +143,13 @@ export class TeamworkStory {
   /** Resolves true when the story completes, false when a gate denies access (the agent waits there, Stopped). */
   async play(): Promise<boolean> {
     const { stage, scene, onStep } = this;
+
+    if (!this.requested) {
+      onStep('request');
+      await dropTicket(stage, this.ticket);
+      await handOff(stage, this.ticket, scene.drone);
+      this.requested = true;
+    }
 
     if (!this.act1Crew) {
       this.act1Crew = await act1(stage, scene, onStep);
@@ -151,6 +169,8 @@ export class TeamworkStory {
         status: 'waiting',
       });
       scene.act2.signal = attachSignal(stage, this.rovo.drone, scene.act2.gate);
+      // The same ticket that started Act 1 starts Act 2.
+      await handOff(stage, this.ticket, this.rovo.drone);
       // Rovo flies in to its gate.
       this.rovo.drone.status = 'working';
       await fly(stage, DroneFlight.to(this.rovo.drone, scene.act2.gate.position));
@@ -209,7 +229,7 @@ export class TeamworkStory {
     return true;
   }
 
-  /** Back to the opening: crews dismissed, graph, gateway and maps hidden, gates off, D3V1N home, Rovo gone. */
+  /** Back to the opening: crews dismissed, graph, gateway and maps hidden, gates off, D3V1N home, Rovo gone, the request cleared. */
   async reset(): Promise<void> {
     const { stage, scene } = this;
     const out = this.cast.length
@@ -245,6 +265,8 @@ export class TeamworkStory {
     }
     this.rovo = null;
     scene.act2.signal = null;
+    this.requested = false;
+    leaving.push(liftTicket(stage, this.ticket));
     await Promise.all(leaving);
     scene.drone.status = 'waiting';
   }
