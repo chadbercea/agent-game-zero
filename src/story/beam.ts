@@ -1,4 +1,4 @@
-import { type Curve, MathUtils, type Object3D, type Vector3 } from 'three';
+import { type Color, type Curve, MathUtils, type Object3D, type Vector3 } from 'three';
 import { PacketFlight } from '../animation/PacketFlight';
 import { Packet } from '../primitives/packet/Packet';
 import type { SceneHost } from '../stage/Stage';
@@ -32,15 +32,34 @@ const SHOT_HEIGHT = 0.16;
  * riding just above the line, and resolve when it lands. It pops in at the
  * start and shrinks into the far end.
  */
-export function shoot(stage: SceneHost, path: Curve<Vector3>, speed = SHOT_SPEED): Promise<void> {
+/** A stretch of floor where packets ride faster and glow (an information highway). */
+export interface Boost {
+  at: (p: Vector3) => boolean;
+  /** Speed multiplier inside. */
+  speed: number;
+  glow: Color;
+}
+
+export function shoot(stage: SceneHost, path: Curve<Vector3>, speed = SHOT_SPEED, boost?: Boost): Promise<void> {
   const packet = new Packet();
   packet.trail.visible = false;
   stage.add(packet);
+  if (boost) packet.cubeMaterial.emissiveIntensity = 0;
   const length = path.getLength();
   let travelled = 0;
   return new Promise((resolve) => {
     const untick = stage.onTick((dt) => {
-      travelled = Math.min(length, travelled + speed * dt);
+      const boosted = boost?.at(packet.cube.position) ?? false;
+      travelled = Math.min(length, travelled + speed * (boosted ? boost!.speed : 1) * dt);
+      if (boost) {
+        packet.cubeMaterial.emissive.copy(boost.glow);
+        const k = 1 - Math.exp(-10 * dt);
+        packet.cubeMaterial.emissiveIntensity = MathUtils.lerp(
+          packet.cubeMaterial.emissiveIntensity,
+          boosted ? 1.4 : 0,
+          k,
+        );
+      }
       const t = travelled / length;
       path.getPointAt(t, packet.cube.position);
       packet.cube.position.y = SHOT_HEIGHT;

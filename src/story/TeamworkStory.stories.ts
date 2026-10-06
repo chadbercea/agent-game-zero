@@ -5,10 +5,10 @@ import type { SceneHost } from '../stage/Stage';
 import { comeHome, converge, graphTraffic } from './act2';
 import { fanOut, keepWorking } from './fanOut';
 import { ATLASSIAN_GATE, STORY_CENTER } from './layout';
-import { TeamworkGraph } from './TeamworkGraph';
+import type { TeamworkGraph } from './TeamworkGraph';
 import { STORY_CAPTION, TeamworkStory } from './teamworkStory';
 import { wait } from './timeline';
-import { type TwoActScene, twoActScene } from './twoActs';
+import { type TwoActScene, twoActScene, teamworkGraph } from './twoActs';
 
 const meta: Meta = {
   title: 'Story/10 Teamwork Story',
@@ -80,7 +80,7 @@ export const Handoffs: StoryObj = {
     const { root, stage } = specimenStage(VIEW);
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
-    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], scene.graphLines);
+    const graph = teamworkGraph(stage, scene);
     void (async () => {
       const { crew } = await connectedScene(stage, scene, graph);
       graphTraffic(stage, graph, crew);
@@ -95,7 +95,7 @@ export const Converge: StoryObj = {
     const { root, stage } = specimenStage(VIEW);
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
-    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], scene.graphLines);
+    const graph = teamworkGraph(stage, scene);
     const deliverable = new Deliverable();
     deliverable.position.copy(ATLASSIAN_GATE).add({ x: 1.13, y: 1.6, z: -1.13 });
     deliverable.visible = false;

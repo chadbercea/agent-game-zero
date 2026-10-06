@@ -72,7 +72,7 @@ export function graphTraffic(
     const link = graph.links[Math.floor(random() * graph.links.length)];
     const forward = random() < 0.5;
     const to = forward ? link.to : link.from;
-    void shoot(stage, forward ? link.edge.path : reversed(link.edge.path), HANDOFF_SPEED).then(() => {
+    void shoot(stage, forward ? link.edge.path : reversed(link.edge.path), HANDOFF_SPEED, graph.boost).then(() => {
       const member = at.get(to);
       if (running && member) member.sub.drone.flash = 1;
     });
@@ -156,7 +156,7 @@ export async function converge(
     crew.map(async (member, i) => {
       await wait(stage, i * CONVERGE_STAGGER);
       if (member.job) member.job.product.visible = false;
-      await shoot(stage, convergeRoute(member.node, hub, graph, member, gate), CONVERGE_SPEED);
+      await shoot(stage, convergeRoute(member.node, hub, graph, member, gate), CONVERGE_SPEED, graph.boost);
       await rise(stage, gate, deliverable);
       deliverable.addPiece();
       drone.flash = 1;

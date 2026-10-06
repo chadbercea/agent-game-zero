@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { STORY_CENTER } from './layout';
 import { specimenStage } from '../stage/specimen';
-import { TeamworkGraph } from './TeamworkGraph';
 import { wait } from './timeline';
-import { twoActScene } from './twoActs';
+import { twoActScene, teamworkGraph } from './twoActs';
 
 const meta: Meta = {
   title: 'Story/09 Teamwork Graph',
@@ -24,7 +23,7 @@ export const Web: StoryObj = {
     scene.act1.gate.state = scene.act2.gate.state = 'open';
     scene.act1.map.showAll();
     scene.act2.map.showAll();
-    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], scene.graphLines);
+    const graph = teamworkGraph(stage, scene);
     void (async () => {
       for (;;) {
         await wait(stage, 0.8);

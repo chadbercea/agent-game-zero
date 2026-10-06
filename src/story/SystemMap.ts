@@ -41,6 +41,8 @@ export class SystemMap {
   readonly branches: Branch[] = [];
   /** Faint grid under each branch, fading with distance from it. */
   readonly patches: GridPatch[] = [];
+  /** Each branch's raw grid line (gate port → node center), before rounding. */
+  readonly polylines: Vector3[][] = [];
   /** Flight paths from the gate's center to each node's center, along its branch. */
   readonly routes: Curve<Vector3>[] = [];
   /** Show the branch lines (e.g. while the gate or a node is hovered or selected). */
@@ -76,6 +78,7 @@ export class SystemMap {
       this.nodes.push(node);
       this.branches.push(branch);
       this.patches.push(patch);
+      this.polylines.push(polyline);
       this.routes.push(roundedPath(polyline, BEND_RADIUS));
       this.active.push(false);
       this.branchLevel.push(0);

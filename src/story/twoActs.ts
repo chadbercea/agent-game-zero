@@ -11,6 +11,7 @@ import { ACT1_GATE, ATLASSIAN_GATE, HOME, storyLayout } from './layout';
 import { leaveBase } from './leaveBase';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
+import { TeamworkGraph } from './TeamworkGraph';
 import type { SystemsLayout } from './systemLayout';
 
 /** One gate's system: the gate, its map, and the parent's signal link to it. */
@@ -68,6 +69,16 @@ export async function toAtlassian(stage: SceneHost, scene: TwoActScene): Promise
   const { drone, act1: from, act2: to } = scene;
   await leaveBase(stage, { drone, gate: from.gate, signal: from.signal }, ATLASSIAN_GATE, { keepOpen: true });
   return accessCheck(stage, drone, to.gate);
+}
+
+/** The Teamwork Graph across both systems of a scene, with its highways. */
+export function teamworkGraph(stage: SceneHost, scene: TwoActScene): TeamworkGraph {
+  const { act1, act2 } = scene;
+  return new TeamworkGraph(stage, [act1.map.nodes, act2.map.nodes], {
+    lines: scene.graphLines,
+    gateLines: [...act1.map.polylines, ...act2.map.polylines],
+    gates: [act1.gate.position, act2.gate.position],
+  });
 }
 
 /** Build the two-gate scene: both gates and maps on the grid, D3V1N at home, linked to both gates. */

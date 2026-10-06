@@ -7,9 +7,9 @@ import { act2, comeHome, converge, graphTraffic } from './act2';
 import { dismiss } from './fanOut';
 import { HOME } from './layout';
 import { leaveBase } from './leaveBase';
-import { TeamworkGraph } from './TeamworkGraph';
+import type { TeamworkGraph } from './TeamworkGraph';
 import { tween, wait } from './timeline';
-import { act1, type TwoActScene, type WorkingCrew } from './twoActs';
+import { act1, type TwoActScene, type WorkingCrew, teamworkGraph } from './twoActs';
 
 export type StoryStep =
   | 'access'
@@ -80,8 +80,8 @@ export class TeamworkStory {
     readonly scene: TwoActScene,
     private readonly onStep: (step: StoryStep) => void = () => {},
   ) {
-    const { act1: a, act2: b } = scene;
-    this.graph = new TeamworkGraph(stage, [a.map.nodes, b.map.nodes], scene.graphLines);
+    const { act2: b } = scene;
+    this.graph = teamworkGraph(stage, scene);
     this.deliverable.position.copy(b.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
     stage.add(this.deliverable);
