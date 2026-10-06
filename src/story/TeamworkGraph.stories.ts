@@ -24,7 +24,7 @@ export const Web: StoryObj = {
     scene.act1.gate.state = scene.act2.gate.state = 'open';
     scene.act1.map.showAll();
     scene.act2.map.showAll();
-    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes]);
+    const graph = new TeamworkGraph(stage, [scene.act1.map.nodes, scene.act2.map.nodes], [scene.act1.gate.position, scene.act2.gate.position]);
     void (async () => {
       for (;;) {
         await wait(stage, 0.8);

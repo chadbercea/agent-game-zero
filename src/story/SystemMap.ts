@@ -1,7 +1,6 @@
 import { type Curve, MathUtils, type Object3D, Vector3 } from 'three';
-import { type Axis, busRoutes } from '../core/busRoute';
-import { hashSeed, scatterSpots } from '../core/scatter';
-import { BEND_RADIUS, GRID, snapToGrid } from '../core/grid';
+import { hashSeed, radialMap } from '../core/scatter';
+import { BEND_RADIUS, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
 import { GridPatch } from '../primitives/branch/GridPatch';
@@ -12,13 +11,10 @@ import { FACE_CAMERA } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 
 export interface SystemMapOptions {
-  /** Layout seed: same seed, same scatter. Defaults to one derived from the kinds on the map. */
+  /** Layout seed: same seed, same map. Defaults to one derived from the kinds on the map. */
   seed?: number;
-  /**
-   * Which way the traces leave the gate as a bus: 'x' runs up-left on screen,
-   * 'z' up-right. Point it away from neighbouring gates so maps never cross.
-   */
-  bus?: Axis;
+  /** Other things on the floor (other gates, home) the map keeps clear of. */
+  avoid?: readonly Vector3[];
 }
 
 const LINE_FADE = 3;
@@ -27,12 +23,11 @@ const BRANCH_INSET_NODE = 0.7;
 const LINE_OPACITY = 0.8;
 
 /**
- * The system behind a gate: one node per system, scattered in a loose seeded
- * cluster behind the gate (see scatterSpots), each joined to the gate by a branch. Everything sits on the floor's
- * square grid: nodes snap to grid points, and branches are circuit-board
- * traces (see busRoutes) along the grid axes (the isometric diagonals on
- * screen): shortest routes that run in parallel and peel off one by one, with
- * rounded bends, over a faint patch of grid that fades to white away from them. Everything starts hidden and
+ * The system behind a gate: one node per system, placed procedurally around
+ * the gate (see radialMap), each joined to the gate by a branch. Everything
+ * sits on the floor's square grid: nodes snap to grid points, and each branch
+ * is the shortest grid line from gate to node (see gridRoute: at most one
+ * rounded bend, and a fixed bend rule that can never form a pinwheel), over a faint patch of grid that fades to white away from them. Everything starts hidden and
  * only appears when access is granted (see revealMap). Lines are never
  * persistent: they draw in during the reveal, fade out, and come back only
  * while `linesVisible` is set (hover or click) or, per branch, while a
@@ -64,10 +59,8 @@ export class SystemMap {
   ) {
     const origin = snapToGrid(gate.position);
     const seed = options.seed ?? hashSeed(kinds.join());
-    // Nodes scatter up and back from the gate on screen (the −X−Z quadrant): loose, uneven, never a row.
-    const spots = scatterSpots(origin, kinds.length, { seed, bus: options.bus });
-    // Circuit-board traces: shortest routes that share a parallel bus and peel off one by one.
-    const polylines = busRoutes(origin, spots, GRID, options.bus);
+    // Nodes radiate around the gate in seeded directions, each as close as it fits, each on its shortest line.
+    const { spots, routes: polylines } = radialMap(origin, kinds.length, { seed, avoid: options.avoid });
     kinds.forEach((kind, i) => {
       const polyline = polylines[i];
       const node = new SystemNode({ kind });

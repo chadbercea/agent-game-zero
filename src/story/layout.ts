@@ -7,14 +7,10 @@ import { Vector3 } from 'three';
  * far enough that the two maps never overlap. Every position is on the grid.
  */
 export const ACT1_GATE = new Vector3(2, 0, 2);
-export const ATLASSIAN_GATE = new Vector3(10, 0, -6);
+export const ATLASSIAN_GATE = new Vector3(8, 0, -4);
 export const HOME = new Vector3(-1.8, 0, 5);
 /** Screen-space middle of both maps, for framing the whole story. */
-export const STORY_CENTER = new Vector3(4.5, 0, -4.5);
-/**
- * Each map's traces leave its gate heading toward the other gate, with its
- * nodes on that side: both clusters sit in the middle, close together, so the
- * graph's links between them stay short, and the two maps never cross.
- */
-export const ACT1_MAP = { bus: 'z' } as const;
-export const ATLASSIAN_MAP = { bus: 'x' } as const;
+export const STORY_CENTER = new Vector3(5, 0, -1);
+/** Each map keeps clear of the other gate and of D3V1N's home. */
+export const ACT1_MAP = { avoid: [ATLASSIAN_GATE, HOME] } as const;
+export const ATLASSIAN_MAP = { avoid: [ACT1_GATE, HOME] } as const;

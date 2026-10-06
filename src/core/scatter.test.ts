@@ -1,56 +1,51 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
-import { busRoutes } from './busRoute';
 import { GRID } from './grid';
-import { scatterSpots } from './scatter';
+import { gridRoute, radialMap } from './scatter';
 
 const origin = new Vector3(2, 0, 2);
+/** Which way a route bends: +1 / −1 by handedness, 0 when straight. */
+const handedness = (route: Vector3[]) => {
+  if (route.length < 3) return 0;
+  const [a, b, c] = route;
+  return Math.sign((b.x - a.x) * (c.z - b.z) - (b.z - a.z) * (c.x - b.x));
+};
 
-describe('scatterSpots', () => {
-  for (const [count, seed] of [[3, 1], [3, 7], [4, 2], [4, 99]] as const) {
-    it(`lays out ${count} nodes cleanly (seed ${seed})`, () => {
-      const spots = scatterSpots(origin, count, { seed });
-      expect(spots).toHaveLength(count);
-      for (const p of spots) {
-        expect(Number.isInteger(p.x / GRID) && Number.isInteger(p.z / GRID)).toBe(true);
-        expect(p.x).toBeLessThan(origin.x);
-        expect(p.z).toBeLessThan(origin.z);
-        // Tight to the gate: never more than a few steps out.
-        expect(origin.x - p.x + origin.z - p.z).toBeLessThanOrEqual(2 * (2 + 1.1 * count));
-      }
-      spots.forEach((a, i) =>
-        spots.forEach((b, j) => {
-          if (i >= j) return;
-          expect(a.distanceTo(b)).toBeGreaterThanOrEqual(2);
-          expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual(1);
-          expect(Math.abs(a.z - b.z)).toBeGreaterThanOrEqual(1);
-        }),
-      );
-      const routes = busRoutes(origin, spots);
-      spots.forEach((p, i) =>
-        routes.forEach((r, j) => i !== j && expect(distanceToPolyline(p.x, p.z, r)).toBeGreaterThanOrEqual(1)),
-      );
-      const depths = spots.map((p) => p.x + p.z);
-      expect(Math.max(...depths) - Math.min(...depths)).toBeGreaterThanOrEqual(2.5);
-      const across = spots.map((p) => p.x - p.z);
-      expect(Math.max(...across) - Math.min(...across)).toBeGreaterThanOrEqual(2);
-    });
-  }
+describe('gridRoute', () => {
+  it('is the shortest grid line: |Δx| + |Δz|, at most one bend', () => {
+    const route = gridRoute(new Vector3(0, 0, 0), new Vector3(3, 0, -2));
+    const length = route.slice(1).reduce((sum, p, i) => sum + p.distanceTo(route[i]), 0);
+    expect(length).toBeCloseTo(5);
+    expect(route.length).toBeLessThanOrEqual(3);
+  });
 
-  it('is deterministic per seed', () => {
-    expect(scatterSpots(origin, 4, { seed: 5 })).toEqual(scatterSpots(origin, 4, { seed: 5 }));
+  it('can never make a pinwheel: neighbouring quadrants always bend opposite ways', () => {
+    const o = new Vector3(0, 0, 0);
+    const quadrants = [[3, 2], [-2, 3], [-3, -2], [2, -3]].map(([x, z]) => handedness(gridRoute(o, new Vector3(x, 0, z))));
+    for (let i = 0; i < 4; i++) expect(quadrants[i]).toBe(-quadrants[(i + 1) % 4]);
   });
 });
 
-describe('scatterSpots with a set bus axis', () => {
-  it('keeps traces clear on either bus', () => {
-    for (const bus of ['x', 'z'] as const) {
-      const spots = scatterSpots(origin, 4, { seed: 3, bus });
-      const routes = busRoutes(origin, spots, GRID, bus);
-      spots.forEach((p, i) =>
-        routes.forEach((r, j) => i !== j && expect(distanceToPolyline(p.x, p.z, r)).toBeGreaterThanOrEqual(1)),
-      );
+describe('radialMap', () => {
+  for (const seed of [1, 2, 3, 7, 42, 99, 1234, 2026]) {
+    for (const count of [3, 4]) {
+      it(`places ${count} nodes cleanly (seed ${seed})`, () => {
+        const { spots, routes } = radialMap(origin, count, { seed });
+        expect(spots).toHaveLength(count);
+        spots.forEach((p, i) => {
+          expect(Number.isInteger(p.x / GRID) && Number.isInteger(p.z / GRID)).toBe(true);
+          expect(p.distanceTo(origin)).toBeGreaterThanOrEqual(2.5 - GRID);
+          spots.forEach((q, j) => j > i && expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2));
+          routes.forEach((r, j) => i !== j && expect(distanceToPolyline(p.x, p.z, r)).toBeGreaterThanOrEqual(1));
+          expect(routes[i]).toEqual(gridRoute(origin, p));
+        });
+      });
     }
+  }
+
+  it('is deterministic per seed and different across seeds', () => {
+    expect(radialMap(origin, 4, { seed: 5 })).toEqual(radialMap(origin, 4, { seed: 5 }));
+    expect(radialMap(origin, 4, { seed: 5 }).spots).not.toEqual(radialMap(origin, 4, { seed: 6 }).spots);
   });
 });

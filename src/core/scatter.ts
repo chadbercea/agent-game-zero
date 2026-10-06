@@ -1,6 +1,5 @@
 import { Vector3 } from 'three';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
-import { type Axis, busRoutes } from './busRoute';
 import { GRID, snapToGrid } from './grid';
 
 /** A small seeded random generator (mulberry32): same seed, same sequence. */
@@ -22,69 +21,121 @@ export function hashSeed(text: string): number {
   return h >>> 0;
 }
 
-export interface ScatterOptions {
-  seed: number;
-  /** Closest a node may sit to the gate, per world axis. */
-  near?: number;
-  /** Farthest a node may sit from the gate, per world axis. */
-  far?: number;
-  /** Least distance between two nodes. */
-  spacing?: number;
-  /** Least clearance between a node and any other node's trace. */
-  clearance?: number;
-  /**
-   * Which axis the traces' shared bus runs along (see busRoutes). Nodes then
-   * sit toward the bus's side of the gate, so traces run out and peel off
-   * short instead of swinging wide around the cluster.
-   */
-  bus?: Axis;
+/**
+ * The one routing rule for every line on the floor: X leg first, then Z leg
+ * (a straight line when either leg is zero). Shortest possible on the grid:
+ * its length is exactly |Δx| + |Δz|, with at most one bend.
+ *
+ * Why X first, always, and never chosen per line: the bend's handedness is
+ * then fixed by the quadrant alone, sign(Δx·Δz). Lines into opposite
+ * quadrants bend the same way; lines into neighbouring quadrants bend
+ * opposite ways. A pinwheel (swastika, triskelion, any rotating whorl) needs
+ * arms in neighbouring directions to all bend the same way around a center,
+ * which this rule makes impossible: whatever the RNG does, no set of these
+ * lines can form one. The pattern is mirror-like (about the grid diagonal),
+ * never rotational.
+ */
+export function gridRoute(from: Vector3, to: Vector3): Vector3[] {
+  const corner = new Vector3(to.x, 0, from.z);
+  const points = [from.clone(), corner, to.clone()].filter((p, i, all) => i === 0 || p.distanceTo(all[i - 1]) > 1e-6);
+  return points.length >= 2 ? points : [from.clone(), to.clone()];
 }
 
-const MAX_TRIES = 2000;
+export interface RadialOptions {
+  seed: number;
+  /** Closest a node may sit to the gate (clears both pads). */
+  near?: number;
+  /** Least distance between two nodes. */
+  spacing?: number;
+  /** Least distance between a node and any line it isn't on. */
+  clearance?: number;
+  /** Other things on the floor (other gates, home) nodes and lines keep clear of. */
+  avoid?: readonly Vector3[];
+}
+
+export interface RadialMap {
+  spots: Vector3[];
+  /** Gate → node, one per spot (see gridRoute). */
+  routes: Vector3[][];
+}
+
+/** Each leg must be zero or long enough to show past the pads it leaves and enters. */
+const MIN_LEG = 1.5;
+/** How far a node walks out along one ray before turning to try the next one. */
+const RAY_REACH = 1.5;
+const MAX_REACH = 10;
+/** Two lines either share a run exactly (a trunk that splits) or keep at least this far apart. */
+const LINE_GAP = 0.9;
+/** Each node walks out from the gate on its own ray; when a ray is blocked it turns by the golden angle. */
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 /**
- * Seeded scattered cluster: `count` node spots behind a gate (up and back on
- * screen, the −X−Z quadrant), loose and uneven rather than in a row, and
- * every one a valid circuit-board target:
- * - on grid points, at least `spacing` apart;
- * - at distinct distances from the gate along both axes (so each trace peels
- *   off the bus on its own grid line);
- * - clear of every other node's trace;
- * - staggered in depth and across on screen (never one row or one column).
- * Same seed, same layout.
+ * Procedural radial node map. One pass, no searching over whole layouts:
+ * for each node, the RNG draws a direction (uniform around the gate, so some
+ * nodes share a side and some spread out), and the node takes the first
+ * grid point on that ray, walking out from the gate one half-step at a time,
+ * where it is as close to the gate as it can be while:
+ * - at least `spacing` from every placed node;
+ * - its line (gridRoute, shortest possible) keeps `clearance` from every other
+ *   node, and no other line runs within `clearance` of it;
+ * - each leg of its line is zero or long enough to read;
+ * - its line either shares another's run exactly (a trunk that splits) or
+ *   keeps `LINE_GAP` from it, never running alongside it.
+ * A blocked ray is tried only a short way out (RAY_REACH) before the node
+ * turns by the golden angle to the next ray, so it stays near the gate; only
+ * if every turn is blocked close in does the reach widen (bounded). The draw order and directions come from the seed, so every
+ * system gets its own shape; same seed, same map.
  */
-export function scatterSpots(origin: Vector3, count: number, options: ScatterOptions): Vector3[] {
-  const { seed, near = 2, far = 2 + 1.1 * count, spacing = 2, clearance = 1, bus } = options;
+export function radialMap(origin: Vector3, count: number, options: RadialOptions): RadialMap {
+  const { seed, near = 2.5, spacing = 2, clearance = 1, avoid = [] } = options;
   const random = seededRandom(seed);
-  const step = () => near + Math.round((random() * (far - near)) / GRID) * GRID;
-  let best: Vector3[] | undefined;
-  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
-    const offsets: [number, number][] = [];
-    for (let tries = 0; offsets.length < count && tries < 200; tries++) {
-      const candidate: [number, number] = [step(), step()];
-      const [along, across] = bus === 'z' ? [candidate[1], candidate[0]] : [candidate[0], candidate[1]];
-      if (bus && along < across) continue;
-      const fits = offsets.every(
-        ([x, z]) =>
-          Math.hypot(x - candidate[0], z - candidate[1]) >= spacing &&
-          Math.abs(x - candidate[0]) >= 1 &&
-          Math.abs(z - candidate[1]) >= 1,
-      );
-      if (fits) offsets.push(candidate);
+  const center = snapToGrid(origin);
+  const spots: Vector3[] = [];
+  const routes: Vector3[][] = [];
+
+  const fits = (spot: Vector3, route: Vector3[]) => {
+    const dx = Math.abs(spot.x - center.x);
+    const dz = Math.abs(spot.z - center.z);
+    if ((dx > 0 && dx < MIN_LEG) || (dz > 0 && dz < MIN_LEG)) return false;
+    if (spots.some((s) => s.distanceTo(spot) < spacing)) return false;
+    if (spots.some((s) => distanceToPolyline(s.x, s.z, route) < clearance)) return false;
+    if (routes.some((r) => distanceToPolyline(spot.x, spot.z, r) < clearance)) return false;
+    if (!routes.every((r) => separate(route, r))) return false;
+    return avoid.every((a) => a.distanceTo(spot) >= spacing && distanceToPolyline(a.x, a.z, route) >= clearance);
+  };
+  // Sample the new line: each sample lies on the other line (a shared trunk), or keeps LINE_GAP from it,
+  // or sits within LINE_GAP of where the two lines meet (the gate, or the point a trunk splits).
+  const separate = (route: Vector3[], other: Vector3[]) => {
+    const samples: { p: Vector3; d: number }[] = [];
+    for (let i = 1; i < route.length; i++) {
+      const [a, b] = [route[i - 1], route[i]];
+      const steps = Math.ceil(a.distanceTo(b) / (GRID / 2));
+      for (let s = 0; s <= steps; s++) {
+        const p = a.clone().lerp(b, s / steps);
+        samples.push({ p, d: distanceToPolyline(p.x, p.z, other) });
+      }
     }
-    if (offsets.length < count) continue;
-    // Staggered: the cluster has real depth and width on screen, never one row or one column.
-    const range = (values: number[]) => Math.max(...values) - Math.min(...values);
-    if (count > 2 && range(offsets.map(([x, z]) => x + z)) < 2.5) continue;
-    if (count > 2 && range(offsets.map(([x, z]) => x - z)) < 2) continue;
-    const spots = offsets.map(([x, z]) => snapToGrid(new Vector3(origin.x - x, 0, origin.z - z)));
-    const routes = busRoutes(snapToGrid(origin), spots, GRID, bus);
-    const clear = spots.every((spot, i) =>
-      routes.every((route, j) => i === j || distanceToPolyline(spot.x, spot.z, route) >= clearance),
-    );
-    if (clear) return spots;
-    best ??= spots;
+    const meets = [center, ...samples.filter(({ d }) => d < 1e-6).map(({ p }) => p)];
+    return samples.every(({ p, d }) => d < 1e-6 || d >= LINE_GAP || meets.some((m) => m.distanceTo(p) < LINE_GAP));
+  };
+
+  for (let n = 0; n < count; n++) {
+    const start = random() * Math.PI * 2;
+    let placed = false;
+    for (let reach = RAY_REACH; reach <= MAX_REACH && !placed; reach += RAY_REACH) {
+      for (let turn = 0, angle = start; turn < 12 && !placed; turn++, angle += GOLDEN_ANGLE) {
+        for (let r = near; r <= near + reach && !placed; r += GRID / 2) {
+          const spot = snapToGrid(new Vector3(center.x + Math.cos(angle) * r, 0, center.z + Math.sin(angle) * r));
+          const route = gridRoute(center, spot);
+          if (fits(spot, route)) {
+            spots.push(spot);
+            routes.push(route);
+            placed = true;
+          }
+        }
+      }
+    }
+    if (!placed) throw new Error(`radialMap: no room for node ${n + 1} of ${count}`);
   }
-  if (!best) throw new Error(`scatterSpots: no layout for ${count} nodes`);
-  return best;
+  return { spots, routes };
 }
