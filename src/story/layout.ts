@@ -15,6 +15,12 @@ export const ATLASSIAN_GATE = new Vector3(10, 0, -6);
 export const HOME = new Vector3(-1.8, 0, 5);
 /** Rovo, the Atlassian side's own agent, waits off to the right of its gate. */
 export const ROVO_HOME = new Vector3(13.5, 0, -9.5);
+/**
+ * Where the request (the ticket) lands: below the secure gateway on screen,
+ * between the two systems, since both acts work on it. Clear of every node
+ * and line the layout can place, so it's not in the layout's keep-outs.
+ */
+export const REQUEST_SPOT = new Vector3(10, 0, 2);
 /** The security bot comes in from the back of the grid. */
 export const SECURITY_HOME = new Vector3(3, 0, -10);
 /**
