@@ -55,7 +55,7 @@ export interface RadialOptions {
 
 export interface RadialMap {
   spots: Vector3[];
-  /** Gate → node, one per spot (see gridRoute). */
+  /** Gate port → node, one per spot (see gridRoute); no two touch. */
   routes: Vector3[][];
 }
 
@@ -64,8 +64,15 @@ const MIN_LEG = 1.5;
 /** How far a node walks out along one ray before turning to try the next one. */
 const RAY_REACH = 1.5;
 const MAX_REACH = 10;
-/** Two lines either share a run exactly (a trunk that splits) or keep at least this far apart. */
-const LINE_GAP = 0.9;
+/**
+ * Ports on the gate's edge, as offsets across a line's first leg: lines that
+ * leave the same side of the gate start one lane apart instead of sharing a run.
+ */
+const PORTS = [0, GRID, -GRID];
+/** Lines never touch: every point of one keeps at least a lane from every other. */
+const LINE_GAP = GRID - 1e-6;
+/** Under the gate pad (lines are drawn from its edge), where every line meets at the gate. */
+const GATE_PAD = 1.2;
 /** Each node walks out from the gate on its own ray; when a ray is blocked it turns by the golden angle. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
@@ -76,15 +83,18 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
  * grid point on that ray, walking out from the gate one half-step at a time,
  * where it is as close to the gate as it can be while:
  * - at least `spacing` from every placed node;
- * - its line (gridRoute, shortest possible) keeps `clearance` from every other
- *   node, and no other line runs within `clearance` of it;
+ * - its line (gridRoute from a port on the gate, shortest possible) keeps
+ *   `clearance` from every other node, and no other line runs within
+ *   `clearance` of it;
  * - each leg of its line is zero or long enough to read;
- * - its line either shares another's run exactly (a trunk that splits) or
- *   keeps `LINE_GAP` from it, never running alongside it.
+ * - its line is its own all the way to the gate: it never touches, crosses or
+ *   shares a run with another line (no junctions but the gate). Lines leaving
+ *   the same side start from neighbouring ports, a lane apart.
  * A blocked ray is tried only a short way out (RAY_REACH) before the node
  * turns by the golden angle to the next ray, so it stays near the gate; only
- * if every turn is blocked close in does the reach widen (bounded). The draw order and directions come from the seed, so every
- * system gets its own shape; same seed, same map.
+ * if every turn is blocked close in does the reach widen (bounded). The draw
+ * order and directions come from the seed, so every system gets its own
+ * shape; same seed, same map.
  */
 export function radialMap(origin: Vector3, count: number, options: RadialOptions): RadialMap {
   const { seed, near = 2.5, spacing = 2, clearance = 1, avoid = [] } = options;
@@ -93,30 +103,34 @@ export function radialMap(origin: Vector3, count: number, options: RadialOptions
   const spots: Vector3[] = [];
   const routes: Vector3[][] = [];
 
+  const legsReadable = (route: Vector3[]) =>
+    route.slice(1).every((p, i) => p.distanceTo(route[i]) >= MIN_LEG || p.distanceTo(route[i]) < 1e-6);
   const fits = (spot: Vector3, route: Vector3[]) => {
-    const dx = Math.abs(spot.x - center.x);
-    const dz = Math.abs(spot.z - center.z);
-    if ((dx > 0 && dx < MIN_LEG) || (dz > 0 && dz < MIN_LEG)) return false;
+    if (!legsReadable(route)) return false;
     if (spots.some((s) => s.distanceTo(spot) < spacing)) return false;
     if (spots.some((s) => distanceToPolyline(s.x, s.z, route) < clearance)) return false;
     if (routes.some((r) => distanceToPolyline(spot.x, spot.z, r) < clearance)) return false;
-    if (!routes.every((r) => separate(route, r))) return false;
+    if (!routes.every((r) => apart(route, r))) return false;
     return avoid.every((a) => a.distanceTo(spot) >= spacing && distanceToPolyline(a.x, a.z, route) >= clearance);
   };
-  // Sample the new line: each sample lies on the other line (a shared trunk), or keeps LINE_GAP from it,
-  // or sits within LINE_GAP of where the two lines meet (the gate, or the point a trunk splits).
-  const separate = (route: Vector3[], other: Vector3[]) => {
-    const samples: { p: Vector3; d: number }[] = [];
+  // Every point of the new line beyond the gate pad keeps at least a lane from the other line.
+  const apart = (route: Vector3[], other: Vector3[]) => {
     for (let i = 1; i < route.length; i++) {
       const [a, b] = [route[i - 1], route[i]];
-      const steps = Math.ceil(a.distanceTo(b) / (GRID / 2));
+      const steps = Math.ceil(a.distanceTo(b) / (GRID / 4));
       for (let s = 0; s <= steps; s++) {
         const p = a.clone().lerp(b, s / steps);
-        samples.push({ p, d: distanceToPolyline(p.x, p.z, other) });
+        if (p.distanceTo(center) < GATE_PAD) continue;
+        if (distanceToPolyline(p.x, p.z, other) < LINE_GAP) return false;
       }
     }
-    const meets = [center, ...samples.filter(({ d }) => d < 1e-6).map(({ p }) => p)];
-    return samples.every(({ p, d }) => d < 1e-6 || d >= LINE_GAP || meets.some((m) => m.distanceTo(p) < LINE_GAP));
+    return true;
+  };
+  // The node's line from each port on the gate, in port order. The first leg runs along X unless
+  // the node is straight down Z, so ports offset across it: along Z for an X leg, along X for a Z leg.
+  const linesTo = (spot: Vector3) => {
+    const alongX = Math.abs(spot.x - center.x) > 1e-6;
+    return PORTS.map((o) => gridRoute(center.clone().add(alongX ? new Vector3(0, 0, o) : new Vector3(o, 0, 0)), spot));
   };
 
   for (let n = 0; n < count; n++) {
@@ -126,8 +140,8 @@ export function radialMap(origin: Vector3, count: number, options: RadialOptions
       for (let turn = 0, angle = start; turn < 12 && !placed; turn++, angle += GOLDEN_ANGLE) {
         for (let r = near; r <= near + reach && !placed; r += GRID / 2) {
           const spot = snapToGrid(new Vector3(center.x + Math.cos(angle) * r, 0, center.z + Math.sin(angle) * r));
-          const route = gridRoute(center, spot);
-          if (fits(spot, route)) {
+          const route = linesTo(spot).find((line) => fits(spot, line));
+          if (route) {
             spots.push(spot);
             routes.push(route);
             placed = true;

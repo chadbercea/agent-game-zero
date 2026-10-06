@@ -22,7 +22,12 @@ describe('gridRoute', () => {
 
   it('can never make a pinwheel: neighbouring quadrants always bend opposite ways', () => {
     const o = new Vector3(0, 0, 0);
-    const quadrants = [[3, 2], [-2, 3], [-3, -2], [2, -3]].map(([x, z]) => handedness(gridRoute(o, new Vector3(x, 0, z))));
+    const quadrants = [
+      [3, 2],
+      [-2, 3],
+      [-3, -2],
+      [2, -3],
+    ].map(([x, z]) => handedness(gridRoute(o, new Vector3(x, 0, z))));
     for (let i = 0; i < 4; i++) expect(quadrants[i]).toBe(-quadrants[(i + 1) % 4]);
   });
 });
@@ -38,7 +43,19 @@ describe('radialMap', () => {
           expect(p.distanceTo(origin)).toBeGreaterThanOrEqual(2.5 - GRID);
           spots.forEach((q, j) => j > i && expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2));
           routes.forEach((r, j) => i !== j && expect(distanceToPolyline(p.x, p.z, r)).toBeGreaterThanOrEqual(1));
-          expect(routes[i]).toEqual(gridRoute(origin, p));
+          // Its own line: starts at a port on the gate, shortest from there, and never touches another line.
+          expect(routes[i][0].distanceTo(origin)).toBeLessThanOrEqual(GRID + 1e-9);
+          expect(routes[i]).toEqual(gridRoute(routes[i][0], p));
+          routes.forEach((r, j) => {
+            if (j === i) return;
+            for (let t = 0; t <= 1; t += 0.05) {
+              for (let k = 1; k < routes[i].length; k++) {
+                const q = routes[i][k - 1].clone().lerp(routes[i][k], t);
+                if (q.distanceTo(origin) >= 1.2)
+                  expect(distanceToPolyline(q.x, q.z, r)).toBeGreaterThanOrEqual(GRID - 1e-6);
+              }
+            }
+          });
         });
       });
     }
