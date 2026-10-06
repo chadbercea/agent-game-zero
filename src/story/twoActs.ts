@@ -43,12 +43,15 @@ export interface WorkingCrew {
  * Act 1: access at the first gate, its system maps out, and three sub-agents
  * fan out and do their jobs in parallel. Unlike the one-act story they don't
  * come home: each finishes its first job, then keeps working (the job loops),
- * all green. Resolves with the working crew, or null if access is denied.
+ * all green. `onJobDone` runs as each one finishes its first job (the story
+ * sends the product back to D3V1N's ticket). Resolves with the working crew,
+ * or null if access is denied.
  */
 export async function act1(
   stage: SceneHost,
   scene: TwoActScene,
   onStep: (step: 'access' | 'mapping' | 'fan-out' | 'working') => void = () => {},
+  onJobDone: (member: CrewMember) => Promise<void> | void = () => {},
 ): Promise<WorkingCrew | null> {
   const { drone, act1: system } = scene;
   onStep('access');
@@ -59,7 +62,12 @@ export async function act1(
   onStep('fan-out');
   const crew = await fanOut(stage, drone, system.map);
   onStep('working');
-  await Promise.all(crew.map((member) => workOne(stage, member)));
+  await Promise.all(
+    crew.map(async (member) => {
+      await workOne(stage, member);
+      await onJobDone(member);
+    }),
+  );
   const stops = crew.map((member) => keepWorking(stage, member));
   return { crew, stop: () => stops.forEach((stop) => stop()), stopEach: stops };
 }

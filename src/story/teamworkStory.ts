@@ -11,16 +11,17 @@ import { attachSignal } from '../stage/attachSignal';
 import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
-import { act2, converge, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
+import { act2, converge, convergeRoute, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
 import { type CrewMember, dismiss } from './fanOut';
-import { GATEWAY, HOME, REQUEST_SPOT, ROVO_HOME, SECURITY_HOME } from './layout';
+import { GATEWAY, HOME, ROVO_HOME, SECURITY_HOME, TICKET_DROP } from './layout';
 import { leaveBase } from './leaveBase';
-import { dropTicket, handOff, liftTicket } from './request';
+import { deliver, dropTicket, handOff, liftTicket, pickUp } from './request';
 import { assignRoles, type Role } from './roles';
 import { TEAMWORK_LINKS } from './systemLayout';
 import type { GraphLink, TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 import { act1, teamworkGraph, type TwoActScene, type WorkingCrew } from './twoActs';
+import type { SystemMap } from './SystemMap';
 
 export type StoryStep =
   | 'request'
@@ -74,6 +75,9 @@ const TRAVEL_START = 1;
 const TRAVEL_APART = 1.6;
 const DESPAWN_START = 3;
 const DESPAWN_APART = 2.2;
+/** When the Atlassian side's work starts arriving at D3V1N's ticket during the connected phase (seconds in, then apart). */
+const FILL_START = 1.5;
+const FILL_APART = 2;
 
 /** A sub-agent this run, its parent, its role, and (for travelers) where it's visiting. */
 interface Cast {
@@ -91,13 +95,18 @@ interface Cast {
 
 /**
  * The whole story, start to finish, on one grid. It opens with a request: a
- * ticket drops onto the grid, and the same request starts both acts.
- * Act 1: D3V1N gets access → map → three sub-agents, three isolated jobs.
- * Act 2: Rovo arrives and gets access to Atlassian → map → four sub-agents →
- * a security bot builds the secure gateway (glass tunnel, lock) → the
- * Teamwork Graph draws in between every node → work changes hands along the
- * graph; some sub-agents stay, some finish and go home, some cross to the
- * other system through the gateway (access granted, green, as they pass).
+ * ticket drops in front of D3V1N, which reads it and carries it from then on.
+ * The ticket lists the work, one row per system, and shows where it stands.
+ * Act 1: D3V1N gets access → map → three sub-agents, three isolated jobs;
+ * each product comes back to the ticket and ticks its row. Three of five:
+ * the rest live on the other side.
+ * Act 2: Rovo picks up the same request, gets access to Atlassian → map →
+ * four sub-agents → a security bot builds the secure gateway (glass tunnel,
+ * lock) → the Teamwork Graph draws in between every node. The missing rows
+ * arrive across it, through the gateway, and the ticket fills in. Work
+ * changes hands along the graph; some sub-agents stay, some finish and go
+ * home, some cross to the other system through the gateway (access granted,
+ * green, as they pass).
  * Converge: every product flows across the graph into one shipped
  * deliverable at D3V1N; everyone comes home; the graph fades.
  *
@@ -111,6 +120,8 @@ export class TeamworkStory {
   readonly ticket = new Ticket();
   /** The request is on the grid and D3V1N has it (a retry at the first gate doesn't drop it again). */
   private requested = false;
+  /** Lets go of the ticket D3V1N is carrying. */
+  private letGo: (() => void) | null = null;
   private act1Crew: WorkingCrew | null = null;
   private act2Crew: WorkingCrew | null = null;
   private rovo: SpawnedDrone | null = null;
@@ -125,7 +136,6 @@ export class TeamworkStory {
     this.graph = teamworkGraph(stage, scene);
     this.deliverable.position.copy(scene.act1.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
-    this.ticket.position.copy(REQUEST_SPOT);
     this.ticket.visible = false;
     stage.add(this.deliverable, this.gateway, this.ticket);
     stage.onTick((dt) => {
@@ -144,16 +154,29 @@ export class TeamworkStory {
   async play(): Promise<boolean> {
     const { stage, scene, onStep } = this;
 
+    const { ticket } = this;
     if (!this.requested) {
+      // The request lands in front of D3V1N; D3V1N reads it and picks it up. It carries the ticket from here on.
       onStep('request');
-      await dropTicket(stage, this.ticket);
-      await handOff(stage, this.ticket, scene.drone);
+      await dropTicket(stage, ticket, TICKET_DROP);
+      await handOff(stage, ticket, scene.drone);
+      this.letGo = await pickUp(stage, ticket, scene.drone);
       this.requested = true;
     }
 
     if (!this.act1Crew) {
-      this.act1Crew = await act1(stage, scene, onStep);
+      this.act1Crew = await act1(
+        stage,
+        scene,
+        (step) => {
+          if (step === 'mapping') ticket.status = 'progress';
+          onStep(step);
+        },
+        // Each sub-agent's product comes back down its line to the gate and up into its row on the ticket.
+        (member) => deliver(stage, ticket, member.node.kind, reversed(member.route)),
+      );
       if (!this.act1Crew) {
+        ticket.status = 'blocked';
         onStep('denied');
         return false;
       }
@@ -178,9 +201,11 @@ export class TeamworkStory {
     const rovo = this.rovo.drone;
     onStep('access-2');
     if (!(await accessCheck(stage, rovo, scene.act2.gate))) {
+      ticket.status = 'blocked';
       onStep('denied');
       return false;
     }
+    ticket.status = 'progress';
     this.act2Crew = await act2(stage, rovo, scene.act2.map, (step) =>
       onStep(step === 'mapping' ? 'mapping-2' : 'fan-out-2'),
     );
@@ -196,13 +221,14 @@ export class TeamworkStory {
     this.cast = this.castRoles(rovo);
     const allCrew = this.cast.map((c) => c.member);
     const stopTraffic = graphTraffic(stage, this.graph, allCrew, this.runs);
-    await Promise.all([wait(stage, CONNECTED_SECONDS), this.playRoles()]);
+    await Promise.all([wait(stage, CONNECTED_SECONDS), this.playRoles(), this.fillTicketAcross()]);
     stopTraffic();
 
     onStep('converge');
     for (const c of this.cast) c.stopLoop();
     await wait(stage, 0.6);
     await converge(stage, scene, this.graph, allCrew, this.deliverable);
+    ticket.status = 'done';
     onStep('shipped');
     await wait(stage, SHIPPED_HOLD);
 
@@ -266,6 +292,8 @@ export class TeamworkStory {
     this.rovo = null;
     scene.act2.signal = null;
     this.requested = false;
+    this.letGo?.();
+    this.letGo = null;
     leaving.push(liftTicket(stage, this.ticket));
     await Promise.all(leaving);
     scene.drone.status = 'waiting';
@@ -363,6 +391,28 @@ export class TeamworkStory {
           c.gone = true;
           await goHome(stage, c.member, c.parent, { carry: false });
         }),
+    );
+  }
+
+  /**
+   * The rows Act 1 couldn't fill (Spec, Issue link) come in from the Atlassian
+   * side, across the Teamwork Graph and through the secure gateway, to D3V1N's
+   * gate and up into the ticket. One at a time, early in the connected phase.
+   */
+  private async fillTicketAcross(): Promise<void> {
+    const { stage, scene, graph, ticket } = this;
+    const stations = (map: SystemMap) => map.nodes.map((node, i) => ({ node, route: map.routes[i] }));
+    const home = stations(scene.act1.map);
+    const hub = home.reduce((best, s) => (s.route.getLength() < best.route.getLength() ? s : best), home[0]);
+    const missing = stations(scene.act2.map).filter((s) =>
+      ticket.request.rows.some((row) => row.kind === s.node.kind && !ticket.isDone(row.kind)),
+    );
+    await Promise.all(
+      missing.map(async (station, i) => {
+        await wait(stage, FILL_START + i * FILL_APART);
+        const route = convergeRoute(station, hub, graph, scene.act1.gate.position);
+        await deliver(stage, ticket, station.node.kind, route, { boost: graph.boost });
+      }),
     );
   }
 

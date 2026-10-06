@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { Vector3 } from 'three';
+import { DroneFlight } from '../animation/DroneFlight';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
-import { dropTicket, handOff, liftTicket } from './request';
-import { wait } from './timeline';
+import { dropTicket, handOff, liftTicket, pickUp } from './request';
+import { fly, wait } from './timeline';
 
 const meta: Meta = {
   title: 'Story/02 Request',
@@ -14,24 +15,25 @@ export default meta;
 
 type Story = StoryObj;
 
-const TICKET = new Vector3(0, 0, 0);
-const D3V1N = new Vector3(-2.6, 0, 1.4);
-const ROVO = new Vector3(1.4, 0, -2.6);
+const HOME = new Vector3(-2.2, 0, 1);
+const DROP = new Vector3(-1.4, 0, 2);
+const WORK = new Vector3(1.2, 0, -1.2);
+const ROVO = new Vector3(3, 0, 1.8);
 
 /**
- * A request arrives: the ticket drops onto the grid and hands the request to
- * D3V1N. Then the same ticket hands the same request to Rovo, the way it
- * starts both acts of the story. Loops: the ticket is cleared and drops again.
+ * A request arrives: the ticket drops in front of D3V1N, D3V1N reads it and
+ * picks it up, and the card rides with D3V1N as it flies off to work. Then
+ * Rovo picks up the same request from the same ticket. Loops: the ticket is
+ * cleared, D3V1N flies home, and a fresh ticket drops.
  */
 export const Arrival: Story = {
   render: () => {
-    const { root, stage } = specimenStage({ viewSize: 7, focusY: 0.6 });
+    const { root, stage } = specimenStage({ viewSize: 8, focusY: 1.6 });
     const ticket = new Ticket();
-    ticket.position.copy(TICKET);
     ticket.visible = false;
     stage.add(ticket);
     stage.onTick((dt) => ticket.update(dt));
-    const d3v1n = spawnDrone(stage, D3V1N.x, D3V1N.z, { name: 'D3V1N', showLabel: true, status: 'waiting' }).drone;
+    const d3v1n = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' }).drone;
     const rovo = spawnDrone(stage, ROVO.x, ROVO.z, {
       name: 'Rovo',
       lineage: 'cyan',
@@ -41,15 +43,20 @@ export const Arrival: Story = {
     void (async () => {
       for (;;) {
         await wait(stage, 1);
-        await dropTicket(stage, ticket);
+        await dropTicket(stage, ticket, DROP);
         await handOff(stage, ticket, d3v1n);
+        const letGo = await pickUp(stage, ticket, d3v1n);
         d3v1n.status = 'working';
-        await wait(stage, 1.5);
+        await fly(stage, DroneFlight.to(d3v1n, WORK));
+        ticket.status = 'progress';
+        await wait(stage, 1);
         await handOff(stage, ticket, rovo);
         rovo.status = 'working';
         await wait(stage, 2.5);
+        letGo();
         await liftTicket(stage, ticket);
         d3v1n.status = rovo.status = 'waiting';
+        await fly(stage, DroneFlight.to(d3v1n, HOME));
       }
     })();
     return root;
