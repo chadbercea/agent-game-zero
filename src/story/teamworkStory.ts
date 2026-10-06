@@ -109,7 +109,7 @@ export class TeamworkStory {
     readonly scene: TwoActScene,
     private readonly onStep: (step: StoryStep) => void = () => {},
   ) {
-    this.graph = teamworkGraph(stage, scene, GATEWAY);
+    this.graph = teamworkGraph(stage, scene);
     this.deliverable.position.copy(scene.act1.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
     stage.add(this.deliverable, this.gateway);
@@ -164,6 +164,8 @@ export class TeamworkStory {
     await securityGateway(stage, this.gateway, SECURITY_HOME);
     onStep('graph');
     await this.graph.reveal(stage);
+    // Lines connected to the tunnel's ends: now the streams flow inside it.
+    await tween(stage, 1, (t) => (this.gateway.conduit.streams = t));
 
     onStep('connected');
     this.cast = this.castRoles(rovo);
@@ -192,6 +194,7 @@ export class TeamworkStory {
       this.gateway.built = 1 - t;
       this.gateway.lockDrop = 1 - t;
     });
+    this.gateway.conduit.streams = 0;
     this.act1Crew = this.act2Crew = null;
     this.cast = [];
     scene.drone.status = 'waiting';
@@ -214,6 +217,7 @@ export class TeamworkStory {
     this.graph.hide();
     this.gateway.built = 0;
     this.gateway.lockDrop = 0;
+    this.gateway.conduit.streams = 0;
     this.deliverable.reset();
     this.deliverable.visible = false;
     scene.act1.map.hide();

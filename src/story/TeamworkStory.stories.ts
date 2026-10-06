@@ -84,6 +84,16 @@ async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: Teamw
   return { crew, parentOf, stop: () => stops.forEach((stop) => stop()) };
 }
 
+/** The secure gateway, already built (lock on, streams flowing), for the staged stories. */
+function builtGateway(stage: SceneHost): Gateway {
+  const gateway = new Gateway(GATEWAY);
+  gateway.dropFrom.copy(gateway.center).setY(0.6);
+  gateway.built = gateway.lockDrop = gateway.conduit.streams = 1;
+  stage.add(gateway);
+  stage.onTick((dt) => gateway.update(dt));
+  return gateway;
+}
+
 /** Rovo, parked at the Atlassian gate for the staged stories. */
 function stagedRovo(stage: SceneHost): Drone {
   return spawnDrone(stage, ATLASSIAN_GATE.x, ATLASSIAN_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true })
@@ -97,6 +107,7 @@ export const Handoffs: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
     const graph = teamworkGraph(stage, scene);
+    builtGateway(stage);
     const rovo = stagedRovo(stage);
     void (async () => {
       const { crew } = await connectedScene(stage, scene, graph, rovo);
@@ -154,6 +165,7 @@ export const Converge: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
     const graph = teamworkGraph(stage, scene);
+    builtGateway(stage);
     const rovo = stagedRovo(stage);
     const deliverable = new Deliverable();
     deliverable.position.copy(ACT1_GATE).add({ x: 1.13, y: 1.6, z: -1.13 });

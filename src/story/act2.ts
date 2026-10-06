@@ -130,7 +130,7 @@ export function graphTraffic(
     const link = graph.links[Math.floor(random() * graph.links.length)];
     const forward = random() < 0.5;
     const to = forward ? link.to : link.from;
-    void shoot(stage, forward ? link.edge.path : reversed(link.edge.path), HANDOFF_SPEED, graph.boost).then(() => {
+    void shoot(stage, forward ? link.route : reversed(link.route), HANDOFF_SPEED, graph.boost).then(() => {
       const member = at.get(to);
       if (running && member) member.sub.drone.flash = 1;
     });

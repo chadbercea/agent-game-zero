@@ -69,12 +69,13 @@ export class Conduit extends Group {
   private readonly edges: LineBasicMaterial;
   private readonly ribs: { material: LineBasicMaterial; at: number }[] = [];
   private readonly disposables: { dispose(): void }[] = [];
-  private readonly streams: InstancedMesh;
+  private readonly dashMesh: InstancedMesh;
   private readonly streamMaterial: MeshBasicMaterial;
   /** Per dash: lane height and offset across, speed (signed), and where it starts along the run. */
   private readonly dashes: { y: number; z: number; speed: number; start: number }[] = [];
   private readonly length: number;
   private _level = 0;
+  private _streams = 1;
   private time = 0;
   /** Access-granted flash (0–1): edges and ribs light green, decaying. */
   private flashLevel = 0;
@@ -138,17 +139,17 @@ export class Conduit extends Group {
       for (let k = 0; k < count; k++) this.dashes.push({ y, z, speed, start: random() * length });
     }
     this.streamMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
-    this.streams = new InstancedMesh(
+    this.dashMesh = new InstancedMesh(
       (dashGeometry ??= new BoxGeometry(DASH.length, DASH.thick, DASH.thick)),
       this.streamMaterial,
       this.dashes.length,
     );
-    this.streams.frustumCulled = false;
-    this.dashes.forEach((_, i) => this.streams.setColorAt(i, pick(random())));
-    this.add(this.streams);
+    this.dashMesh.frustumCulled = false;
+    this.dashes.forEach((_, i) => this.dashMesh.setColorAt(i, pick(random())));
+    this.add(this.dashMesh);
     this.placeDashes();
 
-    this.disposables.push(box, outline, rib, this.glass, this.edges, this.streamMaterial, this.streams);
+    this.disposables.push(box, outline, rib, this.glass, this.edges, this.streamMaterial, this.dashMesh);
     this.disposables.push(...this.ribs.map((r) => r.material));
     this.visible = false;
   }
@@ -163,8 +164,23 @@ export class Conduit extends Group {
     this.visible = this._level > 0.001;
     this.glass.opacity = GLASS_OPACITY * this._level;
     this.edges.opacity = EDGE_OPACITY * this._level;
-    this.streamMaterial.opacity = 0.95 * this._level;
+    this.paintStreams();
     this.paintRibs();
+  }
+
+  /** How much of the inner streams flow (0–1), on top of `level`: a gateway holds them until its lines connect. */
+  get streams(): number {
+    return this._streams;
+  }
+
+  set streams(value: number) {
+    this._streams = MathUtils.clamp(value, 0, 1);
+    this.paintStreams();
+  }
+
+  private paintStreams(): void {
+    this.streamMaterial.opacity = 0.95 * this._level * this._streams;
+    this.dashMesh.visible = this.streamMaterial.opacity > 0.001;
   }
 
   /** Signal access granted: the whole tunnel flashes green, then settles back to blue. */
@@ -191,9 +207,9 @@ export class Conduit extends Group {
       const scale = MathUtils.smoothstep(edge, 0, 0.25);
       dashMatrix.makeScale(Math.max(0.001, scale), Math.max(0.001, scale), Math.max(0.001, scale));
       dashMatrix.setPosition(s - half, y, z);
-      this.streams.setMatrixAt(i, dashMatrix);
+      this.dashMesh.setMatrixAt(i, dashMatrix);
     });
-    this.streams.instanceMatrix.needsUpdate = true;
+    this.dashMesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose(): void {

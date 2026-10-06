@@ -7,11 +7,10 @@ import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
-import { ACT1_GATE, ATLASSIAN_GATE, HOME, storyLayout } from './layout';
+import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, HOME, storyLayout } from './layout';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
 import { TeamworkGraph } from './TeamworkGraph';
-import type { SharedRun } from '../core/sharedRuns';
 import type { SystemsLayout } from './systemLayout';
 
 /** One gate's system: the gate, its map, and its parent agent's signal link to it. */
@@ -24,8 +23,10 @@ export interface GateSystem {
 export interface TwoActScene {
   /** D3V1N: Act 1's parent agent, at the first gate. */
   drone: Drone;
-  /** The Teamwork Graph's link lines, as the layout chose them. */
+  /** The Teamwork Graph's in-system link lines, as the layout chose them. */
   graphLines: SystemsLayout['lines'];
+  /** Feeder lines into the secure gateway, for every node that talks across systems. */
+  feeders: SystemsLayout['feeders'];
   act1: GateSystem;
   /** The Atlassian system. Its parent agent (Rovo) arrives mid-story, so its signal link comes with it. */
   act2: Omit<GateSystem, 'signal'> & { signal: AttachedSignal | null };
@@ -64,13 +65,16 @@ export async function act1(
 }
 
 /** The Teamwork Graph across both systems of a scene, with its highways. */
-export function teamworkGraph(stage: SceneHost, scene: TwoActScene, gateway?: SharedRun): TeamworkGraph {
+export function teamworkGraph(stage: SceneHost, scene: TwoActScene): TeamworkGraph {
   const { act1, act2 } = scene;
   return new TeamworkGraph(stage, [act1.map.nodes, act2.map.nodes], {
     lines: scene.graphLines,
+    feeders: scene.feeders,
+    gateway: GATEWAY,
     gateLines: [...act1.map.polylines, ...act2.map.polylines],
     gates: [act1.gate.position, act2.gate.position],
-    reserved: gateway ? [gateway] : [],
+    // The secure gateway is the one tunnel: no plain glass that could read as a way around it.
+    highways: false,
   });
 }
 
@@ -90,10 +94,12 @@ export function twoActScene(stage: SceneHost): TwoActScene {
   const {
     maps: [layout1, layout2],
     lines,
+    feeders,
   } = storyLayout();
   return {
     drone,
     graphLines: lines,
+    feeders,
     act1: {
       gate: gate1,
       map: new SystemMap(stage, gate1, JOB_KINDS, { layout: layout1 }),

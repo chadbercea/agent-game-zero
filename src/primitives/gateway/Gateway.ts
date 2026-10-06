@@ -31,6 +31,8 @@ export class Gateway extends Group {
     super();
     this.conduit = new Conduit(run);
     this.conduit.level = 1;
+    // Quiet inside until the lines connect to its ends (see the story): then the streams flow.
+    this.conduit.streams = 0;
     this.add(this.conduit);
     this.lock.rotation.y = FACE_CAMERA;
     this.lock.scale.setScalar(LOCK_SCALE);

@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { hashSeed, inDroneColumn, pinwheelFree, radialMap, screenStacked } from '../core/scatter';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import { ATLASSIAN_KINDS, JOB_KINDS, type SystemKind } from '../primitives/node/emblems';
-import { ACT1_GATE, ATLASSIAN_GATE, HOME } from './layout';
-import { layoutSystems, TEAMWORK_LINKS } from './systemLayout';
+import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, HOME } from './layout';
+import { gatewayPorts, layoutSystems, TEAMWORK_LINKS } from './systemLayout';
+import { sharedRuns } from '../core/sharedRuns';
 
 const plans = [
   { gate: ACT1_GATE, kinds: JOB_KINDS, avoid: [ATLASSIAN_GATE, HOME] },
@@ -105,4 +106,36 @@ describe('layoutSystems on screen', () => {
         for (const g of [ACT1_GATE, ATLASSIAN_GATE]) expect(inDroneColumn(p.x - g.x, p.z - g.z)).toBe(false);
     }
   });
+});
+
+describe('layoutSystems with the secure gateway', () => {
+  const gatewayPlans = [
+    { gate: ACT1_GATE, kinds: JOB_KINDS, avoid: [ATLASSIAN_GATE, HOME] },
+    { gate: ATLASSIAN_GATE, kinds: ATLASSIAN_KINDS, avoid: [ACT1_GATE, HOME] },
+  ];
+  const run = GATEWAY;
+  for (const seed of [1, 2, 5, 9, hashSeed('teamwork-graph')]) {
+    it(`sends every cross-system link through the tunnel ends (seed ${seed})`, () => {
+      const layout = layoutSystems(gatewayPlans, TEAMWORK_LINKS, seed, run);
+      const atlassian = new Set<string>(ATLASSIAN_KINDS);
+      // No direct line between the systems.
+      for (const link of layout.lines.keys()) expect(atlassian.has(link.a)).toBe(atlassian.has(link.b));
+      const ends = gatewayPorts(run).ends;
+      for (const link of TEAMWORK_LINKS.filter((l) => atlassian.has(l.a) !== atlassian.has(l.b))) {
+        for (const kind of [link.a, link.b]) {
+          const feeder = layout.feeders.get(kind)!;
+          expect(feeder).toBeDefined();
+          // Starts at a port on an end face and leaves along the tunnel's axis, outward.
+          const end = ends.find((e) => e.ports.some((p) => p.distanceTo(feeder[0]) < 1e-6))!;
+          expect(end).toBeDefined();
+          expect(feeder[1].clone().sub(feeder[0]).normalize().dot(end.out)).toBeCloseTo(1);
+        }
+      }
+      // Feeders never run alongside gate lines.
+      const gateLines = layout.maps.flatMap((m) => m.routes);
+      for (const feeder of layout.feeders.values()) {
+        for (const line of gateLines) expect(sharedRuns([feeder, line])).toEqual([]);
+      }
+    });
+  }
 });

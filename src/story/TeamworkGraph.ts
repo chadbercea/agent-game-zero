@@ -1,14 +1,14 @@
-import { type Curve, MathUtils, Vector3 } from 'three';
-import { BEND_RADIUS, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import { type Curve, CurvePath, LineCurve3, MathUtils, Vector3 } from 'three';
+import { BEND_RADIUS, GATE_FOOTPRINT, GRID, NODE_FOOTPRINT, snapToGrid } from '../core/grid';
+import { gridRoute } from '../core/scatter';
 import { inRun, runsOverlap, type SharedRun, sharedRuns } from '../core/sharedRuns';
+import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { Conduit } from '../primitives/conduit/Conduit';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
-import type { Boost } from './beam';
+import type { SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
-import { gridRoute } from '../core/scatter';
-import { snapToGrid } from '../core/grid';
+import type { Boost } from './beam';
 import { TEAMWORK_LINKS, type TeamworkLink } from './systemLayout';
 import { tween, wait } from './timeline';
 
@@ -18,101 +18,138 @@ const STAGGER_SECONDS = 0.28;
 const NODE_INSET = NODE_FOOTPRINT / 2;
 const CONDUIT_SECONDS = 1.2;
 
-/** One link in the graph: its edge, its two endpoints, and the full node-to-node path for handoffs. */
+/** One link in the graph: its endpoints, the relationship, and the path work takes between them. */
 export interface GraphLink {
   from: SystemNode;
   to: SystemNode;
-  edge: GraphEdge;
-  /** Node center to node center along the edge, for work traveling between them. */
+  /** Node center to node center, for work traveling between them (through the gateway, if it crosses systems). */
   route: Curve<Vector3>;
-  /** The relationship this edge stands for. */
+  /** The relationship this link stands for. */
   link: TeamworkLink;
+  /** Whether it crosses between systems (through the secure gateway). */
+  crosses: boolean;
 }
 
-/**
- * The Teamwork Graph: a web of grid-routed edges across the whole floor,
- * linking system nodes from every gate along the relationships the graph
- * actually tracks (TEAMWORK_LINKS; the layout keeps them short and clear). Each edge is an L-shaped grid route
- * (along the isometric axes, one rounded bend) on the same plane as everything
- * else, drawn as blue marching dots so it reads apart from the still, gray access traces.
- */
 export interface TeamworkGraphOptions {
-  /** Each link's floor line as the layout chose it (see layoutSystems); a link without one takes the plain shortest line. */
+  /** Each in-system link's floor line as the layout chose it (see layoutSystems); otherwise the plain shortest line. */
   lines?: ReadonlyMap<TeamworkLink, Vector3[]>;
+  /** Feeder lines, tunnel port → node, for every node that talks across systems (see layoutSystems). */
+  feeders?: ReadonlyMap<SystemKind, Vector3[]>;
+  /** The secure gateway every cross-system link goes through. */
+  gateway?: SharedRun;
   links?: readonly TeamworkLink[];
-  /** The gates' own lines to their nodes: where graph links run alongside them, that's a highway too. */
+  /** The gates' own lines to their nodes: where graph lines run alongside them, that's a highway too. */
   gateLines?: readonly (readonly Vector3[])[];
   /** Gate centers, so highways stop at the gate pads. */
   gates?: readonly Vector3[];
-  /** Runs already spoken for (the secure gateway): no plain highway overlaps them. */
-  reserved?: readonly SharedRun[];
+  /** Enclose shared runs outside the gateway in plain glass highways. Off when the gateway is the only tunnel. */
+  highways?: boolean;
 }
 
+/**
+ * The Teamwork Graph: the relationships it tracks (TEAMWORK_LINKS), drawn as
+ * blue marching dots on the floor grid, apart from the still, gray access
+ * traces. Links within a system are direct lines between the nodes. Links
+ * between systems never skip security: each node that talks across has one
+ * feeder line into its side's end of the secure gateway, and work for those
+ * links rides feeder → tunnel → feeder. Wherever lines share a run outside
+ * the gateway, a plain glass highway encloses it.
+ */
 export class TeamworkGraph {
   readonly links: GraphLink[] = [];
-  /** Information highways: glass conduits over every shared run (see sharedRuns). */
+  /** Every drawn line: in-system links and feeders, each once. */
+  readonly edges: GraphEdge[] = [];
+  /** Information highways: glass conduits over shared runs (see sharedRuns), never over the gateway. */
   readonly conduits: Conduit[] = [];
+  private readonly gateway?: SharedRun;
   private readonly untick: () => void;
 
-  /**
-   * `groups`: the nodes around each gate, one cluster per system. Links between systems not on the grid
-   * are skipped. Wherever lines share a run (graph links with each other, or with gate lines), a conduit
-   * encloses it.
-   */
+  /** `groups`: the nodes around each gate, one cluster per system. Links between systems not on the grid are skipped. */
   constructor(stage: SceneHost, groups: readonly (readonly SystemNode[])[], options: TeamworkGraphOptions = {}) {
-    const { lines = new Map(), links = TEAMWORK_LINKS, gateLines = [], gates = [], reserved = [] } = options;
+    const {
+      lines = new Map(),
+      feeders = new Map(),
+      gateway,
+      links = TEAMWORK_LINKS,
+      gateLines = [],
+      gates = [],
+      highways = true,
+    } = options;
+    this.gateway = gateway;
     this.untick = stage.onTick((dt) => {
-      for (const { edge } of this.links) edge.update(dt);
+      for (const edge of this.edges) edge.update(dt);
       for (const conduit of this.conduits) conduit.update(dt);
     });
     const byKind = new Map(groups.flat().map((n) => [n.kind, n]));
-    const polylines: Vector3[][] = [];
-    links.forEach((link) => {
-      const [from, to] = [byKind.get(link.a), byKind.get(link.b)];
-      if (!from || !to) return;
-      const polyline = lines.get(link) ?? gridRoute(snapToGrid(from.position), snapToGrid(to.position));
-      polylines.push(polyline);
-      const edge = new GraphEdge(roundedPath(trimPolyline(polyline, NODE_INSET, NODE_INSET), BEND_RADIUS));
+    const system = new Map(groups.flatMap((g, i) => g.map((n) => [n.kind, i] as const)));
+    const drawn: Vector3[][] = [];
+    const draw = (polyline: Vector3[], insetStart: number) => {
+      const edge = new GraphEdge(roundedPath(trimPolyline(polyline, insetStart, NODE_INSET), BEND_RADIUS));
       stage.add(edge);
-      this.links.push({
-        from,
-        to,
-        edge,
-        route: roundedPath(polyline, BEND_RADIUS),
-        link,
-      });
-    });
+      this.edges.push(edge);
+      drawn.push(polyline);
+    };
+
+    // Feeders first: from each tunnel port (the line starts right at the end face) out to its node.
+    for (const [, feeder] of feeders) if (byKind.size) draw(feeder, 0);
+
+    for (const link of links) {
+      const [from, to] = [byKind.get(link.a), byKind.get(link.b)];
+      if (!from || !to) continue;
+      const crosses = system.get(link.a) !== system.get(link.b);
+      const [fa, fb] = [feeders.get(link.a), feeders.get(link.b)];
+      if (crosses && gateway && fa && fb) {
+        // Node → its feeder back to the tunnel → through the tunnel → the far feeder → partner node.
+        const route = new CurvePath<Vector3>();
+        route.add(reversed(roundedPath(fa, BEND_RADIUS)));
+        for (const leg of tunnelLegs(fa[0], fb[0], gateway)) route.add(leg);
+        route.add(roundedPath(fb, BEND_RADIUS));
+        this.links.push({ from, to, route, link, crosses });
+        continue;
+      }
+      const polyline = lines.get(link) ?? gridRoute(snapToGrid(from.position), snapToGrid(to.position));
+      draw(polyline, NODE_INSET);
+      this.links.push({ from, to, route: roundedPath(polyline, BEND_RADIUS), link, crosses });
+    }
 
     const keepouts = [
       ...[...byKind.values()].map((n) => ({ center: n.position, half: NODE_FOOTPRINT / 2 })),
       ...gates.map((g) => ({ center: g, half: GATE_FOOTPRINT / 2 })),
     ];
-    // Only runs a graph link takes part in: gate lines alongside each other never meet (each node has its own).
-    const all = [...polylines, ...gateLines];
-    for (const run of sharedRuns(all, keepouts).filter((r) => !reserved.some((g) => runsOverlap(r, g)))) {
+    // The gateway, plus a lane of margin all round: plain highways stay clear of it.
+    const guard = gateway && {
+      ...gateway,
+      from: gateway.from - GRID,
+      to: gateway.to + GRID,
+      low: gateway.low - GRID,
+      high: gateway.high + GRID,
+    };
+    for (const run of highways ? sharedRuns([...drawn, ...gateLines], keepouts) : []) {
+      if (guard && runsOverlap(run, guard)) continue;
       const conduit = new Conduit(run);
       stage.add(conduit);
       this.conduits.push(conduit);
     }
   }
 
-  /** Whether a floor point is inside an information highway (packets there ride faster and glow). */
+  /** Whether a floor point is inside a highway or the gateway (packets there ride faster and glow). */
   inHighway(p: Vector3): boolean {
+    if (this.gateway && inRun(this.gateway, p)) return true;
     return this.conduits.some((c) => c.level > 0.5 && inRun(c.run, p));
   }
 
   /** Packets in a highway ride this much faster, glowing the graph's blue. */
   readonly boost: Boost = { at: (p) => this.inHighway(p), speed: 2.2, glow: GRAPH_COLOR };
 
-  /** Draw the web in, edge after edge; the highways rise as it completes. */
+  /** Draw the lines in, one after another; the plain highways rise as they complete. */
   async reveal(stage: Pick<SceneHost, 'onTick'>): Promise<void> {
     await Promise.all([
-      ...this.links.map(async ({ edge }, i) => {
+      ...this.edges.map(async (edge, i) => {
         await wait(stage, i * STAGGER_SECONDS);
         await tween(stage, DRAW_SECONDS, (t) => (edge.drawn = 1 - (1 - t) ** 3));
       }),
       (async () => {
-        await wait(stage, this.links.length * STAGGER_SECONDS * 0.6);
+        await wait(stage, this.edges.length * STAGGER_SECONDS * 0.6);
         await tween(stage, CONDUIT_SECONDS, (t) => this.conduits.forEach((c) => (c.level = t * t * (3 - 2 * t))));
       })(),
     ]);
@@ -120,30 +157,44 @@ export class TeamworkGraph {
 
   /** Fade the whole web out and reset it. */
   async fade(stage: Pick<SceneHost, 'onTick'>, seconds = 0.8): Promise<void> {
-    const start = this.links.map(({ edge }) => edge.material.opacity);
+    const start = this.edges.map((edge) => edge.material.opacity);
     await tween(stage, seconds, (t) => {
-      this.links.forEach(({ edge }, i) => (edge.material.opacity = MathUtils.lerp(start[i], 0, t)));
+      this.edges.forEach((edge, i) => (edge.material.opacity = MathUtils.lerp(start[i], 0, t)));
       for (const c of this.conduits) c.level = Math.min(c.level, 1 - t);
     });
     this.hide();
-    this.links.forEach(({ edge }, i) => (edge.material.opacity = start[i]));
+    this.edges.forEach((edge, i) => (edge.material.opacity = start[i]));
   }
 
   /** Undrawn, invisible. */
   hide(): void {
-    for (const { edge } of this.links) edge.drawn = 0;
+    for (const edge of this.edges) edge.drawn = 0;
     for (const c of this.conduits) c.level = 0;
   }
 
   /** Fully drawn at once (specimens). */
   showAll(): void {
-    for (const { edge } of this.links) edge.drawn = 1;
+    for (const edge of this.edges) edge.drawn = 1;
     for (const c of this.conduits) c.level = 1;
   }
 
   dispose(): void {
     this.untick();
-    for (const { edge } of this.links) edge.dispose();
+    for (const edge of this.edges) edge.dispose();
     for (const c of this.conduits) c.dispose();
   }
+}
+
+/** Through the tunnel from one end's port to the other's: along the axis, shifting lanes at the middle if need be. */
+function tunnelLegs(a: Vector3, b: Vector3, run: SharedRun): LineCurve3[] {
+  const mid = (run.from + run.to) / 2;
+  const points =
+    run.along === 'x'
+      ? [a, new Vector3(mid, 0, a.z), new Vector3(mid, 0, b.z), b]
+      : [a, new Vector3(a.x, 0, mid), new Vector3(b.x, 0, mid), b];
+  const legs: LineCurve3[] = [];
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].distanceTo(points[i - 1]) > 1e-6) legs.push(new LineCurve3(points[i - 1].clone(), points[i].clone()));
+  }
+  return legs;
 }
