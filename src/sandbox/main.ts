@@ -1,5 +1,6 @@
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { Stage } from '../stage/Stage';
+import { hoverCards } from '../story/hoverCards';
 import { hoverLines } from '../story/hoverLines';
 import { STORY_CENTER } from '../story/layout';
 import { STORY_CAPTION, TeamworkStory } from '../story/teamworkStory';
@@ -25,6 +26,19 @@ hoverLines(stage, scene.act2.map);
 const caption = document.getElementById('caption')!;
 const say = (text: string) => (caption.textContent = text);
 const story = new TeamworkStory(stage, scene, (step) => say(STORY_CAPTION[step]));
+
+// Volume of work: hover anything for its own numbers; the grand total sits quietly in the corner.
+hoverCards(stage, () => story.hoverTargets());
+const totals = document.getElementById('totals')!;
+const fmt = (n: number) => n.toLocaleString('en-US');
+let sinceTotals = Infinity;
+stage.onTick((dt) => {
+  sinceTotals += dt;
+  if (sinceTotals < 0.5) return;
+  sinceTotals = 0;
+  const t = story.volume.ledger.totals('node');
+  totals.textContent = `Today on the grid · ${fmt(t.done)} done · ${fmt(t.inProgress)} in progress · ${fmt(t.queued)} queued`;
+});
 
 const settings = { autoRun: true, gateWorks: true, pauseBetweenRuns: 3 };
 let running = false;

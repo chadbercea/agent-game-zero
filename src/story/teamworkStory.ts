@@ -15,6 +15,9 @@ import { act2, converge, crossGateway, goHome, graphTraffic, securityGateway, vi
 import { type CrewMember, dismiss } from './fanOut';
 import { GATEWAY, HOME, REQUEST_SPOT, ROVO_HOME, SECURITY_HOME } from './layout';
 import { leaveBase } from './leaveBase';
+import { DEMO_1 } from './ledger';
+import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
+import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, subId, TOOLS, Volume, type Worker } from './volume';
 import { dropTicket, handOff, liftTicket } from './request';
 import { assignRoles, type Role } from './roles';
 import { TEAMWORK_LINKS } from './systemLayout';
@@ -116,6 +119,8 @@ export class TeamworkStory {
   private rovo: SpawnedDrone | null = null;
   private cast: Cast[] = [];
   private runs = 0;
+  /** Volume of work across the grid: what hover cards report. */
+  readonly volume: Volume;
 
   constructor(
     private readonly stage: SceneHost,
@@ -123,6 +128,7 @@ export class TeamworkStory {
     private readonly onStep: (step: StoryStep) => void = () => {},
   ) {
     this.graph = teamworkGraph(stage, scene);
+    this.volume = new Volume(stage, scene, () => this.workers(), hashSeed('volume'));
     this.deliverable.position.copy(scene.act1.gate.position).add(DELIVERABLE_OFFSET);
     this.deliverable.visible = false;
     this.ticket.position.copy(REQUEST_SPOT);
@@ -203,6 +209,7 @@ export class TeamworkStory {
     for (const c of this.cast) c.stopLoop();
     await wait(stage, 0.6);
     await converge(stage, scene, this.graph, allCrew, this.deliverable);
+    this.volume.ledger.finish(DEMO_1.key);
     onStep('shipped');
     await wait(stage, SHIPPED_HOLD);
 
@@ -266,9 +273,54 @@ export class TeamworkStory {
     this.rovo = null;
     scene.act2.signal = null;
     this.requested = false;
+    this.volume.followRequest();
     leaving.push(liftTicket(stage, this.ticket));
     await Promise.all(leaving);
     scene.drone.status = 'waiting';
+  }
+
+  /** Everyone on the grid who can be working right now: both agents and every sub-agent still out. */
+  workers(): Worker[] {
+    const { scene } = this;
+    const out: Worker[] = [{ id: D3V1N_ID, drone: scene.drone }];
+    if (this.rovo) out.push({ id: ROVO_ID, drone: this.rovo.drone });
+    const member = (m: CrewMember, parentId: string, at = m.node): Worker => ({
+      id: subId(m.node.kind),
+      drone: m.sub.drone,
+      parentId,
+      nodeId: nodeId(at.kind),
+    });
+    if (this.cast.length) {
+      for (const c of this.cast) {
+        if (c.gone) continue;
+        out.push(member(c.member, c.parent === scene.drone ? D3V1N_ID : ROVO_ID, c.visiting ?? c.member.node));
+      }
+    } else {
+      for (const m of this.act1Crew?.crew ?? []) out.push(member(m, D3V1N_ID));
+      for (const m of this.act2Crew?.crew ?? []) out.push(member(m, ROVO_ID));
+    }
+    return out;
+  }
+
+  /** What you can hover on the grid and the card each shows: gates, nodes, agents, sub-agents. */
+  hoverTargets(): HoverTarget[] {
+    const { scene } = this;
+    const ledger = this.volume.ledger;
+    const workers = this.workers().filter((w) => ledger.has(w.id));
+    const name = (id: string) => ledger.entity(id).name;
+    const crewOf = (w: Worker): string[] =>
+      w.parentId
+        ? [name(w.parentId), ...(w.nodeId ? [name(w.nodeId)] : [])]
+        : workers.filter((o) => o.parentId === w.id).map((o) => name(o.id));
+    return [
+      { object: scene.act1.gate, card: () => gateCard(ledger, TOOLS) },
+      { object: scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN) },
+      ...[...scene.act1.map.nodes, ...scene.act2.map.nodes].map((node) => ({
+        object: node,
+        card: () => nodeCard(ledger, nodeId(node.kind), node.kind),
+      })),
+      ...workers.map((w) => ({ object: w.drone, card: () => agentCard(ledger, w.id, crewOf(w)) })),
+    ];
   }
 
   /** This run's roles: each sub-agent stays, despawns or travels (to a node it's linked to in the other system). */
