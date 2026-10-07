@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { Charge } from '../primitives/charge/Charge';
 import { Cloud } from '../primitives/cloud/Cloud';
 import type { Drone } from '../primitives/drone/Drone';
@@ -5,7 +6,8 @@ import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { Hand } from '../primitives/hand/Hand';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
-import type { SceneHost } from '../stage/Stage';
+import type { SceneHost, Stage } from '../stage/Stage';
+import { fullSystem } from './fullSystem';
 import { HumanLoop } from './humanLoop';
 import { juicedCrew } from './juicedCrew';
 import { opening } from './opening';
@@ -16,7 +18,7 @@ import { tween, wait } from './timeline';
 import { withinReach } from './withinReach';
 
 /** The reworked story's beats, in order. */
-export const REWORK_BEATS = ['opening', 'within-reach', 'phones-rovo', 'juiced-crew', 'ship-output'] as const;
+export const REWORK_BEATS = ['opening', 'within-reach', 'phones-rovo', 'juiced-crew', 'ship-output', 'full-system'] as const;
 export type ReworkBeat = (typeof REWORK_BEATS)[number];
 
 /**
@@ -105,6 +107,37 @@ export class ReworkStory {
       output.stop();
       this.output = null;
     });
+    if (upTo < 5) return;
+    await wait(stage, 2.5);
+    const camera = this.pullBack();
+    this.cleanups.push(camera.restore);
+    this.cleanups.push(
+      await fullSystem(stage, { drone, rovo, scene, onCommit: () => this.output?.commit(), pullBack: camera.to }, 5),
+    );
+  }
+
+  /**
+   * The camera pulling back to the whole grid for the last beat, if the stage
+   * has a camera to move (a real Stage; not in tests): zoom out a little and
+   * re-center on the whole grid. `restore` puts it back.
+   */
+  private pullBack(): { to?: (t: number) => void; restore: () => void } {
+    const s = this.stage as Partial<Stage>;
+    if (!s.camera || !s.controls || !s.centerOn) return { restore: () => {} };
+    const camera = s.camera;
+    const zoom = camera.zoom;
+    const center = s.controls.target.clone();
+    const whole = REWORK.outputCenter.clone().setY(center.y);
+    const at = new Vector3();
+    const set = (z: number, c: Vector3) => {
+      camera.zoom = z;
+      camera.updateProjectionMatrix();
+      s.centerOn!(c);
+    };
+    return {
+      to: (t) => set(zoom * (1 - 0.16 * t), at.lerpVectors(center, whole, t)),
+      restore: () => set(zoom, center),
+    };
   }
 
   /** Fade everything out and put the stage back as it was before the opening. */
