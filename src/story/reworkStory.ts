@@ -3,7 +3,6 @@ import { Charge } from '../primitives/charge/Charge';
 import { Cloud } from '../primitives/cloud/Cloud';
 import type { Drone } from '../primitives/drone/Drone';
 import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
-import { Hand } from '../primitives/hand/Hand';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost, Stage } from '../stage/Stage';
@@ -29,7 +28,6 @@ export type ReworkBeat = (typeof REWORK_BEATS)[number];
 export class ReworkStory {
   readonly scene: ReworkScene;
   readonly cloud = new Cloud();
-  readonly hand = new Hand();
   readonly ticket = new Ticket();
   readonly drone: Drone;
   readonly rovo: Drone;
@@ -44,8 +42,6 @@ export class ReworkStory {
   constructor(private readonly stage: SceneHost) {
     this.scene = reworkScene(stage);
     this.humans = new HumanLoop(stage, this.scene.nodes, 7);
-    this.hand.scale.setScalar(1.4);
-    this.cloud.hand.add(this.hand);
     this.ticket.scale.setScalar(0.7);
     this.drone = spawnDrone(stage, REWORK.d3v1nFrom.x, REWORK.d3v1nFrom.z, {
       name: 'D3V1N',

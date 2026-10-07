@@ -25,8 +25,6 @@ const GLOW_DECAY = 0.9;
 
 const CARD_W = 1.1;
 const CARD_H = 0.74;
-/** The card's height, for whoever holds it by its top edge (a Hand). */
-export const TICKET_CARD_H = CARD_H;
 const CARD_D = 0.05;
 
 let shared:

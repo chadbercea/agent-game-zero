@@ -36,14 +36,11 @@ let geometry: IcosahedronGeometry | undefined;
  * style. Where requests come from (the human in the loop).
  *
  * Rig hooks: `materialized` (0–1) pops the puffs in one after another with
- * a little overshoot, and back out when it falls; `hand` is the point under
- * the cloud's middle where a hand comes out (see Hand); `update(dt)` bobs it
- * and makes the puffs breathe.
+ * a little overshoot, and back out when it falls; `update(dt)` bobs it and
+ * makes the puffs breathe.
  */
 export class Cloud extends Group {
   readonly material: MeshStandardMaterial;
-  /** Where a hand reaches out from: under the middle of the cloud. */
-  readonly hand = new Group();
   private readonly body = new Group();
   private readonly puffs: Mesh[] = [];
   private _materialized = 1;
@@ -66,8 +63,6 @@ export class Cloud extends Group {
       this.puffs.push(puff);
       this.body.add(puff);
     }
-    this.hand.position.set(0, -0.2, 0.05);
-    this.body.add(this.hand);
     this.add(this.body);
     this.materialized = 1;
   }

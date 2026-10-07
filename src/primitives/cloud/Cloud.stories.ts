@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../../stage/specimen';
-import { wait, tween } from '../../story/timeline';
+import { cloudDrop } from '../../story/cloudDrop';
+import { tween, wait } from '../../story/timeline';
+import { SystemNode } from '../node/SystemNode';
+import { Ticket } from '../ticket/Ticket';
 import { Cloud } from './Cloud';
 
 const meta: Meta = {
@@ -33,6 +36,30 @@ export const Materialize: StoryObj = {
         await wait(stage, 1.5);
         await tween(stage, 0.8, (t) => (cloud.materialized = 1 - t));
         await wait(stage, 0.8);
+      }
+    })();
+    return root;
+  },
+};
+
+/** A cloud drifts across, drops a ticket onto Jira as it passes over, and drifts on; the ticket is taken in. Loops. */
+export const DriftAndDrop: StoryObj = {
+  render: () => {
+    const { root, stage } = specimenStage({ viewSize: 7, focusY: 1.2 });
+    const jira = new SystemNode({ kind: 'jira' });
+    stage.add(jira);
+    const cloud = new Cloud();
+    const ticket = new Ticket(undefined, { label: false });
+    ticket.scale.setScalar(0.38);
+    stage.add(cloud, ticket);
+    stage.onTick((dt) => {
+      cloud.update(dt);
+      ticket.update(dt);
+    });
+    void (async () => {
+      for (;;) {
+        await cloudDrop(stage, cloud, ticket, jira.position, { height: 3, tilt: 0.15 });
+        await wait(stage, 1);
       }
     })();
     return root;
