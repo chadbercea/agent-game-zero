@@ -23,7 +23,7 @@ The grand total sits in the top-left corner.
 
 ### Story Rework (in progress)
 
-The story is being rebuilt beat by beat (Linear milestone "Story Rework"). New beats live in Storybook under **Story Rework** until they replace the sandbox's story. Beat 1, the opening: a low-poly cloud materializes, a hand reaches down out of it and hands over a Jira ticket (DEMO-1), waves, and pulls back up; the cloud pops away, and D3V1N floats in to the ticket.
+The story is being rebuilt beat by beat (Linear milestone "Story Rework"). New beats live in Storybook under **Story Rework** until they replace the sandbox's story. Beat 1, the opening: a low-poly cloud materializes, a hand reaches down out of it and hands over a Jira ticket (DEMO-1), waves, and pulls back up; the cloud pops away, and D3V1N floats in to the ticket. Beat 2, within reach: D3V1N's access lines draw out to the only two tools it can reach on its own, Jira and GitHub (the rest show as faint ghosts). The ticket goes into Jira and D3V1N reads it there, then rides its lines to GitHub and starts a branch.
 
 ## Running
 
