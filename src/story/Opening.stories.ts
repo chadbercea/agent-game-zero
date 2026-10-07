@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
-import { REWORK } from './rework';
+import { HumanLoop } from './humanLoop';
+import { REWORK, reworkScene } from './rework';
 import { type ReworkBeat, ReworkStory } from './reworkStory';
 import { wait } from './timeline';
 
@@ -83,4 +84,24 @@ export const JuicedCrew: StoryObj = {
 export const ShipOutput: StoryObj = {
   name: '05 Ship Output',
   render: () => loop('ship-output', 16, { viewSize: 15.5, focusY: 0.6, center: 'output' }),
+};
+
+/**
+ * The human in the loop on its own, with every tool online: clouds keep
+ * coming, each handing an issue into Jira, Confluence or Notion, at seeded
+ * random times, sides and heights. No pattern to spot.
+ */
+export const HumanLoopAmbient: StoryObj = {
+  name: 'Ambient: Human Loop',
+  render: () => {
+    const { root, stage } = specimenStage({ viewSize: 13, focusY: 0.8 });
+    stage.centerOn(REWORK.center.clone().setY(0.8));
+    const scene = reworkScene(stage);
+    for (const node of Object.values(scene.nodes)) {
+      node.visible = true;
+      node.dim = 0;
+    }
+    new HumanLoop(stage, scene.nodes, 11).start();
+    return root;
+  },
 };
