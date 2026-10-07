@@ -6,6 +6,7 @@ import { Hand } from '../primitives/hand/Hand';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
+import { HumanLoop } from './humanLoop';
 import { juicedCrew } from './juicedCrew';
 import { opening } from './opening';
 import { phoneRovo } from './phoneRovo';
@@ -33,11 +34,14 @@ export class ReworkStory {
   /** D3V1N's charge: off until Rovo powers it up through the gateway. */
   readonly charge = new Charge(GRAPH_COLOR);
   private cleanups: (() => void)[] = [];
+  /** The human in the loop: clouds handing issues in, from beat 2 on. */
+  readonly humans: HumanLoop;
   /** The output line, once beat 5 has built it: commits landing in GitHub feed it. */
   private output: OutputLine | null = null;
 
   constructor(private readonly stage: SceneHost) {
     this.scene = reworkScene(stage);
+    this.humans = new HumanLoop(stage, this.scene.nodes, 7);
     this.hand.scale.setScalar(1.4);
     this.cloud.hand.add(this.hand);
     this.ticket.scale.setScalar(0.7);
@@ -73,6 +77,9 @@ export class ReworkStory {
       droneTo: REWORK.d3v1n,
     });
     if (upTo < 1) return;
+    // From here on, people keep handing work in through the clouds.
+    this.humans.start();
+    this.cleanups.push(() => this.humans.stop());
     await wait(stage, 0.8);
     const stopSolo = await withinReach(stage, { drone, ticket, scene });
     let soloStopped = false;
