@@ -20,9 +20,8 @@ describe('Cloud', () => {
     expect(visible[5] || visible[6]).toBe(false); // the ends
   });
 
-  it('has a point under its middle for a hand, and bobs without drifting away', () => {
+  it('bobs without drifting away', () => {
     const cloud = new Cloud();
-    expect(cloud.hand.position.y).toBeLessThan(0);
     for (let i = 0; i < 200; i++) cloud.update(0.05);
     expect(Math.abs(cloud.children[0].position.y)).toBeLessThanOrEqual(0.06 + 1e-9);
   });

@@ -29,9 +29,9 @@ function loop(through: ReworkBeat, hold: number, view: { viewSize: number; focus
 }
 
 /**
- * Beat 1, on loop: a cloud materializes over the grid, a hand reaches down
- * and hands over a Jira ticket (DEMO-1), waves, and pulls back up; the cloud
- * pops away; D3V1N floats in to the ticket and notices it. No captions.
+ * Beat 1, on loop: a cloud drifts across the sky and, passing over D3V1N's
+ * spot, drops a Jira ticket (DEMO-1); the cloud drifts on and away, and
+ * D3V1N floats in to the ticket and notices it. No captions.
  */
 export const Opening: StoryObj = {
   name: '01 Opening',
@@ -88,8 +88,8 @@ export const ShipOutput: StoryObj = {
 
 /**
  * The human in the loop on its own, with every tool online: clouds keep
- * coming, each handing an issue into Jira, Confluence or Notion, at seeded
- * random times, sides and heights. No pattern to spot.
+ * drifting by, each dropping an issue into Jira, Confluence or Notion, at
+ * seeded random times, paths and heights. No pattern to spot.
  */
 export const HumanLoopAmbient: StoryObj = {
   name: 'Ambient: Human Loop',
