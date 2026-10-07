@@ -19,13 +19,23 @@ export interface Entity {
   system: string;
 }
 
+/** What review said about an item. */
+export type Verdict = 'confirmed' | 'denied';
+
+/** An item with its review verdict, if it's had one. */
+export interface ReviewedItem extends WorkItem {
+  verdict?: Verdict;
+}
+
 /** An entity's work today: finished, under way (with what it is), and waiting. */
 export interface Tally {
   done: number;
   inProgress: number;
   queued: number;
-  /** What's under way, oldest first. Its length is `inProgress`. */
-  items: readonly WorkItem[];
+  /** What's under way, oldest first, with any verdict so far. Its length is `inProgress`. */
+  items: readonly ReviewedItem[];
+  /** What it finished most recently, newest first, with any verdict. */
+  recent: readonly ReviewedItem[];
 }
 
 export interface Totals {
@@ -76,7 +86,11 @@ interface Book {
   done: number;
   queued: number;
   items: WorkItem[];
+  recent: WorkItem[];
 }
+
+/** How many finished items each entity remembers. */
+const RECENT = 3;
 
 /**
  * The work ledger: simulated volume of work for today, across every node,
@@ -90,6 +104,7 @@ interface Book {
  */
 export class WorkLedger {
   private readonly books = new Map<string, Book>();
+  private readonly verdicts = new Map<string, Verdict>();
   private readonly random: () => number;
   private nextKey: number;
 
@@ -107,6 +122,7 @@ export class WorkLedger {
       done: this.between(start.done),
       queued: this.between(start.queued),
       items,
+      recent: [],
     });
   }
 
@@ -123,8 +139,26 @@ export class WorkLedger {
   }
 
   tally(id: string): Tally {
-    const { done, queued, items } = this.book(id);
-    return { done, inProgress: items.length, queued, items: [...items] };
+    const { done, queued, items, recent } = this.book(id);
+    const withVerdict = (item: WorkItem): ReviewedItem => {
+      const verdict = this.verdicts.get(item.key);
+      return verdict ? { ...item, verdict } : { ...item };
+    };
+    return { done, inProgress: items.length, queued, items: items.map(withVerdict), recent: recent.map(withVerdict) };
+  }
+
+  /** Record what review said about an item; it shows wherever the item is listed. */
+  setVerdict(key: string, verdict: Verdict): void {
+    this.verdicts.set(key, verdict);
+  }
+
+  verdictOf(key: string): Verdict | undefined {
+    return this.verdicts.get(key);
+  }
+
+  /** Forget an item's verdict (when it goes back to work for another run). */
+  clearVerdict(key: string): void {
+    this.verdicts.delete(key);
   }
 
   /** Put DEMO-1 (or any item) to work at these entities, at the front of what they're doing. */
@@ -140,15 +174,22 @@ export class WorkLedger {
    * other than the followed request is done, and the next one starts from the
    * queue (or a new request arrives if the queue is empty).
    */
-  complete(ids: readonly string[]): void {
+  complete(ids: readonly string[]): WorkItem | undefined {
+    let finished: WorkItem | undefined;
     for (const id of ids) {
       const book = this.book(id);
       const i = book.items.findIndex((item) => item.key !== DEMO_1.key);
-      if (i >= 0) book.items.splice(i, 1);
+      if (i >= 0) {
+        // The first entity's finished item is the one the others count too: one piece of work, credited to each.
+        finished ??= book.items[i];
+        book.items.splice(i, 1);
+      }
+      if (finished) remember(book, finished);
       book.done++;
       if (book.queued > 0) book.queued--;
       book.items.push(this.newItem());
     }
+    return finished;
   }
 
   /** New requests land in these entities' queues. */
@@ -161,7 +202,8 @@ export class WorkLedger {
     for (const book of this.books.values()) {
       const i = book.items.findIndex((item) => item.key === key);
       if (i < 0) continue;
-      book.items.splice(i, 1);
+      const [item] = book.items.splice(i, 1);
+      remember(book, item);
       book.done++;
     }
   }
@@ -205,4 +247,9 @@ export class WorkLedger {
     const title = TITLES[Math.floor(this.random() * TITLES.length)];
     return { key: `DEMO-${this.nextKey++}`, title };
   }
+}
+
+/** Put a finished item at the front of an entity's recent list (once). */
+function remember(book: Book, item: WorkItem): void {
+  book.recent = [item, ...book.recent.filter((r) => r.key !== item.key)].slice(0, RECENT);
 }
