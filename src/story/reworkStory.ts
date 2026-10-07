@@ -9,12 +9,13 @@ import type { SceneHost } from '../stage/Stage';
 import { juicedCrew } from './juicedCrew';
 import { opening } from './opening';
 import { phoneRovo } from './phoneRovo';
+import { type OutputLine, shipOutput } from './shipOutput';
 import { REWORK, type ReworkScene, reworkScene } from './rework';
 import { tween, wait } from './timeline';
 import { withinReach } from './withinReach';
 
 /** The reworked story's beats, in order. */
-export const REWORK_BEATS = ['opening', 'within-reach', 'phones-rovo', 'juiced-crew'] as const;
+export const REWORK_BEATS = ['opening', 'within-reach', 'phones-rovo', 'juiced-crew', 'ship-output'] as const;
 export type ReworkBeat = (typeof REWORK_BEATS)[number];
 
 /**
@@ -32,6 +33,8 @@ export class ReworkStory {
   /** D3V1N's charge: off until Rovo powers it up through the gateway. */
   readonly charge = new Charge(GRAPH_COLOR);
   private cleanups: (() => void)[] = [];
+  /** The output line, once beat 5 has built it: commits landing in GitHub feed it. */
+  private output: OutputLine | null = null;
 
   constructor(private readonly stage: SceneHost) {
     this.scene = reworkScene(stage);
@@ -84,7 +87,17 @@ export class ReworkStory {
     this.cleanups.push(await phoneRovo(stage, { drone, rovo, charge, scene }));
     if (upTo < 3) return;
     await wait(stage, 1.2);
-    this.cleanups.push(await juicedCrew(stage, { drone, scene, stopSolo: stopSoloOnce }));
+    this.cleanups.push(
+      await juicedCrew(stage, { drone, scene, stopSolo: stopSoloOnce, onCommit: () => this.output?.commit() }),
+    );
+    if (upTo < 4) return;
+    await wait(stage, 2);
+    this.output = await shipOutput(stage);
+    const output = this.output;
+    this.cleanups.push(() => {
+      output.stop();
+      this.output = null;
+    });
   }
 
   /** Fade everything out and put the stage back as it was before the opening. */

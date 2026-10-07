@@ -44,8 +44,22 @@ export const REWORK = {
    * through it.
    */
   gateway: { along: 'x', from: 0, to: 2, low: 2, high: 2 } satisfies SharedRun,
+  /**
+   * The output line (beat 5): from GitHub down to an assembler where little
+   * blocks build bigger ones, then a conveyor belt along the front of the
+   * grid into a portal. Open floor, clear of the tools and the crew.
+   */
+  output: {
+    assembler: new Vector3(-1, 0, 5.5),
+    /** The belt runs along +x from here for `beltLength`. */
+    beltFrom: new Vector3(-0.2, 0, 5.5),
+    beltLength: 5,
+    portal: new Vector3(5.4, 0, 5.5),
+  },
   /** The middle of it all, for framing. */
   center: new Vector3(0.75, 0, -1.5),
+  /** The middle once the output line is in, for framing the whole grid. */
+  outputCenter: new Vector3(1.25, 0, 0.5),
 } as const;
 
 /**
@@ -166,4 +180,12 @@ export function linkRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePa
     path.add(link.from.kind === a ? link.route : reversed(link.route));
   }
   return path;
+}
+
+/** The output line from GitHub to the assembler, along the grid: down past D3V1N's side, then across. */
+export function outputRoute(): Curve<Vector3> {
+  const from = REWORK.nodes.github;
+  const to = REWORK.output.assembler;
+  const line = [from.clone(), new Vector3(from.x, 0, to.z), to.clone()];
+  return roundedPath(trimPolyline(line, NODE_FOOTPRINT / 2, 0.35), BEND_RADIUS);
 }

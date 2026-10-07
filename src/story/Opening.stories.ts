@@ -11,9 +11,10 @@ const meta: Meta = {
 export default meta;
 
 /** Play the reworked story through `beat`, hold, clear, and go again. */
-function loop(through: ReworkBeat, hold: number, view: { viewSize: number; focusY: number; center: 'ticket' | 'grid' }) {
+function loop(through: ReworkBeat, hold: number, view: { viewSize: number; focusY: number; center: 'ticket' | 'grid' | 'output' }) {
   const { root, stage } = specimenStage({ viewSize: view.viewSize, focusY: view.focusY });
-  stage.centerOn((view.center === 'ticket' ? REWORK.ticketSpot : REWORK.center).clone().setY(view.focusY));
+  const focus = { ticket: REWORK.ticketSpot, grid: REWORK.center, output: REWORK.outputCenter }[view.center];
+  stage.centerOn(focus.clone().setY(view.focusY));
   const story = new ReworkStory(stage);
   void (async () => {
     for (;;) {
@@ -72,3 +73,14 @@ export const JuicedCrew: StoryObj = {
   render: () => loop('juiced-crew', 10, { viewSize: 13, focusY: 0.8, center: 'grid' }),
 };
 
+/**
+ * Beats 1 to 5, on loop. The output: a line draws from GitHub to an
+ * assembler, and a conveyor belt and a portal appear. Every commit landing
+ * in GitHub sends a little block down the line; eight little blocks fuse
+ * into a bigger one, which rides the belt into the portal, to another realm.
+ * No captions.
+ */
+export const ShipOutput: StoryObj = {
+  name: '05 Ship Output',
+  render: () => loop('ship-output', 16, { viewSize: 15.5, focusY: 0.6, center: 'output' }),
+};
