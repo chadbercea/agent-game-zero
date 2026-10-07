@@ -4,13 +4,14 @@ import { inRun } from '../core/sharedRuns';
 import { reversed } from '../primitives/branch/gridPath';
 import { PhoneCall, RING_SECONDS } from '../primitives/call/PhoneCall';
 import type { Charge } from '../primitives/charge/Charge';
-import type { Drone } from '../primitives/drone/Drone';
+import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { attachSignal } from '../stage/attachSignal';
+import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import { D3V1N_REACH, REWORK, type ReworkScene } from './rework';
-import { fly, tween, until, wait } from './timeline';
+import { fly, tween, wait } from './timeline';
 
 export type PhoneRovoStep = 'call' | 'rovo' | 'graph' | 'secure' | 'juiced';
 
@@ -24,6 +25,8 @@ const WAVE_REACH = 11;
 const WAVE_SECONDS = 1.8;
 /** Power packets that come through the gateway to D3V1N. */
 const POWER_PACKETS = 4;
+/** A sub-agent buds off its parent this small, and grows as it flies out. */
+const BUD_SCALE = 0.25;
 
 /**
  * Beat 3 of the reworked story: D3V1N phones Rovo through Jira.
@@ -33,8 +36,9 @@ const POWER_PACKETS = 4;
  * flies in from that way and settles over Jira. Rovo fires up the rest of
  * the Teamwork Graph: a blue wave spreads from Jira, each ghost tool comes
  * online as it's reached, and the graph's links draw in. Then Rovo secures
- * D3V1N's way in: it builds the glass gateway over D3V1N's line to Jira and
- * drops the lock. Power flows through the gateway to D3V1N, which charges up
+ * D3V1N's way in: it stays on Jira and sends a sub-agent, which builds the
+ * glass gateway over D3V1N's line to Jira, drops the lock, and comes back to
+ * dissolve into Rovo. Power flows through the gateway to D3V1N, which charges up
  * (it's juiced). No denial; D3V1N never stops working. Reads without captions.
  *
  * Expects Rovo on stage, hidden, and D3V1N's charge attached and off.
@@ -96,17 +100,32 @@ export async function phoneRovo(
 
   // Rovo secures D3V1N's way into the graph: the gateway over its line to Jira, and the lock.
   onStep('secure');
-  rovoSignal.mute(true);
-  await until(stage, rovoSignal.quiet);
-  rovoSignal.detach();
-  await fly(stage, DroneFlight.to(rovo, gateway.center, { speed: 4.5 }));
-  rovo.rig.hover.getWorldPosition(gateway.dropFrom);
+  // Rovo stays on Jira and sends one of its sub-agents to do it.
+  const keeper = spawnDrone(stage, rovo.position.x, rovo.position.z, {
+    name: 'Rovo.1',
+    lineage: rovo.lineage,
+    subAgent: true,
+    status: 'working',
+  });
+  rovo.flash = 1;
+  await Promise.all([
+    fly(stage, DroneFlight.to(keeper.drone, gateway.center, { speed: 4 })),
+    tween(stage, 0.8, (t) => keeper.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD_SCALE + (1 - BUD_SCALE) * t))),
+  ]);
+  keeper.drone.rig.hover.getWorldPosition(gateway.dropFrom);
   await tween(stage, 0.9, (t) => (gateway.built = t * t * (3 - 2 * t)));
   await tween(stage, 0.7, (t) => (gateway.lockDrop = t));
   gateway.grant();
+  keeper.drone.flash = 1;
+  // Job done, it heads back to Rovo, docks, and dissolves into it.
+  await fly(stage, DroneFlight.to(keeper.drone, jira.position, { speed: 4 }));
+  await tween(stage, 0.45, (t) => {
+    keeper.drone.scale.setScalar(SUB_AGENT_SCALE * (1 - t * 0.7));
+    keeper.drone.fade = 1 - t;
+  });
+  keeper.despawn();
   rovo.flash = 1;
-  await fly(stage, DroneFlight.to(rovo, jira.position, { speed: 4.5 }));
-  const rovoAtJira = attachSignal(stage, rovo, jira);
+
   // D3V1N's line is connected through it: data starts to flow inside.
   await tween(stage, 0.8, (t) => (gateway.conduit.streams = t));
 
@@ -127,7 +146,7 @@ export async function phoneRovo(
   charge.burst();
   gateway.grant();
   await tween(stage, 0.5, (t) => drone.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.2 + t * 0.12));
-  return () => rovoAtJira.detach();
+  return () => rovoSignal.detach();
 }
 
 /**
