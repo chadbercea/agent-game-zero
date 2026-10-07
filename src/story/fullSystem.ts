@@ -10,9 +10,8 @@ import { attachSignal } from '../stage/attachSignal';
 import { FACE_CAMERA, type SpawnedDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { type Boost, shoot } from './beam';
-import { budOut, graphPathKinds } from './crew';
+import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
-import { linkRoute } from './rework';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 
@@ -216,6 +215,8 @@ async function help(
   const way = rovoRouteTo(at);
   const route: Curve<Vector3> = way.getLength() > 0.05 ? way : new LineCurve3(node.position.clone(), spot.clone());
   const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch);
+  // Stopped while it was on its way out: it never gets to work.
+  if (!running()) return sub.despawn();
   out.add(sub);
   const signal = attachSignal(stage, sub.drone, node);
   for (let t = 0; t < seconds && running(); t += 0.25) await wait(stage, 0.25);

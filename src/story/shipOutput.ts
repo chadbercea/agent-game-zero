@@ -6,7 +6,6 @@ import { BELT_TOP, Conveyor } from '../primitives/conveyor/Conveyor';
 import { PORTAL_CENTER_Y, Portal } from '../primitives/portal/Portal';
 import { Packet } from '../primitives/packet/Packet';
 import type { SceneHost } from '../stage/Stage';
-import { outputRoute, REWORK } from './rework';
 import { tween, wait } from './timeline';
 
 export type ShipOutputStep = 'line' | 'shipping';
@@ -52,7 +51,7 @@ export interface OutputLine {
  */
 export async function shipOutput(
   stage: SceneHost,
-  output: OutputPlace = { route: outputRoute(), ...REWORK.output },
+  output: OutputPlace,
   onStep: (step: ShipOutputStep) => void = () => {},
 ): Promise<OutputLine> {
   const { route } = output;

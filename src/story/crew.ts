@@ -1,10 +1,10 @@
 import { type Curve, CurvePath, LineCurve3, type Vector3 } from 'three';
+import { reversed } from '../primitives/branch/gridPath';
 import { DroneFlight } from '../animation/DroneFlight';
 import { type Drone, HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import type { SystemKind } from '../primitives/node/emblems';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
-import { D3V1N_REACH, linkRoute, type ReworkScene } from './rework';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween } from './timeline';
 
@@ -67,17 +67,14 @@ export function graphPathKinds(graph: TeamworkGraph, from: SystemKind, to: Syste
   return path;
 }
 
-/**
- * D3V1N's way from its spot to any tool once Rovo has connected it: straight
- * along its own line to a tool it can reach, otherwise along its line to Jira
- * (through the secure gateway) and on along the graph.
- */
-export function viaGateway(scene: ReworkScene, to: SystemKind): Curve<Vector3> {
-  const direct = scene.reach[to];
-  if (direct && D3V1N_REACH.includes(to)) return direct.route;
+/** The graph's route through these tools in order, each link turned to run the right way. */
+export function linkRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePath<Vector3> {
   const path = new CurvePath<Vector3>();
-  path.add(scene.reach.jira!.route);
-  const hops = graphPathKinds(scene.graph, 'jira', to);
-  if (hops && hops.length > 1) path.add(linkRoute(scene.graph, ...hops));
+  for (let i = 1; i < kinds.length; i++) {
+    const [a, b] = [kinds[i - 1], kinds[i]];
+    const link = graph.links.find((l) => (l.from.kind === a && l.to.kind === b) || (l.from.kind === b && l.to.kind === a));
+    if (!link) throw new Error(`linkRoute: no graph link between ${a} and ${b}`);
+    path.add(link.from.kind === a ? link.route : reversed(link.route));
+  }
   return path;
 }

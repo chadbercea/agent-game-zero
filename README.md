@@ -5,41 +5,30 @@ Code Name: Zero. A Three.js game about agents, made to teach humans how agents w
 
 ## The story
 
-The sandbox plays one story in two acts on a single isometric grid. It follows one request, *DEMO-1 · Add dark mode*, through a system that's busy with hundreds of others. Small tickets trickle into every open system the whole time, each riding its gate line out to a node, and DEMO-1 is just one of them: it drops in front of D3V1N to start Act 1, and the same request lands in front of Rovo to start Act 2.
+The sandbox plays the reworked story on one isometric grid with two systems: D3V1N's gate and its own third-party tools (Figma, GitHub, Notion), and the Atlassian gate with Rovo's Teamwork Graph (Jira, Confluence, Bitbucket, Code search). Each system is laid out by the grid building guide. It reads without captions.
 
-- **Act 1 — isolated work.** D3V1N, the parent agent, takes the request and checks access at a gate (yellow while checking, green on success, red on denial). Once it's in, D3V1N maps the system's tool nodes (Figma, GitHub, Notion) and spawns three sub-agents. Each one works its own job, cut off from the others.
-- **Before Rovo arrives — denied.** DEMO-1 goes to review with only what Act 1's isolated agents could make: design, branch and PRD, with empty slots where the spec and the issue link should be. Review denies it for missing context, while Act 1's own single-system work keeps passing.
-- **Act 2 — the Teamwork Graph.** Rovo picks up the same request to work on the Atlassian side, gets through its own gate, and spawns its own crew. A security bot then builds a secure gateway between the two systems. The Teamwork Graph draws in, linking every system on the grid. Every cross-system link goes through the gateway: agents ride their links through it and hover over the node they're visiting. Every request the agents finish passes a small review gate beside D3V1N's gate (yellow, then green; ordinary single-system work always passes). DEMO-1 comes back through it with every part filled in, is confirmed as one change among everything done on the grid that day, and everyone heads home carrying their work.
+1. **Opening:** a low-poly cloud drifts over and drops a Jira ticket, *DEMO-1 · Add dark mode*, in front of D3V1N's home. D3V1N floats in from off the grid.
+2. **Own system:** D3V1N takes the ticket and checks access at its gate (yellow while checking, then green; red if the gate is off). Its system maps out: the faint grid draws in, the traces run out, the tools rise, and the lines fade off. One sub-agent rides its trace to GitHub and starts a branch.
+3. **The bridge:** Rovo arrives on its own, gets access at the Atlassian gate, and its Teamwork Graph maps out. A Rovo sub-agent builds the secure bridge between the two systems, a glass tunnel with a lock, and dissolves back into Rovo. The graph's lines draw in to the tunnel's ends and data streams through it: the super tunnel. Power comes through to D3V1N and it charges up.
+4. **Juiced crew:** D3V1N's first sub-agent keeps building at GitHub at twice the pace. Two more ride the graph through the tunnel to Bitbucket, and the gateway flashes green as each one passes. Their commits keep landing in GitHub.
+5. **Output:** an output line draws from GitHub to an assembler behind D3V1N's system. Every commit sends a little block down it, and eight fuse into a bigger block, which rides a conveyor belt through a portal.
+6. **Full system:** D3V1N's crew spreads across both systems (its own tools along its traces, Rovo's through the tunnel), Rovo's helpers come and go on its tools, and the camera pulls back. Crew size, placement and timing come from a seeded generator.
 
-A caption at the bottom of the screen names each step as it plays.
+From beat 2 on, the human in the loop: clouds drift by at seeded random times, each dropping an issue into Jira, Confluence or Notion, whichever are online.
 
-A work ledger simulates today's volume across the grid: every node keeps busy with everyone else's work, and whoever is working in the scene finishes pieces at their own pace. Every request the ledger takes in at a node is a ticket you can see trickling in. **Hover anything** for its volume of work:
-- a node, agent or sub-agent shows its own counts (done, in progress, queued), what's under way (DEMO-1 among the rest), its share of the whole, and who it works with
-- a gate shows its whole system, node by node; the review gate shows what it reviewed today and its latest verdicts
-- items carry their review verdict (Confirmed / Denied) wherever they're listed
-- DEMO-1's line is underlined: point at it to light its trail back to its sources (green where the links exist, dark where Act 1 never had them, through the gateway once Act 2 connects them), and click to pin it
+A work ledger simulates today's volume across the grid: every tool keeps busy with everyone else's work, and whoever is working in the scene finishes pieces at their own pace. **Hover anything** for its volume of work:
+- a tool, agent or sub-agent shows its own counts (done, in progress, queued), what's under way (DEMO-1 among the rest), its share of the whole, and who it works with
+- a gate shows its whole system, tool by tool
 
 The grand total sits in the top-left corner.
 
-### Story Rework (in progress)
-
-The story is being rebuilt beat by beat (Linear milestone "Story Rework"). New beats live in Storybook under **Story Rework** until they replace the sandbox's story. Beat 1, the opening: a low-poly cloud drifts across the sky and drops a Jira ticket (DEMO-1) at D3V1N's spot, then drifts on; D3V1N floats in to the ticket. From then on, the human in the loop: clouds keep drifting by at seeded random times, each dropping an issue into Jira, Confluence or Notion (whichever are online). Beat 2, within reach: D3V1N's access lines draw out to the only two tools it can reach on its own, Jira and GitHub (the rest show as faint ghosts). The ticket goes into Jira and D3V1N reads it there, then rides its lines to GitHub and starts a branch. Beat 3, the call: while it keeps working, D3V1N phones Rovo through Jira (a handset rides its lines there, rings, and goes out). Rovo flies in, fires up the rest of the Teamwork Graph (every ghost tool comes online, the links draw in), and sends a sub-agent to build the secure gateway over D3V1N's line, and power flows through it: D3V1N is juiced. Beat 4, the juiced crew: D3V1N buds three sub-agents, one writing a branch at GitHub and two at Bitbucket (reached through the gateway), and their commits keep flowing into GitHub. Beat 5, the output: every commit landing in GitHub sends a little block down an output line; eight little blocks fuse into a bigger one at the assembler, which rides a conveyor belt into a portal to another realm. Beat 6, the full system: D3V1N's crew spreads across every tool in the graph (through the gateway), Rovo's sub-agents help here and there, blocks keep flowing into the portal, and the camera pulls back to show the whole grid at work. Crew size, placement and timing come from a seeded generator.
-
-**Story Rework v2** (Storybook group of that name, ILI-947) plays the same beats on the two-system scene, so D3V1N keeps its own system and Rovo keeps its own:
-1. **Opening:** a cloud drops DEMO-1 in front of D3V1N's home.
-2. **Own system:** D3V1N gets access at its gate, and its system (Figma, GitHub, Notion) maps out with the grid draw-in and fade. One sub-agent starts a branch in GitHub.
-3. **The bridge:** Rovo arrives on its own and gets access at the Atlassian gate, and its Teamwork Graph maps out. A Rovo sub-agent builds the secure bridge between the systems. The graph's lines connect to it, data streams through the super tunnel, and power comes through to D3V1N.
-4. **Juiced crew:** two more sub-agents go through the tunnel to Bitbucket. Commits flow back to GitHub.
-5. **Output:** blocks, belt and portal behind D3V1N's system.
-6. **Full system:** D3V1N's crew across both systems, Rovo's helpers, and the camera pull-back.
-
-From beat 2 on, clouds drop issues into whichever of Jira, Confluence and Notion are online. v1 stays until v2 replaces it.
+The earlier two-act story (Act 1 isolated, denied at review, Act 2 connected) still lives in Storybook under **Teamwork Story**.
 
 ## Running
 
 ```sh
 npm install
-npm run dev         # Sandbox: the two-act story (http://localhost:5173)
+npm run dev         # Sandbox: the story (http://localhost:5173)
 npm run storybook   # Specimens: every primitive and story step in isolation (http://localhost:6006)
 npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build into dist/
@@ -52,13 +41,13 @@ The panel in the top right:
 | Control | What it does |
 |---|---|
 | Run story | Plays the story from the start |
-| Retry access | After a denial, tries the same gate again; on green, the story carries on |
-| Gate works | Turn it off to watch a gate deny access |
+| Gate works | Turn it off to watch a gate deny access (the story stops there) |
 | Auto-run | Replays the story on a loop |
+| Full system runs for | Seconds the full system keeps running before an auto-run clears it |
 | Pause between runs | Seconds between auto-runs |
 | Reset | Sends everyone home and clears the stage |
 
-Hover over anything for its hover card. Hovering a gate or node also shows its system's lines, and clicking pins them. For debugging, `window.sandbox` exposes `stage`, `scene`, `story`, `run`, `retry`, `reset` and `settings`.
+Hover over anything for its hover card. Hovering a gate or node also shows its system's lines, and clicking pins them. For debugging, `window.sandbox` exposes `stage`, `scene`, `story`, `run`, `reset` and `settings`.
 
 ## Tests
 
@@ -85,8 +74,8 @@ Layering: **Primitive → Animation → Stage → Story.**
 | `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape), Cloud (where requests come from), PhoneCall, Charge (an agent powered up), Assembler, Conveyor, Portal (the output line) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
-| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `trail`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
-| `src/sandbox/` | Sandbox app: the stage, the caption, and the control panel |
+| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `trail`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), the reworked beats (`cloudDrop`, `opening`, `humanLoop`, `crew`, `shipOutput`, `fullSystem`), and the whole thing (`twoActs` builds the scene, `storyV2` plays it; `teamworkStory` is the earlier two-act version) |
+| `src/sandbox/` | Sandbox app: the stage, the totals, and the control panel |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 
 ## Deploys

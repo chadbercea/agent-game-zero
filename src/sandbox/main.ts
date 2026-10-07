@@ -3,35 +3,28 @@ import { Stage } from '../stage/Stage';
 import { hoverCards } from '../story/hoverCards';
 import { hoverLines } from '../story/hoverLines';
 import { STORY_CENTER } from '../story/layout';
-import { STORY_CAPTION, TeamworkStory } from '../story/teamworkStory';
+import { StoryV2 } from '../story/storyV2';
 import { wait } from '../story/timeline';
-import { twoActScene } from '../story/twoActs';
 
 /**
- * Sandbox: the whole two-act story on one grid. Act 1: three sub-agents,
- * three isolated jobs. Act 2: D3V1N takes the work to Atlassian, the Teamwork
- * Graph links every system, seven agents work as one connected system, and
- * everything converges into one shipped result. Hover a gate or a node to see
- * its system's lines; click to pin them.
+ * Sandbox: the reworked story, start to finish, on the two-system grid. A
+ * cloud drops DEMO-1, D3V1N maps its own system and starts a branch; Rovo
+ * arrives, maps its Teamwork Graph and builds the secure bridge; juiced,
+ * D3V1N's crew works across both systems and output ships through the
+ * portal. No captions. Hover a gate, a tool or an agent for its numbers;
+ * hover a gate or a tool to see its system's lines, click to pin them.
  */
 
-const stage = new Stage(document.getElementById('stage')!, { viewSize: 17 });
+const stage = new Stage(document.getElementById('stage')!, { viewSize: 15 });
 stage.centerOn(STORY_CENTER);
 
-const scene = twoActScene(stage);
+const story = new StoryV2(stage);
+const { scene } = story;
 hoverLines(stage, scene.act1.map);
 hoverLines(stage, scene.act2.map);
 
-// Caption: what the story is doing right now.
-const caption = document.getElementById('caption')!;
-const say = (text: string) => (caption.textContent = text);
-const story = new TeamworkStory(stage, scene, (step) => say(STORY_CAPTION[step]));
-
 // Volume of work: hover anything for its own numbers; the grand total sits quietly in the corner.
-hoverCards(stage, () => story.hoverTargets(), undefined, {
-  traceable: (key) => story.traceable(key),
-  trace: (key) => story.trace(key),
-});
+hoverCards(stage, () => story.hoverTargets());
 const totals = document.getElementById('totals')!;
 const fmt = (n: number) => n.toLocaleString('en-US');
 let sinceTotals = Infinity;
@@ -43,49 +36,33 @@ stage.onTick((dt) => {
   totals.textContent = `Today on the grid · ${fmt(t.done)} done · ${fmt(t.inProgress)} in progress · ${fmt(t.queued)} queued`;
 });
 
-const settings = { autoRun: true, gateWorks: true, pauseBetweenRuns: 3 };
+const settings = { autoRun: true, gateWorks: true, hold: 20, pauseBetweenRuns: 2 };
 let running = false;
-/** Stopped at a gate that said no; Retry tries that gate again. */
-let denied = false;
-let finished = false;
+let played = false;
 
 async function reset(): Promise<void> {
-  say('Heading home…');
   await story.reset();
-  denied = finished = false;
-  say('Ready.');
+  played = false;
 }
 
 async function run(): Promise<void> {
   if (running) return;
   running = true;
-  if (finished || denied) await reset();
+  if (played) await reset();
   scene.act1.gate.works = scene.act2.gate.works = settings.gateWorks;
-  const done = await story.play();
-  denied = !done;
-  finished = done;
+  played = true;
+  await story.play();
   running = false;
-  if (denied) say(`${STORY_CAPTION.denied} Turn “Gate works” back on and retry.`);
 }
 
-/** After a red, try that gate again from where D3V1N is; on green the story carries on. */
-async function retry(): Promise<void> {
-  if (running || !denied) return;
-  running = true;
-  scene.act1.gate.works = scene.act2.gate.works = settings.gateWorks;
-  const done = await story.play();
-  denied = !done;
-  finished = done;
-  running = false;
-  if (denied) say(`${STORY_CAPTION.denied} Turn “Gate works” back on and retry.`);
-}
-
-// Auto-run: replay the story on a loop, with a pause between runs.
+// Auto-run: play the whole story, let the full system run a while, clear, and go again.
 void (async () => {
   await wait(stage, 1);
   for (;;) {
-    if (settings.autoRun && !running && !denied) {
+    if (settings.autoRun && !running) {
       await run();
+      await wait(stage, settings.hold);
+      if (settings.autoRun) await reset();
       await wait(stage, settings.pauseBetweenRuns);
     } else {
       await wait(stage, 0.5);
@@ -96,11 +73,10 @@ void (async () => {
 // Panel.
 const gui = new GUI({ title: 'Sandbox' });
 gui.add({ run: () => void run() }, 'run').name('Run story');
-gui.add({ retry: () => void retry() }, 'retry').name('Retry access');
 gui.add(settings, 'gateWorks').name('Gate works');
 gui.add(settings, 'autoRun').name('Auto-run');
+gui.add(settings, 'hold', 5, 60, 1).name('Full system runs for (s)');
 gui.add(settings, 'pauseBetweenRuns', 1, 12, 0.5).name('Pause between runs (s)');
 gui.add({ reset: () => void (!running && reset()) }, 'reset').name('Reset');
 
-say('Ready.');
-Object.assign(window, { sandbox: { stage, scene, story, run, retry, reset, settings }, __stage: stage });
+Object.assign(window, { sandbox: { stage, scene, story, run, reset, settings }, __stage: stage });

@@ -5,7 +5,7 @@ import { inRun } from '../core/sharedRuns';
 import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { Charge } from '../primitives/charge/Charge';
 import { Cloud } from '../primitives/cloud/Cloud';
-import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gateway } from '../primitives/gateway/Gateway';
 import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { Job } from '../primitives/job/Job';
@@ -17,21 +17,22 @@ import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone'
 import type { SceneHost, Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
-import { budOut, graphPathKinds } from './crew';
+import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
 import { fullSystem } from './fullSystem';
+import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
 import { HumanLoop } from './humanLoop';
 import { D3V1N_REQUEST, GATEWAY, HOME, ROVO_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { opening } from './opening';
 import { absorb, handOff } from './request';
 import { revealMap } from './revealMap';
-import { linkRoute } from './rework';
 import { type OutputLine, type OutputPlace, shipOutput } from './shipOutput';
 import type { SystemMap } from './SystemMap';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 import { teamworkGraph, type TwoActScene, twoActScene } from './twoActs';
+import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, TOOLS, Volume, type Worker } from './volume';
 
 /** The v2 story's beats, in order. */
 export const V2_BEATS = ['opening', 'own-system', 'rovo-bridge', 'juiced-crew', 'ship-output', 'full-system'] as const;
@@ -69,6 +70,9 @@ const OUTPUT = {
 /** The middle of everything once the output line is in, for the camera's pull-back. */
 const WHOLE_CENTER = new Vector3(5.5, 0, -2.5);
 
+/** How close a sub-agent has to be to a tool to count as working at it. */
+const AT_NODE = 1.2;
+
 /** A branch being written on a tool, and how to stop it. */
 interface Writer {
   sub: SpawnedDrone;
@@ -100,6 +104,8 @@ export class StoryV2 {
   private stopFirstJob: () => void = () => {};
   private output: OutputLine | null = null;
   private cleanups: (() => void)[] = [];
+  /** Volume of work across the grid: what hover cards report. */
+  readonly volume: Volume;
 
   constructor(private readonly stage: SceneHost) {
     this.scene = twoActScene(stage);
@@ -121,6 +127,53 @@ export class StoryV2 {
       this.charge.update(dt);
     });
     this.humans = new HumanLoop(stage, this.nodes(), 7);
+    this.volume = new Volume(stage, this.scene, () => this.workers(), 11);
+  }
+
+  /**
+   * Everyone on the grid who can be working right now: D3V1N, Rovo once it's
+   * here, and every sub-agent out at a tool (named by the tool it's at, and
+   * counted for its parent by lineage).
+   */
+  workers(): Worker[] {
+    const out: Worker[] = [{ id: D3V1N_ID, drone: this.drone }];
+    if (this.rovo) out.push({ id: ROVO_ID, drone: this.rovo.drone });
+    const nodes = Object.values(this.nodes()).filter((n) => n.visible);
+    const seen = new Map<SystemKind, number>();
+    for (const child of this.drone.parent?.children ?? []) {
+      if (!(child instanceof Drone) || !child.subAgent || !child.visible) continue;
+      const near = nodes.find((n) => Math.hypot(n.position.x - child.position.x, n.position.z - child.position.z) < AT_NODE);
+      if (!near) continue;
+      const n = seen.get(near.kind) ?? 0;
+      seen.set(near.kind, n + 1);
+      out.push({
+        id: `sub:${near.kind}:${n}`,
+        drone: child,
+        parentId: child.lineage === 'cyan' ? ROVO_ID : D3V1N_ID,
+        nodeId: nodeId(near.kind),
+      });
+    }
+    return out;
+  }
+
+  /** What you can hover on the grid and the card each shows: gates, tools, agents, sub-agents. */
+  hoverTargets(): HoverTarget[] {
+    const ledger = this.volume.ledger;
+    const workers = this.workers().filter((w) => ledger.has(w.id));
+    const name = (id: string) => ledger.entity(id).name;
+    const crewOf = (w: Worker): string[] =>
+      w.parentId
+        ? [name(w.parentId), ...(w.nodeId ? [name(w.nodeId)] : [])]
+        : workers.filter((o) => o.parentId === w.id).map((o) => name(o.id));
+    return [
+      { object: this.scene.act1.gate, card: () => gateCard(ledger, TOOLS) },
+      { object: this.scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN) },
+      ...Object.values(this.nodes()).map((node) => ({
+        object: node,
+        card: () => nodeCard(ledger, nodeId(node.kind), node.kind),
+      })),
+      ...workers.map((w) => ({ object: w.drone, card: () => agentCard(ledger, w.id, crewOf(w)) })),
+    ];
   }
 
   get drone(): Drone {
