@@ -58,7 +58,10 @@ export const Full: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const say = captioned(root);
     const story = new TeamworkStory(stage, twoActScene(stage), (step) => say(STORY_CAPTION[step]));
-    hoverCards(stage, () => story.hoverTargets());
+    hoverCards(stage, () => story.hoverTargets(), undefined, {
+      traceable: (key) => story.traceable(key),
+      trace: (key) => story.trace(key),
+    });
     void (async () => {
       for (;;) {
         await wait(stage, 1);

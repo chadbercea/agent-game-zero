@@ -17,6 +17,7 @@ A work ledger simulates today's volume across the grid: every node keeps busy wi
 - a node, agent or sub-agent shows its own counts (done, in progress, queued), what's under way (DEMO-1 among the rest), its share of the whole, and who it works with
 - a gate shows its whole system, node by node; the review gate shows what it reviewed today and its latest verdicts
 - items carry their review verdict (Confirmed / Denied) wherever they're listed
+- DEMO-1's line is underlined: point at it to light its trail back to its sources (green where the links exist, dark where Act 1 never had them, through the gateway once Act 2 connects them), and click to pin it
 
 The grand total sits in the top-left corner.
 
@@ -70,7 +71,7 @@ Layering: **Primitive → Animation → Stage → Story.**
 | `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
-| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
+| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `trail`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
 | `src/sandbox/` | Sandbox app: the stage, the caption, and the control panel |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 
