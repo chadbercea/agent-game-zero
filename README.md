@@ -21,6 +21,10 @@ A work ledger simulates today's volume across the grid: every node keeps busy wi
 
 The grand total sits in the top-left corner.
 
+### Story Rework (in progress)
+
+The story is being rebuilt beat by beat (Linear milestone "Story Rework"). New beats live in Storybook under **Story Rework** until they replace the sandbox's story. Beat 1, the opening: a low-poly cloud materializes, a hand reaches down out of it and hands over a Jira ticket (DEMO-1), waves, and pulls back up; the cloud pops away, and D3V1N floats in to the ticket.
+
 ## Running
 
 ```sh
@@ -68,7 +72,7 @@ Layering: **Primitive → Animation → Stage → Story.**
 | Path | Role |
 |---|---|
 | `src/core/` | Palette, grid, shared textures and mesh helpers, seeded scatter, and shared runs (lines that bus together) |
-| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape) |
+| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape), Cloud and Hand (where requests come from) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
 | `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `trail`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |
