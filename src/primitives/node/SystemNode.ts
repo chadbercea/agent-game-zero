@@ -7,6 +7,8 @@ import { buildEmblem, SYSTEM_NAME, type SystemKind } from './emblems';
 
 /** Nodes are smaller than gates; a sub-agent floats over them. */
 export const NODE_SCALE = 0.72;
+/** How faint a fully dimmed node is: there, but out of reach. */
+const DIM_OPACITY = 0.28;
 /** Height of the emblem's center, low enough to sit under a hovering sub-agent. */
 export const EMBLEM_HEIGHT = 0.62;
 /** Emblems are modeled ~0.5 tall; shown a little larger so the system reads at map scale. */
@@ -32,6 +34,9 @@ export class SystemNode extends Group {
   /** Floating emblem; animators bob and turn it. */
   readonly emblem: Group;
   private _light: NodeLight = 'off';
+  private _dim = 0;
+  /** Every material in the node (pad and emblem) and its own opacity, for dimming. */
+  private dimmable?: { material: Material; opacity: number; transparent: boolean; depthWrite: boolean }[];
   private readonly materials: Material[];
   private readonly label?: CSS2DObject;
 
@@ -79,6 +84,38 @@ export class SystemNode extends Group {
     if (value === this._light) return;
     this._light = value;
     this.applyLight();
+  }
+
+  /**
+   * How far out of reach the node looks (0 = itself, 1 = a faint ghost):
+   * pad, emblem and label fade together. For systems an agent can't reach.
+   */
+  get dim(): number {
+    return this._dim;
+  }
+
+  set dim(value: number) {
+    this._dim = Math.min(1, Math.max(0, value));
+    this.dimmable ??= this.collectMaterials();
+    const keep = 1 - this._dim * (1 - DIM_OPACITY);
+    for (const d of this.dimmable) {
+      d.material.transparent = d.transparent || this._dim > 0;
+      d.material.opacity = d.opacity * keep;
+      // A ghost doesn't hide what's behind it.
+      d.material.depthWrite = this._dim > 0 ? false : d.depthWrite;
+    }
+    if (this.label) this.label.element.style.opacity = String(keep);
+  }
+
+  private collectMaterials() {
+    const seen = new Map<Material, { opacity: number; transparent: boolean; depthWrite: boolean }>();
+    this.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!seen.has(m)) seen.set(m, { opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite });
+      }
+    });
+    return [...seen].map(([material, base]) => ({ material, ...base }));
   }
 
   dispose(): void {
