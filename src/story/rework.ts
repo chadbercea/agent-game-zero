@@ -1,11 +1,11 @@
-import { type Curve, Vector3 } from 'three';
+import { type Curve, CurvePath, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import type { SharedRun } from '../core/sharedRuns';
 import { Gateway } from '../primitives/gateway/Gateway';
 import { gridRoute } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { SYSTEM_KINDS, type SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
@@ -154,4 +154,16 @@ export function reworkScene(stage: SceneHost): ReworkScene {
   stage.add(gateway);
   stage.onTick((dt) => gateway.update(dt));
   return { nodes, reach, graph, gateway };
+}
+
+/** The graph's route through these tools in order, each link turned to run the right way. */
+export function linkRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePath<Vector3> {
+  const path = new CurvePath<Vector3>();
+  for (let i = 1; i < kinds.length; i++) {
+    const [a, b] = [kinds[i - 1], kinds[i]];
+    const link = graph.links.find((l) => (l.from.kind === a && l.to.kind === b) || (l.from.kind === b && l.to.kind === a));
+    if (!link) throw new Error(`linkRoute: no graph link between ${a} and ${b}`);
+    path.add(link.from.kind === a ? link.route : reversed(link.route));
+  }
+  return path;
 }
