@@ -23,6 +23,8 @@ export async function budOut(
   route: Curve<Vector3>,
   spot: Vector3,
   speed = 4.2,
+  /** Runs every frame of the flight out (e.g. to see it through a tunnel). */
+  watch: (drone: Drone) => void = () => {},
 ): Promise<SpawnedDrone> {
   const sub = spawnDrone(stage, parent.position.x, parent.position.z, {
     name,
@@ -35,10 +37,12 @@ export async function budOut(
   const end = route.getPoint(1);
   if (end.distanceTo(spot) > 1e-3) path.add(new LineCurve3(end, spot.clone()));
   const budHover = HOVER_HEIGHT * SUB_AGENT_SCALE * BUD_SCALE;
+  const untick = stage.onTick(() => watch(sub.drone));
   await Promise.all([
     fly(stage, DroneFlight.along(sub.drone, path, { fromHeight: HOVER_HEIGHT - budHover, speed })),
     tween(stage, 0.8, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD_SCALE + (1 - BUD_SCALE) * t))),
   ]);
+  untick();
   return sub;
 }
 

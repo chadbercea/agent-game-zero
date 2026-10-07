@@ -25,6 +25,16 @@ The grand total sits in the top-left corner.
 
 The story is being rebuilt beat by beat (Linear milestone "Story Rework"). New beats live in Storybook under **Story Rework** until they replace the sandbox's story. Beat 1, the opening: a low-poly cloud drifts across the sky and drops a Jira ticket (DEMO-1) at D3V1N's spot, then drifts on; D3V1N floats in to the ticket. From then on, the human in the loop: clouds keep drifting by at seeded random times, each dropping an issue into Jira, Confluence or Notion (whichever are online). Beat 2, within reach: D3V1N's access lines draw out to the only two tools it can reach on its own, Jira and GitHub (the rest show as faint ghosts). The ticket goes into Jira and D3V1N reads it there, then rides its lines to GitHub and starts a branch. Beat 3, the call: while it keeps working, D3V1N phones Rovo through Jira (a handset rides its lines there, rings, and goes out). Rovo flies in, fires up the rest of the Teamwork Graph (every ghost tool comes online, the links draw in), and sends a sub-agent to build the secure gateway over D3V1N's line, and power flows through it: D3V1N is juiced. Beat 4, the juiced crew: D3V1N buds three sub-agents, one writing a branch at GitHub and two at Bitbucket (reached through the gateway), and their commits keep flowing into GitHub. Beat 5, the output: every commit landing in GitHub sends a little block down an output line; eight little blocks fuse into a bigger one at the assembler, which rides a conveyor belt into a portal to another realm. Beat 6, the full system: D3V1N's crew spreads across every tool in the graph (through the gateway), Rovo's sub-agents help here and there, blocks keep flowing into the portal, and the camera pulls back to show the whole grid at work. Crew size, placement and timing come from a seeded generator.
 
+**Story Rework v2** (Storybook group of that name, ILI-947) plays the same beats on the two-system scene, so D3V1N keeps its own system and Rovo keeps its own:
+1. **Opening:** a cloud drops DEMO-1 in front of D3V1N's home.
+2. **Own system:** D3V1N gets access at its gate, and its system (Figma, GitHub, Notion) maps out with the grid draw-in and fade. One sub-agent starts a branch in GitHub.
+3. **The bridge:** Rovo arrives on its own and gets access at the Atlassian gate, and its Teamwork Graph maps out. A Rovo sub-agent builds the secure bridge between the systems. The graph's lines connect to it, data streams through the super tunnel, and power comes through to D3V1N.
+4. **Juiced crew:** two more sub-agents go through the tunnel to Bitbucket. Commits flow back to GitHub.
+5. **Output:** blocks, belt and portal behind D3V1N's system.
+6. **Full system:** D3V1N's crew across both systems, Rovo's helpers, and the camera pull-back.
+
+From beat 2 on, clouds drop issues into whichever of Jira, Confluence and Notion are online. v1 stays until v2 replaces it.
+
 ## Running
 
 ```sh

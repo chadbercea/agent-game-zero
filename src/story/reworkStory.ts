@@ -1,4 +1,5 @@
-import { Vector3 } from 'three';
+import { LineCurve3, Vector3 } from 'three';
+import { inRun } from '../core/sharedRuns';
 import { Charge } from '../primitives/charge/Charge';
 import { Cloud } from '../primitives/cloud/Cloud';
 import type { Drone } from '../primitives/drone/Drone';
@@ -6,13 +7,14 @@ import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost, Stage } from '../stage/Stage';
+import { graphPathKinds, viaGateway } from './crew';
 import { fullSystem } from './fullSystem';
 import { HumanLoop } from './humanLoop';
 import { juicedCrew } from './juicedCrew';
 import { opening } from './opening';
 import { phoneRovo } from './phoneRovo';
 import { type OutputLine, shipOutput } from './shipOutput';
-import { REWORK, type ReworkScene, reworkScene } from './rework';
+import { linkRoute, REWORK, type ReworkScene, reworkScene } from './rework';
 import { tween, wait } from './timeline';
 import { withinReach } from './withinReach';
 
@@ -108,7 +110,24 @@ export class ReworkStory {
     const camera = this.pullBack();
     this.cleanups.push(camera.restore);
     this.cleanups.push(
-      await fullSystem(stage, { drone, rovo, scene, onCommit: () => this.output?.commit(), pullBack: camera.to }, 5),
+      await fullSystem(
+        stage,
+        {
+          drone,
+          rovo,
+          nodes: scene.nodes,
+          graph: scene.graph,
+          routeTo: (kind) => viaGateway(scene, kind),
+          rovoRouteTo: (kind) => {
+            const hops = kind === 'jira' ? null : graphPathKinds(scene.graph, 'jira', kind);
+            return hops && hops.length > 1 ? linkRoute(scene.graph, ...hops) : new LineCurve3(rovo.position.clone().setY(0), rovo.position.clone().setY(0));
+          },
+          boost: { at: (p) => inRun(REWORK.gateway, p), speed: 2, glow: GRAPH_COLOR },
+          onCommit: () => this.output?.commit(),
+          pullBack: camera.to,
+        },
+        5,
+      ),
     );
   }
 

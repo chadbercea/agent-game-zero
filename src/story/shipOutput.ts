@@ -1,4 +1,4 @@
-import { type Mesh, type MeshStandardMaterial, Vector3 } from 'three';
+import { type Curve, type Mesh, type MeshStandardMaterial, Vector3 } from 'three';
 import { NEUTRAL } from '../core/palette';
 import { Assembler, BIG_BLOCK, LITTLE_BLOCK } from '../primitives/assembler/Assembler';
 import { Branch } from '../primitives/branch/Branch';
@@ -18,6 +18,16 @@ const MAX_ON_LINE = 6;
 /** How long a block takes to drop off the assembler onto the belt, and to go through the portal. */
 const DROP_SECONDS = 0.5;
 const THROUGH_SECONDS = 0.45;
+
+/** Where the output line goes: its route from GitHub to the assembler, and where the belt and the portal sit. */
+export interface OutputPlace {
+  route: Curve<Vector3>;
+  assembler: Vector3;
+  /** The belt runs along +x from here for `beltLength`. */
+  beltFrom: Vector3;
+  beltLength: number;
+  portal: Vector3;
+}
 
 /** The output line's parts on the grid. */
 export interface OutputLine {
@@ -40,9 +50,12 @@ export interface OutputLine {
  * which drops onto the belt, rides it, and goes through the portal into
  * another realm (where it leads isn't shown). Steady, on its own. No captions.
  */
-export async function shipOutput(stage: SceneHost, onStep: (step: ShipOutputStep) => void = () => {}): Promise<OutputLine> {
-  const { output } = REWORK;
-  const route = outputRoute();
+export async function shipOutput(
+  stage: SceneHost,
+  output: OutputPlace = { route: outputRoute(), ...REWORK.output },
+  onStep: (step: ShipOutputStep) => void = () => {},
+): Promise<OutputLine> {
+  const { route } = output;
   const line = new Branch(route, NEUTRAL.packet);
   line.drawn = 0;
   const assembler = new Assembler();
