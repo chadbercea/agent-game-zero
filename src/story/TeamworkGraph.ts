@@ -63,6 +63,10 @@ export class TeamworkGraph {
   readonly conduits: Conduit[] = [];
   private readonly gateway?: SharedRun;
   private readonly untick: () => void;
+  /** The feeder lines into the gateway, with each one's full opacity. */
+  private readonly feeders: { edge: GraphEdge; opacity: number }[] = [];
+  /** Tunnels fed by those lines (the secure gateway's conduit): their streams flow only while the feeders are connected. */
+  private readonly tunnels: { streams: number }[] = [];
 
   /** `groups`: the nodes around each gate, one cluster per system. Links between systems not on the grid are skipped. */
   constructor(stage: SceneHost, groups: readonly (readonly SystemNode[])[], options: TeamworkGraphOptions = {}) {
@@ -79,6 +83,7 @@ export class TeamworkGraph {
     this.untick = stage.onTick((dt) => {
       for (const edge of this.edges) edge.update(dt);
       for (const conduit of this.conduits) conduit.update(dt);
+      this.capStreams();
     });
     const byKind = new Map(groups.flat().map((n) => [n.kind, n]));
     const system = new Map(groups.flatMap((g, i) => g.map((n) => [n.kind, i] as const)));
@@ -88,10 +93,15 @@ export class TeamworkGraph {
       stage.add(edge);
       this.edges.push(edge);
       drawn.push(polyline);
+      return edge;
     };
 
     // Feeders first: from each tunnel port (the line starts right at the end face) out to its node.
-    for (const [, feeder] of feeders) if (byKind.size) draw(feeder, 0);
+    for (const [, feeder] of feeders) {
+      if (!byKind.size) continue;
+      const edge = draw(feeder, 0);
+      this.feeders.push({ edge, opacity: edge.material.opacity });
+    }
 
     for (const link of links) {
       const [from, to] = [byKind.get(link.a), byKind.get(link.b)];
@@ -132,6 +142,38 @@ export class TeamworkGraph {
     }
   }
 
+  /**
+   * How connected the gateway is (0–1): 1 while every feeder line is fully
+   * drawn and solid, falling as they fade, 0 once any of them is undrawn (or
+   * there are none).
+   */
+  get feedersConnected(): number {
+    if (!this.feeders.length) return 0;
+    let level = 1;
+    for (const { edge, opacity } of this.feeders) {
+      level = Math.min(level, edge.drawn >= 1 ? edge.material.opacity / opacity : 0);
+    }
+    return MathUtils.clamp(level, 0, 1);
+  }
+
+  /**
+   * Feed a tunnel (the secure gateway's conduit): from now on its streams
+   * never run ahead of the feeder lines. Data flows inside only while the
+   * lines are connected to its ends; when they fade, the streams fade with
+   * them, and when they're gone, it stops. Whoever starts the streams after
+   * the reveal still decides when they start.
+   */
+  feed(tunnel: { streams: number }): void {
+    this.tunnels.push(tunnel);
+    this.capStreams();
+  }
+
+  private capStreams(): void {
+    if (!this.tunnels.length) return;
+    const connected = this.feedersConnected;
+    for (const tunnel of this.tunnels) if (tunnel.streams > connected) tunnel.streams = connected;
+  }
+
   /** Whether a floor point is inside a highway or the gateway (packets there ride faster and glow). */
   inHighway(p: Vector3): boolean {
     if (this.gateway && inRun(this.gateway, p)) return true;
@@ -161,6 +203,7 @@ export class TeamworkGraph {
     await tween(stage, seconds, (t) => {
       this.edges.forEach((edge, i) => (edge.material.opacity = MathUtils.lerp(start[i], 0, t)));
       for (const c of this.conduits) c.level = Math.min(c.level, 1 - t);
+      this.capStreams();
     });
     this.hide();
     this.edges.forEach((edge, i) => (edge.material.opacity = start[i]));
@@ -170,6 +213,7 @@ export class TeamworkGraph {
   hide(): void {
     for (const edge of this.edges) edge.drawn = 0;
     for (const c of this.conduits) c.level = 0;
+    this.capStreams();
   }
 
   /** Fully drawn at once (specimens). */

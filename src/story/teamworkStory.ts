@@ -131,6 +131,8 @@ export class TeamworkStory {
   ) {
     this.graph = teamworkGraph(stage, scene);
     this.volume = new Volume(stage, scene, () => this.workers(), hashSeed('volume'));
+    // The tunnel's data flows only while the graph's feeder lines are connected to its ends.
+    this.graph.feed(this.gateway.conduit);
     this.trickle = new Trickle(stage, [scene.act1, scene.act2]);
     this.volume.onArrive((id) => this.trickle.land(id));
     this.ticket.scale.setScalar(SMALL_TICKET);
@@ -230,7 +232,6 @@ export class TeamworkStory {
       this.gateway.built = 1 - t;
       this.gateway.lockDrop = 1 - t;
     });
-    this.gateway.conduit.streams = 0;
     this.act1Crew = this.act2Crew = null;
     this.cast = [];
     scene.drone.status = 'waiting';
@@ -253,7 +254,6 @@ export class TeamworkStory {
     this.graph.hide();
     this.gateway.built = 0;
     this.gateway.lockDrop = 0;
-    this.gateway.conduit.streams = 0;
     this.trickle.clear();
     this.ticket.visible = false;
     scene.act1.map.hide();
