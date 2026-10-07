@@ -19,6 +19,11 @@ export const ROVO_HOME = new Vector3(13.5, 0, -9.5);
 export const D3V1N_REQUEST = new Vector3(-1, 0, 6);
 /** Where a request for Rovo lands: just in front of it at its home. */
 export const ROVO_REQUEST = new Vector3(14.5, 0, -8.5);
+/**
+ * The review gate: node-sized, just in front of D3V1N's gate on screen (down
+ * and to the left), clear of every node and line the layout can place.
+ */
+export const REVIEW_SPOT = new Vector3(2, 0, 4.5);
 /** The security bot comes in from the back of the grid. */
 export const SECURITY_HOME = new Vector3(3, 0, -10);
 /**

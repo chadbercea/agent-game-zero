@@ -2,7 +2,7 @@ import { seededRandom } from '../core/scatter';
 import type { Drone } from '../primitives/drone/Drone';
 import { SYSTEM_NAME, type SystemKind } from '../primitives/node/emblems';
 import type { SceneHost } from '../stage/Stage';
-import { DEMO_1, WorkLedger } from './ledger';
+import { DEMO_1, type WorkItem, WorkLedger } from './ledger';
 import type { TwoActScene } from './twoActs';
 
 /** The two systems on the grid, as the ledger and hover cards name them. */
@@ -34,6 +34,14 @@ const BACKGROUND_PACE: [number, number] = [3, 6];
 const EXTRA_ARRIVAL = 0.08;
 
 export const nodeId = (kind: SystemKind) => `node:${kind}`;
+const nodeKindOf = (id?: string) => (id?.startsWith('node:') ? (id.slice(5) as SystemKind) : undefined);
+
+/** A piece of work an agent on the grid just finished: the item, who finished it, and at which system. */
+export interface FinishedWork {
+  item: WorkItem;
+  by: string;
+  nodeKind?: SystemKind;
+}
 export const subId = (kind: SystemKind) => `sub:${kind}`;
 export const D3V1N_ID = 'agent:d3v1n';
 export const ROVO_ID = 'agent:rovo';
@@ -52,6 +60,7 @@ export class Volume {
   private readonly clocks = new Map<string, { t: number; every: number }>();
   private readonly drones = new Map<string, Drone>();
   private readonly arrivals: ((nodeId: string) => void)[] = [];
+  private readonly finishes: ((done: FinishedWork) => void)[] = [];
 
   constructor(
     stage: Pick<SceneHost, 'onTick'>,
@@ -76,6 +85,7 @@ export class Volume {
 
   /** Put DEMO-1 to work: it touches both systems, so it's under way at both agents and five tools. */
   followRequest(): void {
+    this.ledger.clearVerdict(DEMO_1.key);
     this.ledger.assign(DEMO_1, [
       D3V1N_ID,
       ROVO_ID,
@@ -107,8 +117,18 @@ export class Volume {
       const ids = [w.id];
       if (w.nodeId && this.ledger.has(w.nodeId)) ids.push(w.nodeId);
       if (w.parentId) ids.push(w.parentId);
-      this.finish(ids);
+      const item = this.finish(ids);
+      if (item) for (const fn of this.finishes) fn({ item, by: w.id, nodeKind: nodeKindOf(w.nodeId) });
     }
+  }
+
+  /**
+   * Listen for work the agents on the grid finish (not the background work at
+   * the nodes): what goes to review. Returns a function that stops listening.
+   */
+  onFinish(fn: (done: FinishedWork) => void): () => void {
+    this.finishes.push(fn);
+    return () => this.finishes.splice(this.finishes.indexOf(fn) >>> 0, 1);
   }
 
   /** Listen for new requests landing at nodes (to show them arriving). Returns a function that stops listening. */
@@ -117,14 +137,15 @@ export class Volume {
     return () => this.arrivals.splice(this.arrivals.indexOf(fn) >>> 0, 1);
   }
 
-  private finish(ids: string[]): void {
-    this.ledger.complete(ids);
+  private finish(ids: string[]): WorkItem | undefined {
+    const item = this.ledger.complete(ids);
     const count = this.random() < EXTRA_ARRIVAL ? 2 : 1;
     this.ledger.arrive(ids, count);
     for (const id of ids) {
       if (this.ledger.entity(id).kind !== 'node') continue;
       for (let i = 0; i < count; i++) for (const fn of this.arrivals) fn(id);
     }
+    return item;
   }
 
   /** Advance a named clock; true when it comes due (then it rewinds to a fresh interval in `range`). */

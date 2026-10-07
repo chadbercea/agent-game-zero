@@ -12,10 +12,11 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { act2, crossGateway, goHome, graphTraffic, securityGateway, visitSpot } from './act2';
 import { type CrewMember, dismiss } from './fanOut';
-import { D3V1N_REQUEST, GATEWAY, HOME, ROVO_HOME, ROVO_REQUEST, SECURITY_HOME } from './layout';
+import { D3V1N_REQUEST, GATEWAY, HOME, REVIEW_SPOT, ROVO_HOME, ROVO_REQUEST, SECURITY_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { DEMO_1 } from './ledger';
-import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
+import { agentCard, gateCard, type HoverTarget, nodeCard, reviewCard } from './hoverCards';
+import { Review } from './review';
 import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, subId, TOOLS, Volume, type Worker } from './volume';
 import { takeRequest } from './request';
 import { SMALL_TICKET, Trickle } from './trickle';
@@ -39,6 +40,7 @@ export type StoryStep =
   | 'security'
   | 'graph'
   | 'connected'
+  | 'review'
   | 'shipped'
   | 'home'
   | 'done';
@@ -57,7 +59,8 @@ export const STORY_CAPTION: Record<StoryStep, string> = {
   security: 'Security bot sets up a secure gateway between the systems',
   graph: 'The Teamwork Graph connects every system on the grid',
   connected: 'Act 2 · Teamwork Graph: agents cross securely, one connected system',
-  shipped: `${DEMO_1.key} shipped: one change among everything done on the grid today`,
+  review: `${DEMO_1.key} goes to review, like every other finished request…`,
+  shipped: `${DEMO_1.key} confirmed at review: one change among everything done on the grid today`,
   home: 'Sub-agents heading home…',
   done: 'Done.',
 };
@@ -114,6 +117,8 @@ export class TeamworkStory {
   readonly ticket = new Ticket(undefined, { label: false });
   /** Requests arriving in every open system, one small ticket per request the ledger takes in. */
   readonly trickle: Trickle;
+  /** "Is this right?": every request the agents finish goes through it, DEMO-1 included. */
+  readonly review: Review;
   /** D3V1N has DEMO-1 (a retry at the first gate doesn't drop it again). */
   private requested = false;
   private act1Crew: WorkingCrew | null = null;
@@ -135,12 +140,17 @@ export class TeamworkStory {
     this.graph.feed(this.gateway.conduit);
     this.trickle = new Trickle(stage, [scene.act1, scene.act2]);
     this.volume.onArrive((id) => this.trickle.land(id));
+    this.review = new Review(stage, REVIEW_SPOT, scene.act1.gate.position, this.volume.ledger, hashSeed('review'));
+    this.volume.onFinish(({ item, nodeKind }) => void this.review.submit(item, nodeKind));
     this.ticket.scale.setScalar(SMALL_TICKET);
     this.ticket.visible = false;
     stage.add(this.gateway, this.ticket);
     stage.onTick((dt) => {
       this.ticket.update(dt);
       this.gateway.update(dt);
+      // Review belongs to D3V1N's system: there while it's mapped, taking work while its gate is open.
+      this.review.visible = scene.act1.map.revealed;
+      this.review.open = scene.act1.map.revealed && scene.act1.gate.state === 'open';
     });
   }
 
@@ -213,7 +223,9 @@ export class TeamworkStory {
 
     for (const c of this.cast) c.stopLoop();
     await wait(stage, 0.6);
-    // DEMO-1 is done: both agents that worked it acknowledge, and the work goes on.
+    // DEMO-1 is finished: it goes to review like everything else. Confirmed, it's done, and the work goes on.
+    onStep('review');
+    await this.review.submit(DEMO_1, 'bitbucket', 'confirmed');
     this.volume.ledger.finish(DEMO_1.key);
     scene.drone.flash = 1;
     rovo.flash = 1;
@@ -255,6 +267,7 @@ export class TeamworkStory {
     this.gateway.built = 0;
     this.gateway.lockDrop = 0;
     this.trickle.clear();
+    this.review.reset();
     this.ticket.visible = false;
     scene.act1.map.hide();
     scene.act2.map.hide();
@@ -318,6 +331,7 @@ export class TeamworkStory {
     return [
       { object: scene.act1.gate, card: () => gateCard(ledger, TOOLS) },
       { object: scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN) },
+      { object: this.review.gate, card: () => reviewCard(this.review.summary(), this.review.waiting) },
       ...[...scene.act1.map.nodes, ...scene.act2.map.nodes].map((node) => ({
         object: node,
         card: () => nodeCard(ledger, nodeId(node.kind), node.kind),
