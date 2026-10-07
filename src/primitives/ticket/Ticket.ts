@@ -31,6 +31,11 @@ let shared:
   | { card: RoundedBoxGeometry; chip: BoxGeometry; rule: BoxGeometry; avatar: SphereGeometry }
   | undefined;
 
+export interface TicketOptions {
+  /** Float the key and title over the card. Off for the small tickets that trickle through the system. */
+  label?: boolean;
+}
+
 /**
  * Ticket primitive: a request, the work someone asked for. A white card
  * standing up to face the camera, with a key chip, two ruled lines of title,
@@ -44,14 +49,14 @@ let shared:
 export class Ticket extends Group {
   readonly request: Request;
   readonly card = new Group();
-  readonly label: CSS2DObject;
+  readonly label?: CSS2DObject;
   private readonly shell: MeshStandardMaterial;
   private readonly graphite: MeshStandardMaterial;
   private glowLevel = 0;
   private bobPhase = 0;
   private _opacity = 1;
 
-  constructor(request: Request = DEFAULT_REQUEST) {
+  constructor(request: Request = DEFAULT_REQUEST, { label = true }: TicketOptions = {}) {
     super();
     this.request = request;
     const g = (shared ??= {
@@ -83,9 +88,11 @@ export class Ticket extends Group {
     place(solid(g.rule, this.graphite), -0.165, -0.08).scale.x = 0.75;
     place(solid(g.avatar, this.graphite), CARD_W / 2 - 0.14, -CARD_H / 2 + 0.14);
 
-    this.label = makeLabel(`${request.key} · ${request.title}`);
-    this.label.position.y = CARD_H / 2 + 0.35;
-    this.card.add(this.label);
+    if (label) {
+      this.label = makeLabel(`${request.key} · ${request.title}`);
+      this.label.position.y = CARD_H / 2 + 0.35;
+      this.card.add(this.label);
+    }
   }
 
   /** Light the card green (0–1); it settles back on its own in `update`. */
@@ -105,7 +112,7 @@ export class Ticket extends Group {
       m.transparent = fading;
       m.opacity = this._opacity;
     }
-    this.label.element.style.opacity = String(this._opacity);
+    if (this.label) this.label.element.style.opacity = String(this._opacity);
   }
 
   get opacity(): number {
@@ -122,7 +129,7 @@ export class Ticket extends Group {
 
   dispose(): void {
     this.removeFromParent();
-    this.label.element.remove();
+    this.label?.element.remove();
     this.shell.dispose();
     this.graphite.dispose();
   }

@@ -20,14 +20,18 @@ export interface Worker {
 }
 
 /** Seconds between pieces of work a working sub-agent finishes (each gets its own pace within this range). */
-const SUB_PACE: [number, number] = [1.3, 2.4];
+const SUB_PACE: [number, number] = [2.2, 3.6];
 /** A working parent agent finishes its own pieces (reviews, hand-offs) more slowly. */
 const AGENT_PACE: [number, number] = [2.5, 4];
 /** Everyone else's work at each node: the hundreds of other things getting done. */
-const BACKGROUND_PACE: [number, number] = [1.8, 4.5];
-const ARRIVAL_PACE: [number, number] = [2.5, 6];
-/** Chance that finishing a piece of work brings another request into the same queues: work keeps coming. */
-const REFILL = 0.9;
+const BACKGROUND_PACE: [number, number] = [3, 6];
+/**
+ * Work keeps coming: every piece finished brings another request into the
+ * same queues, and now and then one extra, so the queues slowly grow. At a
+ * node, each arrival is a new request landing in that system (`onArrive`):
+ * the more work gets done, the more flows in.
+ */
+const EXTRA_ARRIVAL = 0.08;
 
 export const nodeId = (kind: SystemKind) => `node:${kind}`;
 export const subId = (kind: SystemKind) => `sub:${kind}`;
@@ -47,6 +51,7 @@ export class Volume {
   private readonly random: () => number;
   private readonly clocks = new Map<string, { t: number; every: number }>();
   private readonly drones = new Map<string, Drone>();
+  private readonly arrivals: ((nodeId: string) => void)[] = [];
 
   constructor(
     stage: Pick<SceneHost, 'onTick'>,
@@ -93,7 +98,6 @@ export class Volume {
   private update(dt: number): void {
     for (const node of this.ledger.entities('node')) {
       if (this.due(`bg:${node.id}`, dt, BACKGROUND_PACE)) this.finish([node.id]);
-      if (this.due(`in:${node.id}`, dt, ARRIVAL_PACE)) this.ledger.arrive([node.id]);
     }
     for (const w of this.workers()) {
       this.enlist(w);
@@ -107,9 +111,20 @@ export class Volume {
     }
   }
 
+  /** Listen for new requests landing at nodes (to show them arriving). Returns a function that stops listening. */
+  onArrive(fn: (nodeId: string) => void): () => void {
+    this.arrivals.push(fn);
+    return () => this.arrivals.splice(this.arrivals.indexOf(fn) >>> 0, 1);
+  }
+
   private finish(ids: string[]): void {
     this.ledger.complete(ids);
-    if (this.random() < REFILL) this.ledger.arrive(ids);
+    const count = this.random() < EXTRA_ARRIVAL ? 2 : 1;
+    this.ledger.arrive(ids, count);
+    for (const id of ids) {
+      if (this.ledger.entity(id).kind !== 'node') continue;
+      for (let i = 0; i < count; i++) for (const fn of this.arrivals) fn(id);
+    }
   }
 
   /** Advance a named clock; true when it comes due (then it rewinds to a fresh interval in `range`). */

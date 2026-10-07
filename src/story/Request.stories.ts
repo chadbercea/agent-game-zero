@@ -3,8 +3,9 @@ import { Vector3 } from 'three';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
-import { dropTicket, handOff, liftTicket } from './request';
+import { takeRequest } from './request';
 import { wait } from './timeline';
+import { SMALL_TICKET } from './trickle';
 
 const meta: Meta = {
   title: 'Story/02 Request',
@@ -14,20 +15,20 @@ export default meta;
 
 type Story = StoryObj;
 
-const TICKET = new Vector3(0, 0, 0);
-const D3V1N = new Vector3(-2.6, 0, 1.4);
-const ROVO = new Vector3(1.4, 0, -2.6);
+const D3V1N = new Vector3(-1.6, 0, 0.8);
+const ROVO = new Vector3(1.6, 0, -0.8);
+const IN_FRONT = new Vector3(0.8, 0, 1);
 
 /**
- * A request arrives: the ticket drops onto the grid and hands the request to
- * D3V1N. Then the same ticket hands the same request to Rovo, the way it
- * starts both acts of the story. Loops: the ticket is cleared and drops again.
+ * A request arrives: a small ticket (DEMO-1, like any other request) drops in
+ * front of D3V1N, D3V1N takes it, and the ticket is gone. Then the same
+ * request lands in front of Rovo. Loops.
  */
 export const Arrival: Story = {
   render: () => {
-    const { root, stage } = specimenStage({ viewSize: 7, focusY: 0.6 });
-    const ticket = new Ticket();
-    ticket.position.copy(TICKET);
+    const { root, stage } = specimenStage({ viewSize: 6, focusY: 1.2 });
+    const ticket = new Ticket(undefined, { label: false });
+    ticket.scale.setScalar(SMALL_TICKET);
     ticket.visible = false;
     stage.add(ticket);
     stage.onTick((dt) => ticket.update(dt));
@@ -41,14 +42,12 @@ export const Arrival: Story = {
     void (async () => {
       for (;;) {
         await wait(stage, 1);
-        await dropTicket(stage, ticket);
-        await handOff(stage, ticket, d3v1n);
+        await takeRequest(stage, ticket, D3V1N.clone().add(IN_FRONT), d3v1n);
         d3v1n.status = 'working';
-        await wait(stage, 1.5);
-        await handOff(stage, ticket, rovo);
+        await wait(stage, 1);
+        await takeRequest(stage, ticket, ROVO.clone().add(IN_FRONT), rovo);
         rovo.status = 'working';
         await wait(stage, 2.5);
-        await liftTicket(stage, ticket);
         d3v1n.status = rovo.status = 'waiting';
       }
     })();
