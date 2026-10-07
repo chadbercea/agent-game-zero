@@ -12,10 +12,11 @@ import {
   TubeGeometry,
   Vector3,
 } from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { FACE_CAMERA } from '../../core/grid';
 import { at, solid } from '../../core/mesh';
 import { NEUTRAL, STATUS_COLOR } from '../../core/palette';
 import type { JobKind } from '../node/emblems';
+import { productGeometry, productMaterial } from '../product/Product';
 
 /** What each system's job is, in words (labels, logs). */
 export const JOB_TITLE: Record<JobKind, string> = {
@@ -58,8 +59,9 @@ export class Job extends Group {
     else if (kind === 'github') this.build = this.buildBranch(shell, graphite);
     else this.build = this.buildReport(shell, graphite);
 
-    const productMaterial = this.track(new MeshStandardMaterial({ color: NEUTRAL.packet, roughness: 0.4, flatShading: true }));
-    this.product = solid(new RoundedBoxGeometry(0.22, 0.22, 0.22, 2, 0.04), productMaterial);
+    // The job's work product: its system's product shape (see Product), facing the camera.
+    this.product = solid(productGeometry(kind), this.track(productMaterial()));
+    this.product.rotation.y = FACE_CAMERA;
     this.product.position.set(PRODUCT_OFFSET.x, PRODUCT_OFFSET.y, PRODUCT_OFFSET.z);
     this.product.visible = false;
     this.add(this.product);
