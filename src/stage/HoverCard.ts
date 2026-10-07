@@ -3,6 +3,10 @@ export interface CardItem {
   key: string;
   title: string;
   verdict?: 'confirmed' | 'denied';
+  /** Point at it to light its trail on the grid; click to pin. */
+  traceable?: boolean;
+  /** Its trail is pinned on right now. */
+  pinned?: boolean;
 }
 
 /** What a hover card says about the thing under the pointer. */
@@ -34,7 +38,11 @@ const STYLE = `
   box-shadow: 0 6px 24px rgba(0,0,0,0.18);
   opacity: 0; transform: translateY(4px); transition: opacity 120ms, transform 120ms;
 }
-.hover-card.on { opacity: 1; transform: none; }
+.hover-card.on { opacity: 1; transform: none; pointer-events: auto; }
+.hover-card li.trace { cursor: pointer; border-radius: 4px; margin: 0 -4px; padding: 0 4px; }
+.hover-card li.trace .title { text-decoration: underline dotted #6b6e76; text-underline-offset: 3px; }
+.hover-card li.trace:hover, .hover-card li.trace.pinned { background: rgba(34, 211, 107, 0.16); }
+.hover-card .hint { margin-top: 3px; color: #7d8089; font-size: 10px; }
 .hover-card h4 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
 .hover-card .sub { color: #9a9ca4; margin-top: 1px; }
 .hover-card .counts { display: flex; gap: 14px; margin-top: 8px; }
@@ -129,6 +137,9 @@ function render(m: CardModel): HTMLElement[] {
     out.push(el('div', 'label', m.recentLabel ?? 'Just finished'));
     out.push(itemList(m.recent));
   }
+  if ([...(m.items ?? []), ...(m.recent ?? [])].some((i) => i.traceable)) {
+    out.push(el('div', 'hint', 'Point at an underlined request to see its trail; click to pin it'));
+  }
   if (m.breakdown?.length) {
     out.push(el('div', 'label', 'By system'));
     const list = el('ul');
@@ -150,7 +161,13 @@ function itemList(items: readonly CardItem[]): HTMLUListElement {
   const list = el('ul');
   for (const item of items) {
     const li = el('li');
-    li.append(el('span', 'key', item.key), document.createTextNode(item.title));
+    if (item.traceable) {
+      li.classList.add('trace');
+      if (item.pinned) li.classList.add('pinned');
+      li.dataset.key = item.key;
+      li.title = item.pinned ? 'Click to clear its trail' : 'Point to light its trail; click to pin';
+    }
+    li.append(el('span', 'key', item.key), el('span', 'title', item.title));
     if (item.verdict) li.append(el('span', `tag ${item.verdict}`, item.verdict === 'confirmed' ? 'Confirmed' : 'Denied'));
     list.append(li);
   }
