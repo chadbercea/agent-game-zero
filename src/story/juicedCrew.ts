@@ -49,12 +49,18 @@ interface Writer {
  * graph (through Code search) into GitHub, so the branches feed GitHub.
  * Reads as a lot of work getting done fast. No captions.
  *
- * `stopSolo` stops D3V1N's own branch from beat 2. Returns a function that
+ * `stopSolo` stops D3V1N's own branch from beat 2; `onCommit` runs each time
+ * a commit lands in GitHub (beat 5 turns them into output). Returns a function that
  * stops the crew and sends it away (for resetting the scene).
  */
 export async function juicedCrew(
   stage: SceneHost,
-  { drone, scene, stopSolo }: { drone: Drone; scene: ReworkScene; stopSolo: () => void },
+  {
+    drone,
+    scene,
+    stopSolo,
+    onCommit = () => {},
+  }: { drone: Drone; scene: ReworkScene; stopSolo: () => void; onCommit?: () => void },
   onStep: (step: JuicedCrewStep) => void = () => {},
 ): Promise<() => void> {
   const { nodes, reach, graph } = scene;
@@ -107,7 +113,7 @@ export async function juicedCrew(
 
   // In parallel: three branches building fast, commits flowing into GitHub.
   onStep('parallel');
-  const stops = writers.map((w, i) => write(stage, w, graph, github.position, i));
+  const stops = writers.map((w, i) => write(stage, w, graph, github.position, i, onCommit));
   return () => {
     for (const stop of stops) stop();
     for (const w of writers) w.sub.despawn();
@@ -124,7 +130,14 @@ export async function juicedCrew(
  * and every so often a commit goes to GitHub (from Bitbucket, along the graph
  * through Code search, as a pull request). Returns a function that stops it.
  */
-function write(stage: SceneHost, w: Writer, graph: TeamworkGraph, githubAt: Vector3, i: number): () => void {
+function write(
+  stage: SceneHost,
+  w: Writer,
+  graph: TeamworkGraph,
+  githubAt: Vector3,
+  i: number,
+  onCommit: () => void,
+): () => void {
   const job = new Job('github');
   job.position.copy(w.spot);
   job.rotation.y = FACE_CAMERA;
@@ -146,6 +159,7 @@ function write(stage: SceneHost, w: Writer, graph: TeamworkGraph, githubAt: Vect
     since = 0;
     void shoot(stage, feed, w.at === 'github' ? 3 : 7, boost, w.at === 'github' ? 'github' : 'bitbucket').then(() => {
       w.sub.drone.flash = Math.max(w.sub.drone.flash, 0.5);
+      onCommit();
     });
   });
   return () => {
