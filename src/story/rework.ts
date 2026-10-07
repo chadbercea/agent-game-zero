@@ -1,12 +1,16 @@
 import { type Curve, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
+import type { SharedRun } from '../core/sharedRuns';
+import { Gateway } from '../primitives/gateway/Gateway';
 import { gridRoute } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
 import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { SYSTEM_KINDS, type SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
+import { TEAMWORK_LINKS, type TeamworkLink } from './systemLayout';
+import { TeamworkGraph } from './TeamworkGraph';
 
 /**
  * Where everything sits for the reworked story (milestone "Story Rework"),
@@ -32,6 +36,14 @@ export const REWORK = {
     bitbucket: new Vector3(6, 0, -3),
     codesearch: new Vector3(6.5, 0, 0.5),
   } satisfies Record<SystemKind, Vector3>,
+  /** Where Rovo flies in from: off the grid, back and to the right, where D3V1N's call goes. */
+  rovoFrom: new Vector3(12, 0, -8),
+  /**
+   * The secure gateway Rovo builds: a glass tunnel over D3V1N's line to Jira,
+   * on the straight stretch in front of D3V1N's spot. D3V1N reaches the graph
+   * through it.
+   */
+  gateway: { along: 'x', from: 0, to: 2, low: 2, high: 2 } satisfies SharedRun,
   /** The middle of it all, for framing. */
   center: new Vector3(0.75, 0, -1.5),
 } as const;
@@ -48,11 +60,75 @@ export function reachRoute(kind: SystemKind): Curve<Vector3> {
   return roundedPath(trimPolyline(line, 0, NODE_FOOTPRINT / 2), BEND_RADIUS);
 }
 
-/** The tools on the grid, and D3V1N's lines to the ones it can reach. */
+/** Where the ticket rests while it's in Jira: beside the node, screen-right. */
+export const TICKET_IN_JIRA = REWORK.nodes.jira.clone().add(new Vector3(1, 0, -1).normalize().multiplyScalar(1.05));
+
+/** How far a graph line keeps from things it isn't connecting: past a node's edge, with a little air. */
+const CLEAR = 0.7;
+
+/**
+ * The Teamwork Graph's floor line for each link, along the grid. Each link
+ * tries both corners of an L and every Z with a jog on a half-grid line, and
+ * takes the shortest that keeps CLEAR of everything else on the grid (other
+ * tools, D3V1N's spot, the ticket at Jira); if none can, the clearest.
+ */
+export function graphLines(links: readonly TeamworkLink[] = TEAMWORK_LINKS): Map<TeamworkLink, Vector3[]> {
+  const lines = new Map<TeamworkLink, Vector3[]>();
+  for (const link of links) {
+    const a = REWORK.nodes[link.a];
+    const b = REWORK.nodes[link.b];
+    const obstacles = [
+      ...SYSTEM_KINDS.filter((k) => k !== link.a && k !== link.b).map((k) => REWORK.nodes[k]),
+      REWORK.d3v1n,
+      ...(link.a === 'jira' || link.b === 'jira' ? [] : [TICKET_IN_JIRA]),
+    ];
+    const candidates: Vector3[][] = [
+      [a.clone(), new Vector3(b.x, 0, a.z), b.clone()],
+      [a.clone(), new Vector3(a.x, 0, b.z), b.clone()],
+    ];
+    for (let m = -8; m <= 8; m += 0.5) {
+      candidates.push([a.clone(), new Vector3(a.x, 0, m), new Vector3(b.x, 0, m), b.clone()]);
+      candidates.push([a.clone(), new Vector3(m, 0, a.z), new Vector3(m, 0, b.z), b.clone()]);
+    }
+    const scored = candidates.map((line) => ({ line, clear: Math.min(...obstacles.map((o) => clearance(line, o))), len: length(line) }));
+    const ok = scored.filter((c) => c.clear >= CLEAR).sort((p, q) => p.len - q.len);
+    const pick = ok[0] ?? scored.sort((p, q) => q.clear - p.clear)[0];
+    lines.set(link, dedupe(pick.line));
+  }
+  return lines;
+}
+
+/** Drop repeated corners (a Z whose jog is on an endpoint's own line is an L). */
+function dedupe(line: Vector3[]): Vector3[] {
+  return line.filter((p, i) => i === 0 || p.distanceTo(line[i - 1]) > 1e-6);
+}
+
+function clearance(line: Vector3[], point: Vector3): number {
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const [p, q] = [line[i - 1], line[i]];
+    const d = q.clone().sub(p);
+    const t = d.lengthSq() > 0 ? Math.min(1, Math.max(0, point.clone().sub(p).dot(d) / d.lengthSq())) : 0;
+    best = Math.min(best, p.clone().addScaledVector(d, t).distanceTo(point));
+  }
+  return best;
+}
+
+function length(line: Vector3[]): number {
+  let total = 0;
+  for (let i = 1; i < line.length; i++) total += line[i].distanceTo(line[i - 1]);
+  return total;
+}
+
+/** The tools on the grid, D3V1N's lines to the ones it can reach, and the graph and gateway Rovo brings. */
 export interface ReworkScene {
   nodes: Record<SystemKind, SystemNode>;
   /** D3V1N's access lines, one per tool it can reach. */
   reach: Partial<Record<SystemKind, { line: Branch; route: Curve<Vector3> }>>;
+  /** The Teamwork Graph's links between the tools (undrawn until Rovo fires it up). */
+  graph: TeamworkGraph;
+  /** The secure gateway over D3V1N's line to Jira (unbuilt until Rovo builds it). */
+  gateway: Gateway;
 }
 
 /** Put every tool on the grid (hidden until a beat shows it) and D3V1N's access lines (undrawn). */
@@ -73,5 +149,9 @@ export function reworkScene(stage: SceneHost): ReworkScene {
     stage.add(line);
     reach[kind] = { line, route };
   }
-  return { nodes, reach };
+  const graph = new TeamworkGraph(stage, [SYSTEM_KINDS.map((k) => nodes[k])], { highways: false, lines: graphLines() });
+  const gateway = new Gateway(REWORK.gateway);
+  stage.add(gateway);
+  stage.onTick((dt) => gateway.update(dt));
+  return { nodes, reach, graph, gateway };
 }
