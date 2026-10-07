@@ -65,7 +65,7 @@ Layering: **Primitive → Animation → Stage → Story.**
 | Path | Role |
 |---|---|
 | `src/core/` | Palette, grid, shared textures and mesh helpers, seeded scatter, and shared runs (lines that bus together) |
-| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request) |
+| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
 | `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
 | `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), and the whole thing (`twoActs` builds the scene, `teamworkStory` plays it with captions) |

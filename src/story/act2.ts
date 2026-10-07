@@ -133,8 +133,9 @@ export function graphTraffic(
     since = 0;
     const link = graph.links[Math.floor(random() * graph.links.length)];
     const forward = random() < 0.5;
-    const to = forward ? link.to : link.from;
-    void shoot(stage, forward ? link.route : reversed(link.route), HANDOFF_SPEED, graph.boost).then(() => {
+    const [from, to] = forward ? [link.from, link.to] : [link.to, link.from];
+    // What changes hands is the sending system's product.
+    void shoot(stage, forward ? link.route : reversed(link.route), HANDOFF_SPEED, graph.boost, from.kind).then(() => {
       const member = at.get(to);
       if (running && member) member.sub.drone.flash = 1;
     });
