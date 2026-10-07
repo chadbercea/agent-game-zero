@@ -114,7 +114,7 @@ export async function workOne(stage: SceneHost, member: CrewMember): Promise<voi
     sinceShot += dt;
     if (sinceShot < PACKET_INTERVAL) return;
     sinceShot = 0;
-    void shoot(stage, backToGate);
+    void shoot(stage, backToGate, undefined, undefined, member.node.kind);
   });
   await tween(stage, JOB_SECONDS[job.kind], (t) => (job.progress = t));
   untick();
@@ -145,7 +145,7 @@ export function keepWorking(stage: SceneHost, member: CrewMember): () => void {
     sinceShot += dt;
     if (sinceShot < PACKET_INTERVAL) return;
     sinceShot = 0;
-    void shoot(stage, backToGate);
+    void shoot(stage, backToGate, undefined, undefined, member.node.kind);
   });
   return () => {
     untick();
