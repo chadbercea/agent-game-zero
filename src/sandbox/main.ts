@@ -28,7 +28,10 @@ const say = (text: string) => (caption.textContent = text);
 const story = new TeamworkStory(stage, scene, (step) => say(STORY_CAPTION[step]));
 
 // Volume of work: hover anything for its own numbers; the grand total sits quietly in the corner.
-hoverCards(stage, () => story.hoverTargets());
+hoverCards(stage, () => story.hoverTargets(), undefined, {
+  traceable: (key) => story.traceable(key),
+  trace: (key) => story.trace(key),
+});
 const totals = document.getElementById('totals')!;
 const fmt = (n: number) => n.toLocaleString('en-US');
 let sinceTotals = Infinity;

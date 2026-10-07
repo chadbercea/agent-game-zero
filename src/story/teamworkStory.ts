@@ -17,6 +17,7 @@ import { leaveBase } from './leaveBase';
 import { DEMO_1 } from './ledger';
 import { agentCard, gateCard, type HoverTarget, nodeCard, reviewCard } from './hoverCards';
 import { type Parts, Review } from './review';
+import { Trail, trailLegs } from './trail';
 import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, subId, TOOLS, Volume, type Worker } from './volume';
 import { takeRequest } from './request';
 import { SMALL_TICKET, Trickle } from './trickle';
@@ -130,6 +131,11 @@ export class TeamworkStory {
   readonly trickle: Trickle;
   /** "Is this right?": every request the agents finish goes through it, DEMO-1 included. */
   readonly review: Review;
+  /** DEMO-1's path back to its sources, lit from its line on a hover card. */
+  readonly trail: Trail;
+  /** Whose trail is up, and what it was drawn for (redrawn when DEMO-1's verdict changes). */
+  private traceKey: string | null = null;
+  private traceDrawn = '';
   /** D3V1N has DEMO-1 (a retry at the first gate doesn't drop it again). */
   private requested = false;
   private act1Crew: WorkingCrew | null = null;
@@ -153,6 +159,7 @@ export class TeamworkStory {
     this.volume.onArrive((id) => this.trickle.land(id));
     this.review = new Review(stage, REVIEW_SPOT, scene.act1.gate.position, this.volume.ledger);
     this.volume.onFinish(({ item, nodeKind }) => void this.review.submit(item, nodeKind));
+    this.trail = new Trail(stage);
     this.ticket.scale.setScalar(SMALL_TICKET);
     this.ticket.visible = false;
     stage.add(this.gateway, this.ticket);
@@ -162,6 +169,7 @@ export class TeamworkStory {
       // Review belongs to D3V1N's system: there while it's mapped, taking work while its gate is open.
       this.review.visible = scene.act1.map.revealed;
       this.review.open = scene.act1.map.revealed && scene.act1.gate.state === 'open';
+      this.drawTrail();
     });
   }
 
@@ -311,6 +319,38 @@ export class TeamworkStory {
     this.volume.followRequest();
     await Promise.all(leaving);
     scene.drone.status = 'waiting';
+  }
+
+  /** Which requests have a trail to show from their line on a hover card: DEMO-1, the one the story follows. */
+  traceable(key: string): boolean {
+    return key === DEMO_1.key;
+  }
+
+  /** Show a request's trail (or none). It stays up, and follows DEMO-1's verdict, until cleared. */
+  trace(key: string | null): void {
+    this.traceKey = key && this.traceable(key) ? key : null;
+    this.drawTrail();
+  }
+
+  /**
+   * DEMO-1's trail from D3V1N's gate to every source. Confirmed: every leg lit,
+   * through the gateway to the spec and the issue. Otherwise (denied, or not
+   * yet reviewed): the legs Act 1 had are lit, and the links it never had
+   * (across to Confluence and Jira) stay dark.
+   */
+  private drawTrail(): void {
+    const verdict = this.traceKey ? this.volume.ledger.verdictOf(this.traceKey) ?? 'open' : '';
+    const want = this.traceKey ? `${this.traceKey}:${verdict}` : '';
+    if (want === this.traceDrawn) return;
+    this.traceDrawn = want;
+    if (!this.traceKey) return this.trail.hide();
+    const all = trailLegs(this.scene, this.graph, ALL_PARTS.present);
+    if (verdict === 'confirmed') return this.trail.show(all);
+    const had = trailLegs(this.scene, this.graph, ACT1_PARTS.present);
+    this.trail.show(
+      had,
+      all.filter((leg) => !had.some((h) => h.route === leg.route)),
+    );
   }
 
   /** Everyone on the grid who can be working right now: both agents and every sub-agent still out. */
