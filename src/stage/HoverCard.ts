@@ -1,3 +1,10 @@
+/** One request on a card, with review's verdict if it has one. */
+export interface CardItem {
+  key: string;
+  title: string;
+  verdict?: 'confirmed' | 'denied';
+}
+
 /** What a hover card says about the thing under the pointer. */
 export interface CardModel {
   title: string;
@@ -7,9 +14,12 @@ export interface CardModel {
   counts: readonly [string, number][];
   /** Its part of the whole, already worded: "11% of all work done today". */
   share?: string;
-  /** What's under way now (a few), and how many more beyond those. */
-  items?: readonly { key: string; title: string }[];
+  /** What's under way now (a few), and how many more beyond those. A verdict shows as a tag. */
+  items?: readonly CardItem[];
   more?: number;
+  /** What it just finished, newest first, with any verdict; `recentLabel` names the list (default "Just finished"). */
+  recent?: readonly CardItem[];
+  recentLabel?: string;
   worksWith?: readonly string[];
   /** For a whole system: each part and how much it's done, e.g. [['Jira', 142], ['Confluence', 98]]. */
   breakdown?: readonly [string, number][];
@@ -36,6 +46,9 @@ const STYLE = `
 .hover-card li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hover-card li .key { color: #9a9ca4; font-variant-numeric: tabular-nums; margin-right: 6px; }
 .hover-card .more { color: #9a9ca4; }
+.hover-card .tag { margin-left: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.hover-card .tag.confirmed { color: #22d36b; }
+.hover-card .tag.denied { color: #ff5a5a; }
 .hover-card li .num { display: inline-block; min-width: 4ch; text-align: right; margin-right: 8px; color: #9a9ca4; font-variant-numeric: tabular-nums; }
 `;
 
@@ -108,14 +121,13 @@ function render(m: CardModel): HTMLElement[] {
   if (m.share) out.push(el('div', 'share', m.share));
   if (m.items?.length) {
     out.push(el('div', 'label', 'Under way'));
-    const list = el('ul');
-    for (const item of m.items) {
-      const li = el('li');
-      li.append(el('span', 'key', item.key), document.createTextNode(item.title));
-      list.append(li);
-    }
+    const list = itemList(m.items);
     if (m.more) list.append(el('li', 'more', `and ${m.more} more`));
     out.push(list);
+  }
+  if (m.recent?.length) {
+    out.push(el('div', 'label', m.recentLabel ?? 'Just finished'));
+    out.push(itemList(m.recent));
   }
   if (m.breakdown?.length) {
     out.push(el('div', 'label', 'By system'));
@@ -132,4 +144,15 @@ function render(m: CardModel): HTMLElement[] {
     out.push(el('div', undefined, m.worksWith.join(', ')));
   }
   return out;
+}
+
+function itemList(items: readonly CardItem[]): HTMLUListElement {
+  const list = el('ul');
+  for (const item of items) {
+    const li = el('li');
+    li.append(el('span', 'key', item.key), document.createTextNode(item.title));
+    if (item.verdict) li.append(el('span', `tag ${item.verdict}`, item.verdict === 'confirmed' ? 'Confirmed' : 'Denied'));
+    list.append(li);
+  }
+  return list;
 }

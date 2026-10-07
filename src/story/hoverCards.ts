@@ -3,6 +3,7 @@ import { SYSTEM_NAME, type SystemKind } from '../primitives/node/emblems';
 import { type CardModel, HoverCard } from '../stage/HoverCard';
 import type { Stage } from '../stage/Stage';
 import type { WorkLedger } from './ledger';
+import type { ReviewStats } from './review';
 import { TEAMWORK_LINKS } from './systemLayout';
 
 /** Something on the grid you can hover, and the card it shows. */
@@ -63,9 +64,27 @@ export function gateCard(ledger: WorkLedger, system: string): CardModel {
   };
 }
 
-function counts(ledger: WorkLedger, id: string, doneLabel: string): Pick<CardModel, 'counts' | 'items' | 'more'> {
+/** The review gate's card: how much it reviewed today, how much went green, and the last few verdicts. */
+export function reviewCard(stats: ReviewStats, waiting: number): CardModel {
+  const rate = stats.reviewed ? Math.round((stats.confirmed / stats.reviewed) * 100) : 100;
+  return {
+    title: 'Review',
+    subtitle: 'Gate · every finished request',
+    counts: [
+      ['reviewed', stats.reviewed],
+      ['confirmed', stats.confirmed],
+      ['denied', stats.denied],
+    ],
+    share: `${rate}% confirmed${waiting ? ` · ${waiting} waiting` : ''}`,
+    recent: stats.recent,
+    recentLabel: 'Latest verdicts',
+  };
+}
+
+function counts(ledger: WorkLedger, id: string, doneLabel: string): Pick<CardModel, 'counts' | 'items' | 'more' | 'recent'> {
   const t = ledger.tally(id);
   return {
+    recent: t.recent,
     counts: [
       [doneLabel, t.done],
       ['in progress', t.inProgress],
