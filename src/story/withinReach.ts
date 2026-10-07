@@ -1,4 +1,4 @@
-import { CurvePath, MathUtils, Vector3 } from 'three';
+import { CurvePath, MathUtils, type Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
 import { reversed } from '../primitives/branch/gridPath';
@@ -9,14 +9,13 @@ import { attachSignal } from '../stage/attachSignal';
 import { FACE_CAMERA } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { JOB_SECONDS } from './fanOut';
-import { D3V1N_REACH, type ReworkScene } from './rework';
-import { fly, tween, wait } from './timeline';
+import { D3V1N_REACH, type ReworkScene, TICKET_IN_JIRA } from './rework';
+import { fly, tween, until, wait } from './timeline';
 
 export type WithinReachStep = 'tools' | 'read' | 'branch' | 'working';
 
-/** Where the ticket floats while D3V1N reads it: beside the Jira node (screen-right), at about D3V1N's eye level. */
+/** How high the ticket floats beside the Jira node while D3V1N reads it: about D3V1N's eye level. */
 const READ_HEIGHT = 1.35;
-const READ_BESIDE = new Vector3(1, 0, -1).normalize().multiplyScalar(1.05);
 const READ_SECONDS = 2.6;
 /** D3V1N rides its lines at a working pace. */
 const RIDE_SPEED = 3.2;
@@ -62,7 +61,7 @@ export async function withinReach(
   // The ticket goes into Jira: it floats over along an easy arc and settles beside the node.
   onStep('read');
   const from = ticket.position.clone();
-  const to = jira.position.clone().add(READ_BESIDE);
+  const to = TICKET_IN_JIRA.clone();
   const fromY = ticket.card.position.y;
   const toY = READ_HEIGHT / ticket.scale.y;
   await tween(stage, 1.1, (t) => {
@@ -85,7 +84,7 @@ export async function withinReach(
   // Then over to GitHub, along its own lines, and starts a branch.
   onStep('branch');
   reading.mute(true);
-  await waitFor(stage, reading.quiet);
+  await until(stage, reading.quiet);
   reading.detach();
   jira.light = 'off';
   const path = new CurvePath<Vector3>();
@@ -120,16 +119,4 @@ export async function withinReach(
     github.emblem.scale.setScalar(EMBLEM_SCALE);
     github.light = 'off';
   };
-}
-
-/** Resolve once `ready` is true (checked every frame). */
-function waitFor(stage: SceneHost, ready: () => boolean): Promise<void> {
-  return new Promise((resolve) => {
-    if (ready()) return resolve();
-    const untick = stage.onTick(() => {
-      if (!ready()) return;
-      untick();
-      resolve();
-    });
-  });
 }

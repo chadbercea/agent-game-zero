@@ -46,3 +46,15 @@ export function tween(stage: Pick<SceneHost, 'onTick'>, seconds: number, fn: (t:
     });
   });
 }
+
+/** Resolve once `ready()` is true, checked every frame on the stage clock. */
+export function until(stage: Pick<SceneHost, 'onTick'>, ready: () => boolean): Promise<void> {
+  return new Promise((resolve) => {
+    if (ready()) return resolve();
+    const untick = stage.onTick(() => {
+      if (!ready()) return;
+      untick();
+      resolve();
+    });
+  });
+}
