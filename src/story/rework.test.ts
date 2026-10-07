@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_FOOTPRINT } from '../core/grid';
 import { SYSTEM_KINDS } from '../primitives/node/emblems';
-import { D3V1N_REACH, graphLines, REWORK, reachRoute, TICKET_IN_JIRA } from './rework';
+import type { SystemNode } from '../primitives/node/SystemNode';
+import type { SceneHost } from '../stage/Stage';
+import { D3V1N_REACH, graphLines, linkRoute, REWORK, reachRoute, TICKET_IN_JIRA } from './rework';
+import { TeamworkGraph } from './TeamworkGraph';
 import { TEAMWORK_LINKS } from './systemLayout';
 
 describe('Story Rework layout', () => {
@@ -40,6 +43,16 @@ describe('Story Rework layout', () => {
         expect(near).toBe(false);
       }
     }
+  });
+
+  it('the graph carries Bitbucket\'s work to GitHub through Code search, end to end', () => {
+    const stage = { onTick: () => () => {}, add: () => {} } as unknown as SceneHost;
+    const nodes = SYSTEM_KINDS.map((kind) => ({ kind, position: REWORK.nodes[kind] }) as unknown as SystemNode);
+    const graph = new TeamworkGraph(stage, [nodes], { highways: false, lines: graphLines() });
+    const route = linkRoute(graph, 'bitbucket', 'codesearch', 'github');
+    expect(route.getPoint(0).distanceTo(REWORK.nodes.bitbucket)).toBeLessThan(1e-3);
+    expect(route.getPoint(1).distanceTo(REWORK.nodes.github)).toBeLessThan(1e-3);
+    expect(() => linkRoute(graph, 'bitbucket', 'notion')).toThrow();
   });
 });
 
