@@ -4,12 +4,20 @@ import { Gateway } from '../primitives/gateway/Gateway';
 import { spawnDrone } from '../stage/spawnDrone';
 import { specimenStage } from '../stage/specimen';
 import type { SceneHost } from '../stage/Stage';
-import { crossGateway, gatewayCrossing, graphTraffic, securityGateway } from './act2';
-import { type CrewMember, fanOut, keepWorking } from './fanOut';
-import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, SECURITY_HOME, STORY_CENTER } from './layout';
+import { DroneFlight } from '../animation/DroneFlight';
+import { Ticket } from '../primitives/ticket/Ticket';
+import { attachSignal } from '../stage/attachSignal';
+import { accessCheck } from './accessCheck';
+import { act2, crossGateway, gatewayCrossing, goHome, graphTraffic, securityGateway } from './act2';
+import { type CrewMember, dismiss, fanOut, keepWorking } from './fanOut';
+import { hoverCards } from './hoverCards';
+import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, ROVO_HOME, ROVO_REQUEST, SECURITY_HOME, STORY_CENTER } from './layout';
+import { leaveBase } from './leaveBase';
+import { takeRequest } from './request';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { STORY_CAPTION, TeamworkStory } from './teamworkStory';
-import { tween, wait } from './timeline';
+import { fly, tween, wait } from './timeline';
+import { SMALL_TICKET } from './trickle';
 import { type TwoActScene, twoActScene, teamworkGraph } from './twoActs';
 
 const meta: Meta = {
@@ -37,10 +45,12 @@ function captioned(root: HTMLElement): (text: string) => void {
 }
 
 /**
- * The whole two-act story on loop: Act 1 (3 agents, 3 isolated jobs) → D3V1N
- * takes the work to Atlassian → the Teamwork Graph draws in → 7 agents, work
- * changing hands across the graph → everything converges into one shipped
- * deliverable at D3V1N → everyone comes home → replay.
+ * The whole story on loop, as the sandbox plays it: DEMO-1 lands for D3V1N →
+ * Act 1 (3 agents, 3 isolated jobs) → Rovo takes the same request → access,
+ * map, four more sub-agents → the security bot builds the gateway → the
+ * Teamwork Graph draws in → work changes hands across the graph while small
+ * tickets trickle in → DEMO-1 ships, one change among many → everyone comes
+ * home → replay. Hover anything for its volume of work.
  */
 export const Full: StoryObj = {
   render: () => {
@@ -48,6 +58,7 @@ export const Full: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const say = captioned(root);
     const story = new TeamworkStory(stage, twoActScene(stage), (step) => say(STORY_CAPTION[step]));
+    hoverCards(stage, () => story.hoverTargets());
     void (async () => {
       for (;;) {
         await wait(stage, 1);
@@ -83,14 +94,24 @@ async function connectedScene(stage: SceneHost, scene: TwoActScene, graph: Teamw
   return { crew, parentOf, stop: () => stops.forEach((stop) => stop()) };
 }
 
-/** The secure gateway, already built (lock on, streams flowing), for the staged stories. */
-function builtGateway(stage: SceneHost): Gateway {
+/**
+ * The secure gateway, already built (lock on), for the staged stories. Fed by
+ * the graph like the shipped story's: its streams flow only while the graph's
+ * lines are connected to its ends (see TeamworkGraph.feed).
+ */
+function builtGateway(stage: SceneHost, graph: TeamworkGraph): Gateway {
   const gateway = new Gateway(GATEWAY);
   gateway.dropFrom.copy(gateway.center).setY(0.6);
-  gateway.built = gateway.lockDrop = gateway.conduit.streams = 1;
+  gateway.built = gateway.lockDrop = 1;
   stage.add(gateway);
   stage.onTick((dt) => gateway.update(dt));
+  graph.feed(gateway.conduit);
   return gateway;
+}
+
+/** Once the lines are connected, the streams start inside the tunnel. */
+async function startStreams(stage: SceneHost, gateway: Gateway): Promise<void> {
+  await tween(stage, 1, (t) => (gateway.conduit.streams = t));
 }
 
 /** Rovo, parked at the Atlassian gate for the staged stories. */
@@ -106,10 +127,11 @@ export const Handoffs: StoryObj = {
     stage.centerOn(STORY_CENTER);
     const scene = twoActScene(stage);
     const graph = teamworkGraph(stage, scene);
-    builtGateway(stage);
+    const gateway = builtGateway(stage, graph);
     const rovo = stagedRovo(stage);
     void (async () => {
       const { crew } = await connectedScene(stage, scene, graph, rovo);
+      await startStreams(stage, gateway);
       graphTraffic(stage, graph, crew);
     })();
     return root;
@@ -151,6 +173,115 @@ export const SecureGateway: StoryObj = {
           gateway.lockDrop = 1 - t;
         });
         await wait(stage, 1);
+      }
+    })();
+    return root;
+  },
+};
+
+/**
+ * The transition into Act 2. Act 1 is already working at the first gate. Rovo
+ * takes the same request (DEMO-1 lands in front of it), flies to the
+ * Atlassian gate, gets access, maps the system and fans out four sub-agents.
+ * Loops: Rovo's crew is dismissed, Rovo leaves, and it starts again.
+ */
+export const Transition: StoryObj = {
+  render: () => {
+    const { root, stage } = specimenStage(VIEW);
+    stage.centerOn(STORY_CENTER);
+    const say = captioned(root);
+    const scene = twoActScene(stage);
+    const { drone, act1, act2: system } = scene;
+    act1.gate.state = 'open';
+    drone.position.copy(ACT1_GATE);
+    drone.status = 'working';
+    act1.map.showAll();
+    act1.map.linesVisible = false;
+    const ticket = new Ticket(undefined, { label: false });
+    ticket.scale.setScalar(SMALL_TICKET);
+    ticket.visible = false;
+    stage.add(ticket);
+    stage.onTick((dt) => ticket.update(dt));
+    void (async () => {
+      const crew1 = await fanOut(stage, drone, act1.map);
+      crew1.forEach((member) => keepWorking(stage, member));
+      say(STORY_CAPTION.working);
+      for (;;) {
+        await wait(stage, 1.5);
+        say(STORY_CAPTION.rovo);
+        const rovo = spawnDrone(stage, ROVO_HOME.x, ROVO_HOME.z, {
+          name: 'Rovo',
+          lineage: 'cyan',
+          showLabel: true,
+          status: 'waiting',
+        });
+        const signal = attachSignal(stage, rovo.drone, system.gate);
+        await takeRequest(stage, ticket, ROVO_REQUEST, rovo.drone);
+        rovo.drone.status = 'working';
+        await fly(stage, DroneFlight.to(rovo.drone, system.gate.position));
+        say(STORY_CAPTION['access-2']);
+        await accessCheck(stage, rovo.drone, system.gate);
+        const crew2 = await act2(stage, rovo.drone, system.map, (step) =>
+          say(STORY_CAPTION[step === 'mapping' ? 'mapping-2' : 'fan-out-2']),
+        );
+        say('Both systems working, still apart');
+        await wait(stage, 4);
+        crew2.stop();
+        dismiss(crew2.crew);
+        system.map.hide();
+        system.gate.state = 'off';
+        await leaveBase(stage, { drone: rovo.drone, gate: system.gate, signal }, ROVO_HOME);
+        await tween(stage, 0.6, (t) => (rovo.drone.fade = 1 - t));
+        signal.detach();
+        rovo.despawn();
+      }
+    })();
+    return root;
+  },
+};
+
+/**
+ * The end of the story: the connected system at work, then DEMO-1 ships, one
+ * change among many. Both agents acknowledge, everyone heads home carrying
+ * their work, and the graph fades; the tunnel's streams stop with its lines.
+ * Then the gateway folds away. Loops.
+ */
+export const ShipAndHome: StoryObj = {
+  render: () => {
+    const { root, stage } = specimenStage(VIEW);
+    stage.centerOn(STORY_CENTER);
+    const say = captioned(root);
+    const scene = twoActScene(stage);
+    const graph = teamworkGraph(stage, scene);
+    const gateway = builtGateway(stage, graph);
+    const rovo = stagedRovo(stage);
+    void (async () => {
+      for (;;) {
+        gateway.built = gateway.lockDrop = 1;
+        const working = await connectedScene(stage, scene, graph, rovo);
+        await startStreams(stage, gateway);
+        say(STORY_CAPTION.connected);
+        const stopTraffic = graphTraffic(stage, graph, working.crew);
+        await wait(stage, 4);
+        stopTraffic();
+        working.stop();
+        await wait(stage, 0.6);
+        scene.drone.flash = rovo.flash = 1;
+        say(STORY_CAPTION.shipped);
+        await wait(stage, 2.5);
+        say(STORY_CAPTION.home);
+        await Promise.all([
+          ...working.crew.map((m, i) => wait(stage, i * 0.25).then(() => goHome(stage, m, working.parentOf(m)))),
+          wait(stage, 1).then(() => graph.fade(stage, 1.6)),
+        ]);
+        await tween(stage, 0.8, (t) => {
+          gateway.built = 1 - t;
+          gateway.lockDrop = 1 - t;
+        });
+        say(STORY_CAPTION.done);
+        scene.act1.map.hide();
+        scene.act2.map.hide();
+        await wait(stage, 1.5);
       }
     })();
     return root;
