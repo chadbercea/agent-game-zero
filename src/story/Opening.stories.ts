@@ -105,3 +105,14 @@ export const HumanLoopAmbient: StoryObj = {
     return root;
   },
 };
+
+/**
+ * The whole story, on loop. After the output line, the payoff: D3V1N's crew
+ * spreads across the whole graph (through the gateway), Rovo's sub-agents
+ * help here and there, blocks keep flowing into the portal, and the camera
+ * pulls back to show the whole grid at work. No captions.
+ */
+export const FullSystem: StoryObj = {
+  name: '06 Full System',
+  render: () => loop('full-system', 20, { viewSize: 15.5, focusY: 0.6, center: 'output' }),
+};
