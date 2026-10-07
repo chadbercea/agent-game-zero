@@ -13,7 +13,7 @@ function setup(seed = 2) {
   const stage = { onTick: (fn: Tick) => (ticks.push(fn), () => {}), add: () => {} } as unknown as SceneHost;
   const ledger = new WorkLedger(seed);
   const gate = Object.assign(new Object3D(), { state: 'off' as GateState }) as ReviewGate;
-  const review = new Review(stage, new Vector3(2, 0, 4.5), new Vector3(2, 0, 2), ledger, seed, { gate });
+  const review = new Review(stage, new Vector3(2, 0, 4.5), new Vector3(2, 0, 2), ledger, { gate });
   review.open = true;
   const run = async (seconds: number, step = 0.05) => {
     for (let t = 0; t < seconds; t += step) {
@@ -42,15 +42,25 @@ describe('Review', () => {
     expect(review.summary().recent[0]).toMatchObject({ key: DEMO_1.key, verdict: 'denied' });
   });
 
-  it('reviews every submission; most go green', async () => {
+  it('reviews every submission; ordinary requests pass', async () => {
     const { review, run } = setup();
-    const verdicts = Array.from({ length: 80 }, (_, n) => review.submit(item(n)));
-    await run(120);
-    const all = await Promise.all(verdicts);
-    const s = review.summary();
-    expect(s.reviewed).toBe(80);
-    expect(s.confirmed + s.denied).toBe(80);
-    expect(all.filter((v) => v === 'confirmed').length).toBeGreaterThan(70);
+    const verdicts = Array.from({ length: 30 }, (_, n) => review.submit(item(n)));
+    await run(60);
+    expect(await Promise.all(verdicts)).toEqual(Array(30).fill('confirmed'));
+    expect(review.summary()).toMatchObject({ reviewed: 30, confirmed: 30, denied: 0 });
+  });
+
+  it("shows a request's parts while it's reviewed: what it has, and dim slots for what's missing", async () => {
+    const { review, run } = setup();
+    const verdict = review.submit(DEMO_1, 'github', 'denied', { present: ['figma', 'github', 'notion'], missing: ['confluence', 'jira'] });
+    await run(0.1);
+    expect(review.showingParts).toBe(true);
+    await expect(Promise.race([verdict, run(3).then(() => verdict)])).resolves.toBe('denied');
+    expect(review.showingParts).toBe(true); // holds just past the verdict, light still on
+    expect(review.gate.state).toBe('denied');
+    await run(3);
+    expect(review.showingParts).toBe(false);
+    expect(review.gate.state).toBe('off');
   });
 
   it('keeps up with volume: reviews faster when work piles up, and counts the overflow without drawing it', async () => {

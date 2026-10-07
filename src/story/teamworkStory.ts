@@ -16,7 +16,7 @@ import { D3V1N_REQUEST, GATEWAY, HOME, REVIEW_SPOT, ROVO_HOME, ROVO_REQUEST, SEC
 import { leaveBase } from './leaveBase';
 import { DEMO_1 } from './ledger';
 import { agentCard, gateCard, type HoverTarget, nodeCard, reviewCard } from './hoverCards';
-import { Review } from './review';
+import { type Parts, Review } from './review';
 import { ATLASSIAN, D3V1N_ID, nodeId, ROVO_ID, subId, TOOLS, Volume, type Worker } from './volume';
 import { takeRequest } from './request';
 import { SMALL_TICKET, Trickle } from './trickle';
@@ -33,6 +33,8 @@ export type StoryStep =
   | 'mapping'
   | 'fan-out'
   | 'working'
+  | 'review-1'
+  | 'missing-context'
   | 'rovo'
   | 'access-2'
   | 'mapping-2'
@@ -52,6 +54,8 @@ export const STORY_CAPTION: Record<StoryStep, string> = {
   mapping: 'Access granted. Mapping the system…',
   'fan-out': 'Spawning sub-agents…',
   working: 'Act 1 · 3 agents, 3 isolated jobs',
+  'review-1': `${DEMO_1.key} goes to review with what Act 1 could make on its own…`,
+  'missing-context': `${DEMO_1.key} denied: missing context. No issue key on the branch; the design isn't linked to a spec`,
   rovo: 'Rovo picks up the same request for the Atlassian side…',
   'access-2': 'Rovo checking access to Atlassian…',
   'mapping-2': 'Access granted. Mapping Atlassian…',
@@ -71,6 +75,11 @@ export const ACT1_HOLD = 4;
 export const CONNECTED_SECONDS = 14;
 /** How long the moment DEMO-1 ships holds before everyone heads home. */
 const SHIPPED_HOLD = 2.5;
+/** What DEMO-1 is made of, before and after: Act 1 can make the design, branch and PRD, but not the spec or the issue link. */
+const ACT1_PARTS: Parts = { present: ['figma', 'github', 'notion'], missing: ['confluence', 'jira'] };
+const ALL_PARTS: Parts = { present: ['figma', 'github', 'notion', 'confluence', 'jira'], missing: [] };
+/** How long the denial holds before Rovo arrives. */
+const DENIAL_HOLD = 2.5;
 /** When travelers set off and despawners leave during the connected phase (seconds in, then apart). */
 const TRAVEL_START = 1;
 const TRAVEL_APART = 1.6;
@@ -99,6 +108,8 @@ interface Cast {
  * one small ticket, dropped in front of D3V1N and, later, Rovo.
  * Act 1: D3V1N takes DEMO-1, gets access → map → three sub-agents, three
  * isolated jobs.
+ * Before Rovo arrives, DEMO-1 goes to review with only Act 1's parts and is
+ * denied for missing context (no spec, no issue link).
  * Act 2: Rovo takes the same request and gets access to Atlassian → map → four sub-agents →
  * a security bot builds the secure gateway (glass tunnel, lock) → the
  * Teamwork Graph draws in between every node → work changes hands along the
@@ -140,7 +151,7 @@ export class TeamworkStory {
     this.graph.feed(this.gateway.conduit);
     this.trickle = new Trickle(stage, [scene.act1, scene.act2]);
     this.volume.onArrive((id) => this.trickle.land(id));
-    this.review = new Review(stage, REVIEW_SPOT, scene.act1.gate.position, this.volume.ledger, hashSeed('review'));
+    this.review = new Review(stage, REVIEW_SPOT, scene.act1.gate.position, this.volume.ledger);
     this.volume.onFinish(({ item, nodeKind }) => void this.review.submit(item, nodeKind));
     this.ticket.scale.setScalar(SMALL_TICKET);
     this.ticket.visible = false;
@@ -179,6 +190,12 @@ export class TeamworkStory {
     }
 
     if (!this.rovo) {
+      // Before: DEMO-1 goes to review with only what Act 1's isolated agents could make. It's denied
+      // for missing context, while Act 1's own single-system work keeps passing. Nothing pauses.
+      onStep('review-1');
+      await this.review.submit(DEMO_1, 'github', 'denied', ACT1_PARTS);
+      onStep('missing-context');
+      await wait(stage, DENIAL_HOLD);
       onStep('rovo');
       this.rovo = spawnDrone(stage, ROVO_HOME.x, ROVO_HOME.z, {
         name: 'Rovo',
@@ -225,7 +242,8 @@ export class TeamworkStory {
     await wait(stage, 0.6);
     // DEMO-1 is finished: it goes to review like everything else. Confirmed, it's done, and the work goes on.
     onStep('review');
-    await this.review.submit(DEMO_1, 'bitbucket', 'confirmed');
+    // After: the same request, every part filled in across the graph. Confirmed.
+    await this.review.submit(DEMO_1, 'bitbucket', 'confirmed', ALL_PARTS);
     this.volume.ledger.finish(DEMO_1.key);
     scene.drone.flash = 1;
     rovo.flash = 1;

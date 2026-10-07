@@ -26,7 +26,7 @@ function scene() {
   stage.add(main);
   stage.onTick((dt) => animator.update(dt));
   const ledger = new WorkLedger(3);
-  const review = new Review(stage, SPOT, MAIN, ledger, 3);
+  const review = new Review(stage, SPOT, MAIN, ledger);
   review.visible = review.open = true;
   hoverCards(stage, () => [{ object: review.gate, card: () => reviewCard(review.summary(), review.waiting) }], new HoverCard(root));
   return { root, stage, review };
@@ -39,7 +39,7 @@ const caption = (root: HTMLElement) => {
   return (text: string) => (el.textContent = text);
 };
 
-/** Review at volume: finished requests keep coming, one product at a time rides in; most go green, now and then one is denied. Hover the gate. */
+/** Review at volume: finished requests keep coming, one product at a time rides in; each is one system's work, and each passes. Hover the gate. */
 export const AtVolume: StoryObj = {
   render: () => {
     const { root, stage, review } = scene();
@@ -56,7 +56,11 @@ export const AtVolume: StoryObj = {
   },
 };
 
-/** Both outcomes, one after the other: DEMO-1 denied, then DEMO-1 confirmed. Loops. */
+/**
+ * Both outcomes, before and after: DEMO-1 with only Act 1's parts (no spec, no
+ * issue link: dim empty slots) is denied for missing context; then with every
+ * part, it's confirmed. Loops.
+ */
 export const BothOutcomes: StoryObj = {
   render: () => {
     const { root, stage, review } = scene();
@@ -64,11 +68,14 @@ export const BothOutcomes: StoryObj = {
     void (async () => {
       for (;;) {
         say(`${DEMO_1.key} at review…`);
-        await review.submit(DEMO_1, 'github', 'denied');
-        say(`${DEMO_1.key} denied: missing context`);
+        await review.submit(DEMO_1, 'github', 'denied', { present: ['figma', 'github', 'notion'], missing: ['confluence', 'jira'] });
+        say(`${DEMO_1.key} denied: missing context. No issue key on the branch; the design isn't linked to a spec`);
         await wait(stage, 2);
         say(`${DEMO_1.key} at review…`);
-        await review.submit(DEMO_1, 'bitbucket', 'confirmed');
+        await review.submit(DEMO_1, 'bitbucket', 'confirmed', {
+          present: ['figma', 'github', 'notion', 'confluence', 'jira'],
+          missing: [],
+        });
         say(`${DEMO_1.key} confirmed`);
         await wait(stage, 2);
       }
