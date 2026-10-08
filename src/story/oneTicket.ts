@@ -16,11 +16,13 @@ import { dropTicket, handOff } from './request';
 import { fly, tween, wait } from './timeline';
 
 /** The one ticket's beats, in order (Version A for now). */
-export const ONE_TICKET_BEATS = ['a1', 'a2'] as const;
+export const ONE_TICKET_BEATS = ['a1', 'a2', 'a3', 'a4'] as const;
 export type OneTicketBeat = (typeof ONE_TICKET_BEATS)[number];
 
 /** The work in Version A: a Linear issue, assigned to D3V1N. */
 export const ILI_990 = { key: 'ILI-990', title: 'Add dark mode' };
+/** The PRD the ticket links to, in Notion. */
+export const DARK_MODE_PRD = { key: 'PRD', title: 'Dark mode' };
 
 /** Version A's tools, in the order D3V1N visits them, left to right on screen. */
 export const A_KINDS: readonly SystemKind[] = ['linear', 'notion', 'figma', 'github'];
@@ -81,6 +83,10 @@ export class OneTicket {
   readonly ticket = new Ticket(ILI_990);
   /** The ticket's link onward to the Notion PRD: shows once D3V1N has read it. */
   readonly link: Group;
+  /** The PRD in Notion: already there, waiting beside its node. */
+  readonly prd = new Ticket(DARK_MODE_PRD);
+  /** The PRD's acceptance criteria link onward to the design in Figma: shows once D3V1N has read it. */
+  readonly prdLink: Group;
   /** What D3V1N is carrying, bottom of the stack first. */
   readonly carried: Product[] = [];
 
@@ -101,8 +107,16 @@ export class OneTicket {
     this.link = linkMarker('notion');
     this.link.visible = false;
     this.ticket.card.add(this.link);
-    stage.add(this.ticket);
-    stage.onTick((dt) => this.ticket.update(dt));
+    this.prd.scale.setScalar(TICKET_SCALE);
+    this.prd.position.copy(this.stop('notion').node.position).add(TICKET_BESIDE);
+    this.prdLink = linkMarker('figma');
+    this.prdLink.visible = false;
+    this.prd.card.add(this.prdLink);
+    stage.add(this.ticket, this.prd);
+    stage.onTick((dt) => {
+      this.ticket.update(dt);
+      this.prd.update(dt);
+    });
   }
 
   get drone(): Drone {
@@ -122,6 +136,12 @@ export class OneTicket {
     if (upTo < 1) return;
     await wait(this.stage, 0.5);
     await this.readTicket();
+    if (upTo < 2) return;
+    await wait(this.stage, 0.5);
+    await this.readPrd();
+    if (upTo < 3) return;
+    await wait(this.stage, 0.5);
+    await this.pullDesign();
   }
 
   /**
@@ -141,25 +161,71 @@ export class OneTicket {
    * D3V1N goes back out through the gate and home, carrying it.
    */
   private async readTicket(): Promise<void> {
-    const { stage, drone, ticket } = this;
-    const linear = this.stop('linear');
-    await accessCheck(stage, drone, linear.gate, { thinkSeconds: THINK_SECONDS });
+    await this.visit('linear', async () => {
+      this.ticket.glow = 1;
+      await this.pickUp(new Product('linear'), this.ticket.card);
+      await this.showLink(this.link);
+    });
+  }
+
+  /**
+   * A3: D3V1N follows the ticket's link to Notion (the link pulses as it
+   * sets off), crosses Notion's own gate, and reads the PRD: a page lifts
+   * onto its stack, and the PRD's acceptance criteria show their link on to
+   * Figma. Then back out and home.
+   */
+  private async readPrd(): Promise<void> {
+    await this.follow(this.link);
+    await this.visit('notion', async () => {
+      this.prd.glow = 1;
+      await this.pickUp(new Product('notion'), this.prd.card);
+      await this.showLink(this.prdLink);
+    });
+  }
+
+  /**
+   * A4: D3V1N follows the PRD's link to Figma, crosses Figma's own gate (its
+   * MCP), and pulls the design off the node onto its stack: ticket, PRD,
+   * design. Then back out and home.
+   */
+  private async pullDesign(): Promise<void> {
+    await this.follow(this.prdLink);
+    await this.visit('figma', async () => {
+      await this.pickUp(new Product('figma'), this.stop('figma').node.emblem);
+    });
+  }
+
+  /**
+   * One stop on the row: from home, D3V1N crosses the tool's own gate
+   * (yellow, then green), goes on to the node, does `work` there, then goes
+   * back out through the gate, which closes behind it, and home.
+   */
+  private async visit(kind: SystemKind, work: () => Promise<void>): Promise<void> {
+    const { stage, drone } = this;
+    const { gate, node } = this.stop(kind);
+    await accessCheck(stage, drone, gate, { thinkSeconds: THINK_SECONDS });
     await wait(stage, 0.4);
-    await fly(stage, DroneFlight.to(drone, linear.node.position));
+    await fly(stage, DroneFlight.to(drone, node.position));
     drone.status = 'waiting';
-    // Read it: the ticket lights up and its issue lifts onto D3V1N's stack.
-    ticket.glow = 1;
-    await this.pickUp(new Product('linear'), ticket.card);
-    // The ticket links on to the PRD in Notion.
-    this.link.visible = true;
-    await tween(stage, 0.35, (t) => this.link.scale.setScalar(Math.max(0.001, t)));
+    await work();
     await wait(stage, 0.6);
-    // Out the way it came: back through the gate, which closes behind it, and home.
     drone.status = 'working';
-    await fly(stage, DroneFlight.to(drone, linear.gate.position));
-    linear.gate.state = 'off';
+    await fly(stage, DroneFlight.to(drone, gate.position));
+    gate.state = 'off';
     await fly(stage, DroneFlight.to(drone, A_LAYOUT.home));
     drone.status = 'waiting';
+  }
+
+  /** A link pops up on the doc D3V1N just read. */
+  private async showLink(link: Group): Promise<void> {
+    link.visible = true;
+    await tween(this.stage, 0.35, (t) => link.scale.setScalar(Math.max(0.001, t)));
+  }
+
+  /** D3V1N follows a link: it pulses, and D3V1N lights up as it takes it. */
+  private async follow(link: Group): Promise<void> {
+    this.drone.flash = 1;
+    await tween(this.stage, 0.5, (t) => link.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.35));
   }
 
   /** A product rises from `from` onto the top of D3V1N's carried stack. */
@@ -192,6 +258,7 @@ export class OneTicket {
     ticket.visible = false;
     ticket.opacity = 1;
     this.link.visible = false;
+    this.prdLink.visible = false;
     for (const { gate } of this.stops) gate.state = 'off';
     drone.position.copy(A_LAYOUT.home);
     drone.status = 'waiting';
