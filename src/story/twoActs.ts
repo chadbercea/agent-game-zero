@@ -1,3 +1,4 @@
+import type { DroneAnimator } from '../animation/DroneAnimator';
 import { GateAnimator } from '../animation/GateAnimator';
 import type { Drone } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
@@ -23,6 +24,8 @@ export interface GateSystem {
 export interface TwoActScene {
   /** D3V1N: Act 1's parent agent, at the first gate. */
   drone: Drone;
+  /** What moves D3V1N (it stays on stage between runs; restart it for a run to play the same). */
+  animator: DroneAnimator;
   /** The Teamwork Graph's in-system link lines, as the layout chose them. */
   graphLines: SystemsLayout['lines'];
   /** Feeder lines into the secure gateway, for every node that talks across systems. */
@@ -88,7 +91,7 @@ export function twoActScene(stage: SceneHost): TwoActScene {
     stage.onTick((dt) => animator.update(dt));
     return gate;
   };
-  const { drone } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
+  const { drone, animator } = spawnDrone(stage, HOME.x, HOME.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
   const gate1 = gateAt(ACT1_GATE);
   const gate2 = gateAt(ATLASSIAN_GATE);
   const {
@@ -98,6 +101,7 @@ export function twoActScene(stage: SceneHost): TwoActScene {
   } = storyLayout();
   return {
     drone,
+    animator,
     graphLines: lines,
     feeders,
     act1: {

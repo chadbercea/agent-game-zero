@@ -22,7 +22,7 @@ import { JOB_SECONDS } from './fanOut';
 import { fullSystem } from './fullSystem';
 import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
 import { HumanLoop } from './humanLoop';
-import { D3V1N_REQUEST, GATEWAY, HOME, ROVO_HOME } from './layout';
+import { ACT1_GATE, GATEWAY, HOME, ROVO_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { opening } from './opening';
 import { absorb, handOff } from './request';
@@ -217,11 +217,11 @@ export class StoryV2 {
     const { stage, roster } = this;
     const upTo = V2_BEATS.indexOf(through);
     roster.begin();
-    // Beat 1: a cloud drops DEMO-1 in front of D3V1N's home; D3V1N floats in and notices it.
+    // Beat 1: a cloud drops DEMO-1 at D3V1N's gate (where the gate will come up); D3V1N floats in and notices it.
     await opening(
       stage,
       this,
-      { spot: D3V1N_REQUEST, cloudHeight: V2_CLOUD_HEIGHT, droneFrom: D3V1N_FROM, droneTo: HOME },
+      { spot: ACT1_GATE, cloudHeight: V2_CLOUD_HEIGHT, droneFrom: D3V1N_FROM, droneTo: HOME },
       (step) => step === 'drone' && roster.arrive(this.drone),
     );
     if (upTo < 1) return;
@@ -644,6 +644,8 @@ export class StoryV2 {
     await tween(stage, 0.6, (t) => (drone.fade = Math.min(drone.fade, 1 - t)));
     drone.scale.setScalar(1);
     drone.status = 'waiting';
+    // D3V1N stays on stage between runs: its motion starts over too, so every run plays the same.
+    scene.animator.restart();
     // Gates sink back into the floor; everything called goes off the grid again.
     await tween(stage, 0.4, (t) => {
       for (const g of [scene.act1.gate, scene.act2.gate]) if (g.visible) g.scale.setScalar(Math.max(0.001, 1 - t));

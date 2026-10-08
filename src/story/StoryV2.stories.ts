@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
-import { ACT1_GATE, D3V1N_REQUEST, STORY_CENTER } from './layout';
+import { ACT1_GATE, HOME, STORY_CENTER } from './layout';
 import { StoryV2, type V2Beat } from './storyV2';
 import { wait } from './timeline';
 
@@ -13,7 +13,8 @@ export default meta;
 /** Play the v2 story through `beat`, hold, clear, and go again. */
 function loop(through: V2Beat, hold: number, view: { viewSize: number; focusY: number; center: 'ticket' | 'gate' | 'story' }) {
   const { root, stage } = specimenStage({ viewSize: view.viewSize, focusY: view.focusY });
-  const focus = { ticket: D3V1N_REQUEST, gate: ACT1_GATE, story: STORY_CENTER }[view.center];
+  // The opening frames the gate, where the ticket lands, and D3V1N's home, where it floats in to.
+  const focus = { ticket: ACT1_GATE.clone().lerp(HOME, 0.5), gate: ACT1_GATE, story: STORY_CENTER }[view.center];
   stage.centerOn(focus.clone().setY(view.focusY));
   const story = new StoryV2(stage);
   void (async () => {
@@ -29,7 +30,7 @@ function loop(through: V2Beat, hold: number, view: { viewSize: number; focusY: n
 
 /**
  * Beat 1, on loop: a cloud drifts across the sky and drops a Jira ticket
- * (DEMO-1) in front of D3V1N's home by its gate; the cloud drifts on, and
+ * (DEMO-1) at D3V1N's gate, before the gate is up; the cloud drifts on, and
  * D3V1N floats in and notices it. No captions.
  */
 export const Opening: StoryObj = {
