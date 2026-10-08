@@ -99,4 +99,27 @@ describe('StoryV2 drone sequence', () => {
     expect(tertiaryCount).toBe(1);
     expect((await onGrid('full-system')).nodes).toHaveLength(7);
   });
+
+  it("lists only called tools on each gate's hover card, as they come up, and starts over after a reset", async () => {
+    const { stage, run } = testStage();
+    const story = new StoryV2(stage);
+    const listed = (gate: 0 | 1) => {
+      const target = story.hoverTargets()[gate];
+      return (target.card().breakdown ?? []).map(([name]) => name).sort();
+    };
+    let played = false;
+    void story.play('own-system').then(() => (played = true));
+    await run(400, () => played);
+    expect(listed(0)).toEqual(['GitHub']);
+    expect(listed(1)).toEqual([]);
+    played = false;
+    void story.reset().then(() => (played = true));
+    await run(60, () => played);
+    expect(listed(0)).toEqual([]);
+    played = false;
+    void story.play('juiced-crew').then(() => (played = true));
+    await run(400, () => played);
+    expect(listed(0)).toEqual(['GitHub']);
+    expect(listed(1)).toEqual(['Bitbucket', 'Jira']);
+  });
 });
