@@ -14,6 +14,7 @@ const SPOT: Record<SystemKind, [number, number]> = {
   confluence: [3.5, -5],
   bitbucket: [6, -3],
   codesearch: [6.5, 0.5],
+  linear: [-6, -4],
 };
 
 type Tick = (dt: number, elapsed: number) => void;

@@ -23,6 +23,7 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   jira: 'Issue',
   bitbucket: 'Pull request',
   codesearch: 'Code context',
+  linear: 'Issue',
 };
 
 /** About the size of the old work cube: small enough to ride a line, big enough to read. */
@@ -42,6 +43,7 @@ const cache = new Map<SystemKind, BufferGeometry>();
  * - Jira: an issue, a landscape card with a key chip
  * - Bitbucket: a pull request, two dots joined into one
  * - Code search: code context, a lens
+ * - Linear: an issue, a square card with a status ring
  */
 export function productGeometry(kind: SystemKind): BufferGeometry {
   const hit = cache.get(kind);
@@ -80,6 +82,11 @@ export function productGeometry(kind: SystemKind): BufferGeometry {
     add(new SphereGeometry(s * 0.24, 12, 8), 0, -s * 0.32);
     add(new CylinderGeometry(s * 0.07, s * 0.07, s * 0.7, 8), -s * 0.15, 0, 0, 0.5);
     add(new CylinderGeometry(s * 0.07, s * 0.07, s * 0.7, 8), s * 0.15, 0, 0, -0.5);
+  } else if (kind === 'linear') {
+    add(new RoundedBoxGeometry(s * 0.86, s * 0.86, s * 0.1, 2, s * 0.08));
+    add(new TorusGeometry(s * 0.13, s * 0.04, 6, 16), -s * 0.18, s * 0.18, s * 0.07);
+    add(new BoxGeometry(s * 0.56, s * 0.07, s * 0.06), 0, -s * 0.1, s * 0.07);
+    add(new BoxGeometry(s * 0.36, s * 0.07, s * 0.06), -s * 0.1, -s * 0.26, s * 0.07);
   } else {
     add(new TorusGeometry(s * 0.3, s * 0.08, 8, 20), -s * 0.08, s * 0.1);
     add(new CylinderGeometry(s * 0.08, s * 0.08, s * 0.45, 8), s * 0.26, -s * 0.3, 0, 0.8);

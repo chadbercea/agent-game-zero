@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { inRun } from '../core/sharedRuns';
-import { ATLASSIAN_KINDS, JOB_KINDS, SYSTEM_KINDS } from '../primitives/node/emblems';
+import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { LineCurve3 } from 'three';
@@ -21,7 +21,7 @@ function graph(): TeamworkGraph {
 describe('crew routes', () => {
   it('every tool is reachable over the graph from GitHub', () => {
     const g = graph();
-    for (const kind of SYSTEM_KINDS) {
+    for (const kind of [...JOB_KINDS, ...ATLASSIAN_KINDS]) {
       const path = graphPathKinds(g, 'github', kind);
       expect(path?.[0]).toBe('github');
       expect(path?.at(-1)).toBe(kind);

@@ -17,12 +17,15 @@ import { solid } from '../../core/mesh';
 export type JobKind = 'figma' | 'github' | 'notion';
 /** Act 2 systems, behind the Atlassian gate: their work flows through the Teamwork Graph instead. */
 export type AtlassianKind = 'codesearch' | 'confluence' | 'jira' | 'bitbucket';
+/** Third-party trackers: where a ticket lives outside Atlassian. No job animation. */
+export type TrackerKind = 'linear';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind;
+export type SystemKind = JobKind | AtlassianKind | TrackerKind;
 
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
 export const ATLASSIAN_KINDS: readonly AtlassianKind[] = ['codesearch', 'confluence', 'jira', 'bitbucket'];
-export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS];
+export const TRACKER_KINDS: readonly TrackerKind[] = ['linear'];
+export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS];
 
 /** Does this system have a job animation? */
 export function hasJob(kind: SystemKind): kind is JobKind {
@@ -37,6 +40,7 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   confluence: 'Confluence',
   jira: 'Jira',
   bitbucket: 'Bitbucket',
+  linear: 'Linear',
 };
 
 export interface EmblemMaterials {
@@ -112,6 +116,22 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
       for (let r = 0; r < n; r++) place(solid(card, c === 2 ? m.graphite : m.shell), -0.12 + c * 0.12, 0.09 - r * 0.075, 0.005);
     });
     for (let c = 0; c < 3; c++) place(solid(new BoxGeometry(0.1, 0.012, 0.012), m.graphite), -0.12 + c * 0.12, 0.135, 0.005);
+  } else if (kind === 'linear') {
+    // Tracked work, third-party: a disc crossed by diagonal stripes, in the spirit of Linear's mark.
+    const r = 0.21;
+    const disc = place(solid(new CylinderGeometry(r, r, 0.06, 24), m.shell), 0, 0);
+    disc.rotation.x = Math.PI / 2;
+    // Stripes run corner to corner (top-left to bottom-right), each a chord of the disc.
+    const stripes = new Group();
+    stripes.rotation.z = -Math.PI / 4;
+    stripes.position.z = 0.032;
+    for (const d of [-0.11, 0, 0.11]) {
+      const chord = 2 * Math.sqrt(r * r - d * d) - 0.03;
+      const stripe = solid(new BoxGeometry(chord, 0.034, 0.012), m.graphite);
+      stripe.position.y = d;
+      stripes.add(stripe);
+    }
+    emblem.add(stripes);
   } else if (kind === 'bitbucket') {
     // Repositories: a bucket.
     place(solid(new CylinderGeometry(0.17, 0.12, 0.3, 8), m.shell), 0, 0);
