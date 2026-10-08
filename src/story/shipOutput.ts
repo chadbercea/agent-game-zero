@@ -25,6 +25,8 @@ export interface OutputPlace {
   /** The belt runs along +x from here for `beltLength`. */
   beltFrom: Vector3;
   beltLength: number;
+  /** How fast the belt runs, world units per second (the Conveyor's own pace if left out). */
+  beltSpeed?: number;
   portal: Vector3;
 }
 
@@ -61,6 +63,7 @@ export async function shipOutput(
   assembler.position.copy(output.assembler);
   const conveyor = new Conveyor(output.beltLength);
   conveyor.position.copy(output.beltFrom);
+  if (output.beltSpeed) conveyor.speed = output.beltSpeed;
   const portal = new Portal();
   portal.position.copy(output.portal);
   for (const part of [assembler, conveyor, portal]) part.scale.setScalar(0.001);

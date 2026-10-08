@@ -64,8 +64,9 @@ const SCREEN_RIGHT = new Vector3(1, 0, -1).normalize();
 const OUTPUT = {
   assembler: new Vector3(0, 0, -4),
   beltFrom: new Vector3(0.8, 0, -4),
-  beltLength: 3.5,
-  portal: new Vector3(5.1, 0, -4),
+  beltLength: 2,
+  beltSpeed: 2.2,
+  portal: new Vector3(3.6, 0, -4),
 };
 /** The middle of everything once the output line is in, for the camera's pull-back. */
 const WHOLE_CENTER = new Vector3(5.5, 0, -2.5);
