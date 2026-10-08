@@ -1,5 +1,5 @@
 import { seededRandom } from '../core/scatter';
-import { Cloud } from '../primitives/cloud/Cloud';
+import { Cloud, pickCloudShape } from '../primitives/cloud/Cloud';
 import type { SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { Ticket } from '../primitives/ticket/Ticket';
@@ -83,8 +83,12 @@ export class HumanLoop {
 
   private take(): Visit {
     const free = this.pool.pop();
-    if (free) return free;
-    const cloud = new Cloud();
+    if (free) {
+      // A cloud spawns with a shape of its own each time, picked on the run's seed.
+      free.cloud.shape = pickCloudShape(this.random);
+      return free;
+    }
+    const cloud = new Cloud({ shape: pickCloudShape(this.random) });
     cloud.visible = false;
     const ticket = new Ticket(undefined, { label: false });
     ticket.scale.setScalar(SMALL);
