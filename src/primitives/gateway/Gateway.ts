@@ -8,6 +8,23 @@ import { Lock } from './Lock';
 const LOCK_HEIGHT = 0.6;
 const LOCK_BOB = 0.05;
 const LOCK_SPIN = 0.6;
+/** At rest the lock only drifts a little side to side (it used to swing ±0.4 rad all the time). */
+const LOCK_IDLE_SWAY = 0.12;
+
+/**
+ * The shake when something enters (ILI-976): the lock swings side to side
+ * and settles. A damped oscillation: `amplitude` (radians of swing at the
+ * start), `frequency` (swings per second) and `damping` (how fast it dies
+ * away, per second). Tune it here or per gateway (`gateway.shake`).
+ */
+export interface GatewayShake {
+  amplitude: number;
+  frequency: number;
+  damping: number;
+}
+
+/** Restrained: a short, small sway that says "something passed through securely", nothing violent. */
+export const GATEWAY_SHAKE: GatewayShake = { amplitude: 0.14, frequency: 1.8, damping: 3.2 };
 /** Small, but big enough to read at story zoom. */
 const LOCK_SCALE = 1.8;
 
@@ -23,6 +40,10 @@ export class Gateway extends Group {
   readonly lock = new Lock();
   /** World point the lock drops from (e.g. the security bot's body). */
   readonly dropFrom = new Vector3();
+  /** How it shakes when something enters (see GATEWAY_SHAKE). */
+  shake: GatewayShake = { ...GATEWAY_SHAKE };
+  /** Seconds since something last entered (it shakes from there). */
+  private sinceEntry = Infinity;
   private _built = 0;
   private _lockDrop = 0;
   private time = 0;
@@ -79,10 +100,20 @@ export class Gateway extends Group {
   grant(): void {
     this.conduit.grant();
     this.lock.grant();
+    this.sinceEntry = 0;
+  }
+
+  /** The lock's sway right now from the entry shake, in radians (0 once it has settled). */
+  get sway(): number {
+    const { amplitude, frequency, damping } = this.shake;
+    if (!Number.isFinite(this.sinceEntry)) return 0;
+    const t = this.sinceEntry;
+    return amplitude * Math.exp(-damping * t) * Math.sin(2 * Math.PI * frequency * t);
   }
 
   update(dt: number): void {
     this.time += dt;
+    this.sinceEntry += dt;
     this.conduit.update(dt);
     this.lock.update(dt);
     this.placeLock();
@@ -100,6 +131,6 @@ export class Gateway extends Group {
     const e = 1 - (1 - this._lockDrop) ** 3;
     const from = this.worldToLocal(this.dropFrom.clone());
     this.lock.position.lerpVectors(from, float, e);
-    this.lock.rotation.y = FACE_CAMERA + Math.sin(this.time * LOCK_SPIN) * 0.4;
+    this.lock.rotation.y = FACE_CAMERA + Math.sin(this.time * LOCK_SPIN) * LOCK_IDLE_SWAY + this.sway;
   }
 }
