@@ -2,7 +2,7 @@ import { Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Gate } from '../primitives/gate/Gate';
 import type { SceneHost } from '../stage/Stage';
-import { B_KINDS, B_LAYOUT, OneTicketB } from './oneTicketB';
+import { B_CENTER, B_KINDS, B_LAYOUT, OneTicketB } from './oneTicketB';
 
 /** A stage with no renderer: a scene root and a clock the test drives a frame at a time. */
 function testStage(fps = 30) {
@@ -48,6 +48,9 @@ describe('OneTicketB, Version B beats 1–3', () => {
     root.traverse((o) => o instanceof Gate && gates.push(o));
     expect(gates).toHaveLength(0);
     expect(story.rovo.drone.name).toBe('Rovo');
+    // Home, the first thing placed, is at the origin, dead center of the fixed camera (ILI-977).
+    expect(B_LAYOUT.home.length()).toBe(0);
+    expect(B_CENTER.equals(B_LAYOUT.home)).toBe(true);
   });
 
   it('lands DEMO-990, crosses the gateway, asks Rovo once, and gets five back in one delivery', async () => {

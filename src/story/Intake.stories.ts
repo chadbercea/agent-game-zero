@@ -39,7 +39,8 @@ export const Loop: StoryObj<{ tools: number; seed: number }> = {
   args: { tools: 4, seed: 7 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 13, focusY: 0.6 });
-    stage.centerOn(new Vector3(0.5, 0.6, -0.5));
+    // Jira, the first tool placed, sits dead center; the system grows out from it.
+    stage.centerOn(new Vector3(0, 0.6, 0));
     const nodes = TOOLS.slice(0, args.tools).map(([kind, x, z]) => {
       const node = new SystemNode({ kind });
       node.position.set(x, 0, z);

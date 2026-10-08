@@ -39,17 +39,24 @@ const STEP = new Vector3(3, 0, -3);
  * screen): far enough that D3V1N hovering over the gate doesn't cover the tool.
  */
 const GATE_IN_FRONT = new Vector3(3.5, 0, 3.5);
-/** The first tool in the row. */
-const FIRST_NODE = new Vector3(2, 0, -2);
+/**
+ * D3V1N's home: the first thing on the grid, so it sits at the origin, dead
+ * center of the fixed camera (ILI-977). Everything else lays out from it.
+ */
+const HOME = new Vector3(0, 0, 0);
+/** The first gate stands a step and a bit screen-right of home, in front of the row of tools. */
+const FIRST_GATE = new Vector3(3.5, 0, -3.5);
+/** The first tool in the row, behind its gate. */
+const FIRST_NODE = FIRST_GATE.clone().sub(GATE_IN_FRONT);
 
-/** Where Version A sits on the grid: D3V1N's home on the left, then each tool behind its own gate, in a row. */
+/** Where Version A sits on the grid: D3V1N's home at the center, then each tool behind its own gate, in a row to the right. */
 export const A_LAYOUT = {
-  home: FIRST_NODE.clone().add(GATE_IN_FRONT).addScaledVector(STEP, -1.2),
+  home: HOME.clone(),
   nodes: A_KINDS.map((_, i) => FIRST_NODE.clone().addScaledVector(STEP, i)),
   gates: A_KINDS.map((_, i) => FIRST_NODE.clone().addScaledVector(STEP, i).add(GATE_IN_FRONT)),
 };
-/** Middle of the whole layout, for a fixed camera that frames all of it. */
-export const A_CENTER = A_LAYOUT.home.clone().lerp(A_LAYOUT.nodes[A_KINDS.length - 1].clone().add(GATE_IN_FRONT.clone().multiplyScalar(0.5)), 0.5);
+/** The fixed camera frames home: the first thing placed sits dead center, and the row grows out to the right from it. */
+export const A_CENTER = A_LAYOUT.home.clone();
 
 /**
  * The ticket waits beside its tool, screen-right of it (toward Notion, where
