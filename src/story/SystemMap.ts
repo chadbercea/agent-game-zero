@@ -113,7 +113,7 @@ export class SystemMap {
   setRise(i: number, rise: number): void {
     const node = this.nodes[i];
     node.visible = rise > 0.001;
-    node.pad.scale.y = node.pad.scale.x * Math.max(rise, 0.001);
+    node.base.scale.y = Math.max(rise, 0.001);
     node.emblem.scale.setScalar(EMBLEM_SCALE * Math.max(rise, 0.001));
   }
 

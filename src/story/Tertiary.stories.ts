@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { DroneFlight } from '../animation/DroneFlight';
+import { LINEAGES } from '../core/palette';
 import { SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { SYSTEM_KINDS, type SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
@@ -29,7 +30,7 @@ export default meta;
 /**
  * Agents using one tool, on loop (ILI-974). Each agent that goes to use the
  * tool builds a tertiary node of its own off it, on demand, the first one
- * included: it buds off the tool (smaller, same kind, a short trace back to
+ * included: it buds off the tool (a small puck ringed in that agent's color, a short trace back to
  * it), the agent settles on it, and its work keeps feeding along the trace
  * into the tool. The tool itself holds no agent. Then the agents finish one
  * by one, newest first, and each tertiary goes away with its agent. Set how
@@ -48,8 +49,8 @@ export const OnOneTool: StoryObj<TertiaryArgs> = {
         // Agents arrive one after another and take their places.
         const crew: { claim: Claim; despawn: () => void; detach: () => void }[] = [];
         for (let i = 0; i < args.agents; i++) {
-          const claim = tertiaries.claim(node);
-          const sub = spawnDrone(stage, from.x, from.z, { name: `Agent ${i + 1}`, subAgent: true, status: 'working' });
+          const claim = tertiaries.claim(node, LINEAGES[i % LINEAGES.length]);
+          const sub = spawnDrone(stage, from.x, from.z, { name: `Agent ${i + 1}`, lineage: LINEAGES[i % LINEAGES.length], subAgent: true, status: 'working' });
           sub.drone.rotation.y = FACE_CAMERA;
           await Promise.all([
             fly(stage, DroneFlight.to(sub.drone, claim.spot, { speed: 4 })),
