@@ -82,3 +82,46 @@ describe('Volume', () => {
     expect([...landed.keys()].every((id) => id.startsWith('node:'))).toBe(true);
   });
 });
+
+describe('Volume with only some tools on the grid', () => {
+  it('keeps only tools on the grid on the books: totals grow as tools come up and start over when they go', () => {
+    const ticks: Tick[] = [];
+    const stage = { onTick: (fn: Tick) => (ticks.push(fn), () => {}) };
+    const map = (kinds: SystemKind[]) => ({ map: { nodes: kinds.map((kind) => ({ kind })) } });
+    const scene = {
+      act1: map(['figma', 'github', 'notion']),
+      act2: map(['codesearch', 'confluence', 'jira', 'bitbucket']),
+    } as unknown as Pick<TwoActScene, 'act1' | 'act2'>;
+    const onGrid = new Set<SystemKind>();
+    const volume = new Volume(stage, scene, () => [], 3, (kind) => onGrid.has(kind));
+    const run = (seconds: number) => {
+      for (let t = 0; t < seconds; t += 0.1) for (const fn of ticks) fn(0.1, t);
+    };
+    const nodesOnBooks = () => volume.ledger.entities('node').map((e) => e.id).sort();
+    run(5);
+    expect(nodesOnBooks()).toEqual([]);
+    expect(volume.ledger.totals('node').done).toBe(0);
+
+    onGrid.add('github');
+    run(0.1);
+    expect(nodesOnBooks()).toEqual([nodeId('github')]);
+    // DEMO-1 is under way at GitHub, one of the tools it touches.
+    expect(volume.ledger.tally(nodeId('github')).items.some((i) => i.key === 'DEMO-1')).toBe(true);
+    const github = volume.ledger.totals('node').done;
+    expect(github).toBe(volume.ledger.tally(nodeId('github')).done);
+    run(30);
+    // Background work only where the grid is: the grid total is GitHub's alone, still climbing.
+    expect(volume.ledger.totals('node').done).toBe(volume.ledger.tally(nodeId('github')).done);
+    expect(volume.ledger.totals('node').done).toBeGreaterThan(github);
+    expect(volume.ledger.share(nodeId('github'))).toBe(1);
+
+    onGrid.add('jira');
+    run(0.1);
+    expect(nodesOnBooks()).toEqual([nodeId('github'), nodeId('jira')]);
+
+    onGrid.clear();
+    run(0.1);
+    expect(nodesOnBooks()).toEqual([]);
+    expect(volume.ledger.totals('node').done).toBe(0);
+  });
+});
