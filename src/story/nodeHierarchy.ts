@@ -12,7 +12,7 @@ import {
 } from 'three';
 import { FACE_CAMERA } from '../core/grid';
 import { solid } from '../core/mesh';
-import { LINEAGE, type Lineage, NEUTRAL, STATUS_COLOR } from '../core/palette';
+import { NEUTRAL, STATUS_COLOR } from '../core/palette';
 import { buildEmblem, type SystemKind } from '../primitives/node/emblems';
 
 /**
@@ -28,7 +28,6 @@ import { buildEmblem, type SystemKind } from '../primitives/node/emblems';
  * - `resting`: on the grid, nobody on it.
  * - `active`: an agent is on it and working (green, like a granted gate).
  * - `waiting`: an agent is on it, held up (yellow, like a gate checking).
- * Tertiaries also carry their owner's lineage color: they belong to one agent.
  */
 export type NodeState = 'resting' | 'active' | 'waiting';
 export const NODE_STATES: readonly NodeState[] = ['resting', 'active', 'waiting'];
@@ -38,7 +37,7 @@ export const DIRECTIONS: readonly Direction[] = ['puck', 'hex', 'float'];
 
 /** What each direction is, in a line (for the specimen's legend in docs, not on the canvas). */
 export const DIRECTION_NOTES: Record<Direction, string> = {
-  puck: 'Round puck under the emblem, lit by a ring: round tools vs the square gate. Tertiaries: small pucks ringed in their agent’s color.',
+  puck: 'Round puck under the emblem, lit by a ring: round tools vs the square gate. Tertiaries: small pucks with the same state ring.',
   hex: 'A flat hexagon tile flush with the floor, its edge lights: tools tile the system. Tertiaries: half-size hexes docked on the tool’s edge.',
   float: 'No base: the emblem floats, bigger, over a soft halo on the floor. Tertiaries: a mini emblem with its own small halo, tethered to the tool.',
 };
@@ -158,11 +157,8 @@ export function secondary(direction: Direction, kind: SystemKind): HierarchyNode
 
 // Tertiary: three directions, one per secondary ---------------------------
 
-/** A tertiary: small, subordinate, owned by one agent (its lineage color), tied to its tool. */
+/** A tertiary: small, subordinate, tied to its tool. Neutral like its tool: it lights only with its state. */
 abstract class Tertiary extends HierarchyNode {
-  constructor(protected readonly owner: Lineage) {
-    super();
-  }
   /** Born off its tool (0 → 1) and released when the work ends (1 → 0). */
   set grown(t: number) {
     this.scale.setScalar(Math.max(0.001, t));
@@ -171,45 +167,46 @@ abstract class Tertiary extends HierarchyNode {
 
 class PuckTertiary extends Tertiary {
   private readonly ring: Mesh<TorusGeometry, MeshStandardMaterial>;
-  constructor(owner: Lineage) {
-    super(owner);
+  constructor() {
+    super();
     this.add(solid(new CylinderGeometry(0.24, 0.26, 0.08, 28), new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.4 }))).position.y = 0.04;
-    this.ring = new Mesh(new TorusGeometry(0.24, 0.025, 6, 32), new MeshStandardMaterial({ color: LINEAGE[owner], emissive: LINEAGE[owner] }));
+    this.ring = new Mesh(new TorusGeometry(0.24, 0.025, 6, 32), new MeshStandardMaterial({ color: NEUTRAL.offLight, emissive: NEUTRAL.offLight }));
     this.ring.rotation.x = Math.PI / 2;
     this.ring.position.y = 0.085;
     this.add(this.ring);
   }
   protected apply(): void {
-    // Its owner's color always; brighter while it's in use, and a status tick (green/yellow) at its heart.
-    this.ring.material.emissiveIntensity = 0.3 + this.glow * 1.2;
-    this.ring.material.emissive.copy(LINEAGE[this.owner]).lerp(stateColor(this.state), this.state === 'resting' ? 0 : 0.35);
+    const c = stateColor(this.state);
+    this.ring.material.color.copy(c);
+    this.ring.material.emissive.copy(c);
+    this.ring.material.emissiveIntensity = 0.2 + this.glow * 1.2;
   }
 }
 
 class HexTertiary extends Tertiary {
   private readonly edge: Mesh<RingGeometry, MeshBasicMaterial>;
-  constructor(owner: Lineage) {
-    super(owner);
+  constructor() {
+    super();
     const tile = solid(new CylinderGeometry(0.3, 0.3, 0.04, 6), new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.45, flatShading: true }));
     tile.position.y = 0.02;
     this.add(tile);
-    this.edge = new Mesh(new RingGeometry(0.3, 0.36, 6), new MeshBasicMaterial({ color: LINEAGE[owner], transparent: true, depthWrite: false }));
+    this.edge = new Mesh(new RingGeometry(0.3, 0.36, 6), new MeshBasicMaterial({ color: NEUTRAL.offLight, transparent: true, depthWrite: false }));
     this.edge.rotation.x = -Math.PI / 2;
     this.edge.position.y = 0.005;
     this.add(this.edge);
   }
   protected apply(): void {
     this.edge.material.opacity = 0.45 + this.glow * 0.45;
-    this.edge.material.color.copy(LINEAGE[this.owner]).lerp(stateColor(this.state), this.state === 'resting' ? 0 : 0.3);
+    this.edge.material.color.copy(stateColor(this.state));
   }
 }
 
 class FloatTertiary extends Tertiary {
   private readonly halo: Mesh<CircleGeometry, MeshBasicMaterial>;
   private readonly mote: Mesh;
-  constructor(owner: Lineage) {
-    super(owner);
-    this.halo = new Mesh(new CircleGeometry(0.3, 28), new MeshBasicMaterial({ color: LINEAGE[owner], transparent: true, opacity: 0.35, depthWrite: false }));
+  constructor() {
+    super();
+    this.halo = new Mesh(new CircleGeometry(0.3, 28), new MeshBasicMaterial({ color: NEUTRAL.offLight, transparent: true, opacity: 0.35, depthWrite: false }));
     this.halo.rotation.x = -Math.PI / 2;
     this.halo.position.y = 0.004;
     this.add(this.halo);
@@ -219,14 +216,14 @@ class FloatTertiary extends Tertiary {
   }
   protected apply(): void {
     this.halo.material.opacity = 0.2 + this.glow * 0.3;
-    this.halo.material.color.copy(LINEAGE[this.owner]).lerp(stateColor(this.state), this.state === 'resting' ? 0 : 0.3);
+    this.halo.material.color.copy(stateColor(this.state));
     this.mote.position.y = 0.45 + Math.sin(this.time * 1.6) * 0.04;
     this.mote.rotation.y = this.time * (this.state === 'active' ? 1.2 : 0.3);
   }
 }
 
-export function tertiary(direction: Direction, owner: Lineage): Tertiary {
-  return direction === 'puck' ? new PuckTertiary(owner) : direction === 'hex' ? new HexTertiary(owner) : new FloatTertiary(owner);
+export function tertiary(direction: Direction): Tertiary {
+  return direction === 'puck' ? new PuckTertiary() : direction === 'hex' ? new HexTertiary() : new FloatTertiary();
 }
 
 /**

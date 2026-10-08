@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { LineCurve3, Vector3 } from 'three';
 import { GateAnimator } from '../animation/GateAnimator';
-import { LINEAGES, type Lineage, NEUTRAL } from '../core/palette';
+import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
 import { Gate, type GateState } from '../primitives/gate/Gate';
 import { SYSTEM_KINDS, type SystemKind } from '../primitives/node/emblems';
@@ -38,7 +38,7 @@ interface Row {
 }
 
 /** One gate → tool → tertiary row at `origin`, joined by access traces. */
-function row(stage: SceneHost, origin: Vector3, direction: Direction | 'today', kind: SystemKind, owner: Lineage): Row {
+function row(stage: SceneHost, origin: Vector3, direction: Direction | 'today', kind: SystemKind): Row {
   const gate = new Gate();
   gate.position.copy(origin);
   const animator = new GateAnimator(gate);
@@ -53,7 +53,7 @@ function row(stage: SceneHost, origin: Vector3, direction: Direction | 'today', 
     tert.position.copy(toolAt).add(tertiaryOffset('puck'));
   } else {
     tool = secondary(direction, kind);
-    tert = tertiary(direction, owner);
+    tert = tertiary(direction);
     tert.position.copy(toolAt).add(tertiaryOffset(direction));
   }
   tool.position.copy(toolAt);
@@ -96,7 +96,7 @@ export const Compare: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 12, focusY: 0.4 });
     const rows = (['today', ...DIRECTIONS] as const).map((d, i) =>
-      row(stage, new Vector3(-3, 0, -3).addScaledVector(DOWN, i * 2.6), d, 'jira', 'violet'),
+      row(stage, new Vector3(-3, 0, -3).addScaledVector(DOWN, i * 2.6), d, 'jira'),
     );
     stage.centerOn(rows[1].tool.position.clone().lerp(rows[2].tool.position, 0.5).add(RIGHT.clone().multiplyScalar(-0.6)).setY(0.4));
     void (async () => {
@@ -135,7 +135,6 @@ interface OptionArgs {
   tool: NodeState;
   tertiary: NodeState;
   kind: SystemKind;
-  owner: Lineage;
 }
 
 function option(direction: Direction): StoryObj<OptionArgs> {
@@ -145,12 +144,11 @@ function option(direction: Direction): StoryObj<OptionArgs> {
       tool: { control: 'inline-radio', options: NODE_STATES },
       tertiary: { control: 'inline-radio', options: NODE_STATES },
       kind: { control: 'select', options: SYSTEM_KINDS },
-      owner: { control: 'select', options: LINEAGES },
     },
-    args: { gate: 'open', tool: 'active', tertiary: 'active', kind: 'jira', owner: 'violet' },
+    args: { gate: 'open', tool: 'active', tertiary: 'active', kind: 'jira' },
     render: (args) => {
       const { root, stage } = specimenStage({ viewSize: 6, focusY: 0.5 });
-      const r = row(stage, new Vector3(-1.5, 0, 1.5), direction, args.kind, args.owner);
+      const r = row(stage, new Vector3(-1.5, 0, 1.5), direction, args.kind);
       stage.centerOn(r.gate.position.clone().lerp(r.tool.position, 0.5).setY(0.5));
       setRow(r, args.gate, args.tool, args.tertiary);
       return root;
@@ -158,7 +156,7 @@ function option(direction: Direction): StoryObj<OptionArgs> {
   };
 }
 
-/** Puck: round tools on a low puck lit by a ring; tertiaries are small pucks ringed in their agent's color. Controls set each level's state. */
+/** Puck: round tools on a low puck lit by a ring; tertiaries are small pucks with the same state ring. Controls set each level's state. */
 export const Puck = option('puck');
 /** Hex: tools are flat hexagon tiles whose edge lights; tertiaries are half-size hexes docked on the tool's edge. */
 export const Hex = option('hex');
