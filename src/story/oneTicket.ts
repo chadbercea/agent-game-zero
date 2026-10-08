@@ -463,7 +463,7 @@ export function hop(stage: SceneHost, drone: Drone, to: Vector3): Promise<void> 
  * card's right edge, ending in a small copy of that system's product. It
  * says "there's more over there" without going anywhere yet.
  */
-function linkMarker(kind: SystemKind): Group {
+export function linkMarker(kind: SystemKind): Group {
   const marker = new Group();
   const stubEnd = new Vector3(0.5, 0, 0);
   const material = new MeshBasicMaterial({ color: NEUTRAL.graphite });

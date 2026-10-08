@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { hashSeed } from '../core/scatter';
 import type { SharedRun } from '../core/sharedRuns';
-import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
+import { ATLASSIAN_KINDS, type SystemKind } from '../primitives/node/emblems';
 import { layoutSystems, type SystemsLayout, TEAMWORK_LINKS } from './systemLayout';
 
 /**
@@ -11,6 +11,8 @@ import { layoutSystems, type SystemsLayout, TEAMWORK_LINKS } from './systemLayou
  * far enough that the two maps never overlap. Every position is on the grid.
  */
 export const ACT1_GATE = new Vector3(2, 0, 2);
+/** D3V1N's system, behind ACT1_GATE: its third-party tools, Linear first (ILI-979). */
+export const D3V1N_KINDS: readonly SystemKind[] = ['linear', 'notion', 'figma', 'github'];
 export const ATLASSIAN_GATE = new Vector3(10, 0, -6);
 export const HOME = new Vector3(-1.8, 0, 5);
 /** Rovo, the Atlassian side's own agent, waits off to the right of its gate. */
@@ -51,7 +53,7 @@ export function storyLayout(seed = hashSeed('teamwork-graph')): SystemsLayout {
     [
       {
         gate: ACT1_GATE,
-        kinds: JOB_KINDS,
+        kinds: D3V1N_KINDS,
         avoid: [ATLASSIAN_GATE, HOME, ROVO_HOME, SECURITY_HOME, ...GATEWAY_KEEPOUT],
       },
       {

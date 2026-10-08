@@ -1,9 +1,9 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
+import { ATLASSIAN_KINDS } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
-import { GATEWAY, storyLayout } from './layout';
+import { D3V1N_KINDS, GATEWAY, storyLayout } from './layout';
 import { TeamworkGraph } from './TeamworkGraph';
 
 type Tick = (dt: number, elapsed: number) => void;
@@ -28,7 +28,7 @@ function setup() {
   } = storyLayout();
   const nodes = (kinds: readonly string[], spots: Vector3[]) =>
     kinds.map((kind, i) => ({ kind, position: spots[i] }) as unknown as SystemNode);
-  const graph = new TeamworkGraph(stage, [nodes(JOB_KINDS, m1.spots), nodes(ATLASSIAN_KINDS, m2.spots)], {
+  const graph = new TeamworkGraph(stage, [nodes(D3V1N_KINDS, m1.spots), nodes(ATLASSIAN_KINDS, m2.spots)], {
     lines,
     feeders,
     gateway: GATEWAY,
