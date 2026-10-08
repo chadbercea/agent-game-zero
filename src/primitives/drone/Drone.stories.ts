@@ -29,11 +29,27 @@ export default meta;
 
 type Story = StoryObj<DroneArgs>;
 
-/** One drone, close up. Every prop is a control. */
-export const Specimen: Story = {
+/**
+ * One drone, close up. Every option is a control (`name`, `lineage`,
+ * `status`, `subAgent`, `showLabel`), plus `fade` (0–1: materials fade
+ * together) and `flashEvery`, which sets `flash` to 1 on a timer (0 =
+ * never): the acknowledgement lift.
+ */
+export const Specimen: StoryObj<DroneArgs & { fade: number; flashEvery: number }> = {
+  argTypes: { fade: { control: { type: 'range', min: 0, max: 1, step: 0.01 } }, flashEvery: { control: { type: 'range', min: 0, max: 5, step: 0.5 } } },
+  args: { fade: 1, flashEvery: 2 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 4.2, focusY: 2.1 });
-    spawnDrone(stage, 0, 0, args);
+    const { drone } = spawnDrone(stage, 0, 0, args);
+    drone.fade = args.fade;
+    let since = 0;
+    stage.onTick((dt) => {
+      if (!args.flashEvery) return;
+      since += dt;
+      if (since < args.flashEvery) return;
+      since = 0;
+      drone.flash = 1;
+    });
     return root;
   },
 };

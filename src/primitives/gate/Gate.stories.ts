@@ -48,18 +48,21 @@ export const States: Story = {
   },
 };
 
-/** An access check on loop: off → thinking → open, then off → thinking → denied. */
-export const Check: Story = {
-  render: () => {
+/**
+ * An access check on loop: off → thinking → the verdict. The `works` control
+ * is the Gate's `works` (does the system behind it work?), which the access
+ * check reads: on, the verdict is open (green); off, denied (red).
+ */
+export const Check: StoryObj<GateArgs & { works: boolean }> = {
+  args: { works: true },
+  render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 3, focusY: 0.2 });
     const gate = placeGate(stage, 0, 0, 'off');
+    gate.works = args.works;
     const script: [GateState, number][] = [
       ['off', 1.2],
       ['thinking', 2.4],
-      ['open', 2.5],
-      ['off', 1.2],
-      ['thinking', 2.4],
-      ['denied', 2.5],
+      [gate.works ? 'open' : 'denied', 2.5],
     ];
     let step = 0;
     let clock = 0;

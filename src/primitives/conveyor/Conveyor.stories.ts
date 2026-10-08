@@ -10,12 +10,22 @@ const meta: Meta = {
 };
 export default meta;
 
-/** A belt running, with a block riding it end to end on a loop. */
-export const Running: StoryObj = {
-  render: () => {
+/**
+ * A belt running, with a block riding it end to end on a loop. Controls set
+ * the Conveyor's `length` (constructor) and `speed` (world units per second;
+ * the block rides at the belt's speed). Defaults match the live story.
+ */
+export const Running: StoryObj<{ length: number; speed: number }> = {
+  argTypes: {
+    length: { control: { type: 'range', min: 1, max: 6, step: 0.5 } },
+    speed: { control: { type: 'range', min: 0.2, max: 4, step: 0.1 } },
+  },
+  args: { length: 2, speed: 2.2 },
+  render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 4.5, focusY: 0.3 });
-    const belt = new Conveyor(4);
-    belt.position.copy(SCREEN_RIGHT).multiplyScalar(-2);
+    const belt = new Conveyor(args.length);
+    belt.speed = args.speed;
+    belt.position.copy(SCREEN_RIGHT).multiplyScalar(-args.length / 2);
     belt.rotation.y = Math.atan2(-SCREEN_RIGHT.z, SCREEN_RIGHT.x);
     stage.add(belt);
     const block = new Mesh(new BoxGeometry(0.36, 0.36, 0.36), new MeshStandardMaterial({ color: NEUTRAL.packet, flatShading: true }));

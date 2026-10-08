@@ -67,3 +67,21 @@ export const Single: StoryObj<JobArgs & { kind: JobKind }> = {
     return root;
   },
 };
+
+/** One job held at a point: the controls set the Job's `kind` and `progress` (0–1) directly. */
+export const Progress: StoryObj<{ kind: JobKind; progress: number }> = {
+  argTypes: { kind: { control: 'inline-radio', options: JOB_KINDS }, progress: { control: { type: 'range', min: 0, max: 1, step: 0.01 } } },
+  args: { kind: 'github', progress: 0.5 },
+  render: (args) => {
+    const { root, stage } = specimenStage({ viewSize: 1.8, focusY: 0.6 });
+    const node = new SystemNode({ kind: args.kind });
+    node.emblem.visible = false;
+    node.light = 'working';
+    const job = new Job(args.kind);
+    job.rotation.y = FACE_CAMERA;
+    job.progress = args.progress;
+    stage.add(node, job);
+    stage.onTick((dt) => job.update(dt));
+    return root;
+  },
+};
