@@ -45,6 +45,8 @@ export interface FinishedWork {
 export const subId = (kind: SystemKind) => `sub:${kind}`;
 export const D3V1N_ID = 'agent:d3v1n';
 export const ROVO_ID = 'agent:rovo';
+/** The tools DEMO-1 touches. */
+const DEMO_TOOLS: readonly SystemKind[] = ['figma', 'github', 'notion', 'confluence', 'jira'];
 
 /**
  * Volume of work, moving with the story. Every node keeps busy with
@@ -61,36 +63,62 @@ export class Volume {
   private readonly drones = new Map<string, Drone>();
   private readonly arrivals: ((nodeId: string) => void)[] = [];
   private readonly finishes: ((done: FinishedWork) => void)[] = [];
+  private readonly nodes: { kind: SystemKind; system: string }[];
 
+  /**
+   * `onGrid`: which tools are on the grid right now. With it, only those are
+   * on the books: a tool joins (with today's numbers) when it comes up, does
+   * background work only while it's there, and leaves the books when it goes,
+   * so totals and shares count only tools on the grid. Without it, every tool
+   * is on the books from the start.
+   */
   constructor(
     stage: Pick<SceneHost, 'onTick'>,
     scene: Pick<TwoActScene, 'act1' | 'act2'>,
     private readonly workers: () => Worker[],
     seed = 1,
+    private readonly onGrid?: (kind: SystemKind) => boolean,
   ) {
     this.ledger = new WorkLedger(seed);
     this.random = seededRandom(seed ^ 0x9e3779b9);
-    const nodes = [
+    this.nodes = [
       ...scene.act1.map.nodes.map((n) => ({ kind: n.kind, system: TOOLS })),
       ...scene.act2.map.nodes.map((n) => ({ kind: n.kind, system: ATLASSIAN })),
     ];
-    for (const { kind, system } of nodes) {
-      this.ledger.register({ id: nodeId(kind), kind: 'node', name: SYSTEM_NAME[kind], system });
-    }
+    if (!onGrid) for (const node of this.nodes) this.registerNode(node);
     this.ledger.register({ id: D3V1N_ID, kind: 'agent', name: 'D3V1N', system: TOOLS });
     this.ledger.register({ id: ROVO_ID, kind: 'agent', name: 'Rovo', system: ATLASSIAN });
     this.followRequest();
     stage.onTick((dt) => this.update(dt));
   }
 
-  /** Put DEMO-1 to work: it touches both systems, so it's under way at both agents and five tools. */
+  /** Put DEMO-1 to work: it touches both systems, so it's under way at both agents and five tools (those on the books). */
   followRequest(): void {
     this.ledger.clearVerdict(DEMO_1.key);
-    this.ledger.assign(DEMO_1, [
-      D3V1N_ID,
-      ROVO_ID,
-      ...(['figma', 'github', 'notion', 'confluence', 'jira'] as const).map(nodeId),
-    ]);
+    this.ledger.assign(
+      DEMO_1,
+      [D3V1N_ID, ROVO_ID, ...DEMO_TOOLS.map(nodeId)].filter((id) => this.ledger.has(id)),
+    );
+  }
+
+  private registerNode({ kind, system }: { kind: SystemKind; system: string }): void {
+    const id = nodeId(kind);
+    this.ledger.register({ id, kind: 'node', name: SYSTEM_NAME[kind], system });
+    if (DEMO_TOOLS.includes(kind)) this.ledger.assign(DEMO_1, [id]);
+  }
+
+  /** Tools come onto the books as they come up on the grid, and leave when they go. */
+  private syncGrid(): void {
+    if (!this.onGrid) return;
+    for (const node of this.nodes) {
+      const id = nodeId(node.kind);
+      const want = this.onGrid(node.kind);
+      if (want && !this.ledger.has(id)) this.registerNode(node);
+      else if (!want && this.ledger.has(id)) {
+        this.ledger.unregister(id);
+        this.clocks.delete(`bg:${id}`);
+      }
+    }
   }
 
   /** Make sure a worker's sub-agent is on the books; a new drone at the same spot starts over. */
@@ -106,6 +134,7 @@ export class Volume {
   }
 
   private update(dt: number): void {
+    this.syncGrid();
     for (const node of this.ledger.entities('node')) {
       if (this.due(`bg:${node.id}`, dt, BACKGROUND_PACE)) this.finish([node.id]);
     }

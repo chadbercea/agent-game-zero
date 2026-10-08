@@ -126,6 +126,11 @@ export class WorkLedger {
     });
   }
 
+  /** Take an entity off the books (a tool that's gone off the grid). */
+  unregister(id: string): void {
+    this.books.delete(id);
+  }
+
   has(id: string): boolean {
     return this.books.has(id);
   }

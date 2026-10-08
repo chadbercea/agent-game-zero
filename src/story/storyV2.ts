@@ -146,7 +146,8 @@ export class StoryV2 {
       this.charge.update(dt);
     });
     this.humans = new HumanLoop(stage, this.nodes(), seed + 2);
-    this.volume = new Volume(stage, this.scene, () => this.workers(), 11);
+    // Only tools on the grid are on the books: totals and shares grow as the grid does.
+    this.volume = new Volume(stage, this.scene, () => this.workers(), 11, (kind) => this.called.has(kind));
   }
 
   /**
@@ -189,7 +190,8 @@ export class StoryV2 {
       // A gate's card lists only the tools agents have called up so far.
       { object: this.scene.act1.gate, card: () => gateCard(ledger, TOOLS, onGrid) },
       { object: this.scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN, onGrid) },
-      ...Object.values(this.nodes()).map((node) => ({
+      // Tools on the books only (a tool joins them once it's called up).
+      ...Object.values(this.nodes()).filter((node) => ledger.has(nodeId(node.kind))).map((node) => ({
         object: node,
         card: () => nodeCard(ledger, nodeId(node.kind), node.kind),
       })),
