@@ -47,19 +47,30 @@ export function agentCard(ledger: WorkLedger, id: string, crew: readonly string[
   };
 }
 
-/** A gate's card: the collective volume of its whole system, node by node. */
-export function gateCard(ledger: WorkLedger, system: string): CardModel {
-  const t = ledger.totals('node', system);
-  const nodes = ledger.entities('node').filter((e) => e.system === system);
+/**
+ * A gate's card: the collective volume of its system, node by node. With
+ * `onGrid`, only the nodes it accepts (the tools agents have called up so
+ * far) are listed and counted; otherwise every node in the system is.
+ */
+export function gateCard(ledger: WorkLedger, system: string, onGrid?: (nodeId: string) => boolean): CardModel {
+  const nodes = ledger.entities('node').filter((e) => e.system === system && (!onGrid || onGrid(e.id)));
+  const t = { done: 0, inProgress: 0, queued: 0 };
+  for (const n of nodes) {
+    const { done, inProgress, queued } = ledger.tally(n.id);
+    t.done += done;
+    t.inProgress += inProgress;
+    t.queued += queued;
+  }
+  const all = ledger.totals('node').done;
   return {
     title: system,
-    subtitle: `Gate · ${nodes.length} systems`,
+    subtitle: `Gate · ${nodes.length} ${nodes.length === 1 ? 'system' : 'systems'}`,
     counts: [
       ['done today', t.done],
       ['in progress', t.inProgress],
       ['queued', t.queued],
     ],
-    share: `${percent(ledger.systemShare(system))} of everything done on the grid today`,
+    share: `${percent(all > 0 ? t.done / all : 0)} of everything done on the grid today`,
     breakdown: nodes.map((n) => [n.name, ledger.tally(n.id).done] as [string, number]).sort((a, b) => b[1] - a[1]),
   };
 }

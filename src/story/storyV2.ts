@@ -178,6 +178,7 @@ export class StoryV2 {
   /** What you can hover on the grid and the card each shows: gates, tools, agents, sub-agents. */
   hoverTargets(): HoverTarget[] {
     const ledger = this.volume.ledger;
+    const onGrid = (id: string) => [...this.called].some((kind) => nodeId(kind) === id);
     const workers = this.workers().filter((w) => ledger.has(w.id));
     const name = (id: string) => ledger.entity(id).name;
     const crewOf = (w: Worker): string[] =>
@@ -185,8 +186,9 @@ export class StoryV2 {
         ? [name(w.parentId), ...(w.nodeId ? [name(w.nodeId)] : [])]
         : workers.filter((o) => o.parentId === w.id).map((o) => name(o.id));
     return [
-      { object: this.scene.act1.gate, card: () => gateCard(ledger, TOOLS) },
-      { object: this.scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN) },
+      // A gate's card lists only the tools agents have called up so far.
+      { object: this.scene.act1.gate, card: () => gateCard(ledger, TOOLS, onGrid) },
+      { object: this.scene.act2.gate, card: () => gateCard(ledger, ATLASSIAN, onGrid) },
       ...Object.values(this.nodes()).map((node) => ({
         object: node,
         card: () => nodeCard(ledger, nodeId(node.kind), node.kind),
