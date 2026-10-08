@@ -1,6 +1,6 @@
 import { type Curve, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
-import { NEUTRAL } from '../core/palette';
+import { type Lineage, NEUTRAL } from '../core/palette';
 import { gridRoute } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
 import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
@@ -74,9 +74,9 @@ export class Tertiaries {
    * and that's its place. Every claim builds one, however many agents are
    * already there (or none). `release()` when its work there ends.
    */
-  claim(node: SystemNode): Claim {
+  claim(node: SystemNode, owner: Lineage = 'blue'): Claim {
     const spot = this.freeSpot(node.position);
-    const { tertiary, remove } = this.bud(node, spot);
+    const { tertiary, remove } = this.bud(node, spot, owner);
     return { spot, tertiary, release: remove };
   }
 
@@ -97,10 +97,10 @@ export class Tertiaries {
     return OFFSETS.map((o) => center.clone().add(o)).sort((a, b) => room(b) - room(a))[0];
   }
 
-  /** A tertiary buds off `secondary` at `spot`: its trace draws out, it grows, its light comes on, and it starts feeding. */
-  private bud(secondary: SystemNode, spot: Vector3): { tertiary: SystemNode; remove: () => void } {
+  /** A tertiary buds off `secondary` at `spot`, ringed in its owner's color: its trace draws out, it grows, its light comes on, and it starts feeding. */
+  private bud(secondary: SystemNode, spot: Vector3, owner: Lineage): { tertiary: SystemNode; remove: () => void } {
     const { stage } = this;
-    const tertiary = new SystemNode({ kind: secondary.kind, showLabel: false });
+    const tertiary = new SystemNode({ kind: secondary.kind, showLabel: false, tertiaryOf: owner });
     tertiary.position.copy(spot);
     tertiary.scale.setScalar(0.001);
     tertiary.light = 'working';
