@@ -106,7 +106,7 @@ function counts(ledger: WorkLedger, id: string, doneLabel: string): Pick<CardMod
   };
 }
 
-/** Lighting a request's trail from its line on a card (see Trail). */
+/** Lighting a request's trail from its line on a card (optional; the live story passes none). */
 export interface TraceHooks {
   /** Which requests have a trail to show (their lines on cards are underlined). */
   traceable?: (key: string) => boolean;
