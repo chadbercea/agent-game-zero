@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
 import { A_CENTER, OneTicket, type OneTicketBeat } from './oneTicket';
 import { B_CENTER, type BBeat, OneTicketB } from './oneTicketB';
+import { OneTicketFull } from './oneTicketFull';
 import { wait } from './timeline';
 
 const meta: Meta = {
@@ -133,4 +134,25 @@ export const B46: StoryObj = {
 export const VersionB: StoryObj = {
   name: 'Version B',
   render: () => loopB('b6', 4),
+};
+
+/**
+ * The whole story, on loop: Version A, then the scene clears, then Version
+ * B. The same work, done two ways; this is what the sandbox plays. No
+ * captions.
+ */
+export const Full: StoryObj = {
+  name: 'Full (A then B)',
+  render: () => {
+    const { root, stage } = specimenStage(VIEW);
+    const story = new OneTicketFull(stage, (center) => stage.centerOn(center.clone().setY(VIEW.focusY)));
+    Object.assign(window, { __story: story });
+    void (async () => {
+      for (;;) {
+        await wait(stage, 0.8);
+        await story.play();
+      }
+    })();
+    return root;
+  },
 };

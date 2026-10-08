@@ -7,19 +7,17 @@
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
       #stage { position: fixed; inset: 0; }
-      #hint, #totals {
+      #hint {
         position: fixed; left: 16px;
         font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; color: #8a8c93;
         pointer-events: none; user-select: none;
       }
       #hint { bottom: 14px; }
-      #totals { top: 14px; font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <div id="stage"></div>
-    <div id="totals"></div>
-    <div id="hint">Drag to pan · scroll to zoom · hover anything to see its work · hover a gate or node for its lines (click to pin)</div>
+    <div id="hint">One ticket, two ways · Version A, then Version B</div>
     <script type="module" src="/src/sandbox/main.ts"></script>
   </body>
 </html>
