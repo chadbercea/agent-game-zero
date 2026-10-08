@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
-import { easeInOut } from './cloudDrop';
+import { Cloud } from '../primitives/cloud/Cloud';
+import { Ticket } from '../primitives/ticket/Ticket';
+import { cloudDrop, DRIFT_SPEED, groupOffsets } from './cloudDrop';
+import { seededRandom } from '../core/scatter';
 import { Intake, RING_FROM, RING_TO, TRIAGE_SCALE } from './intake';
 
 function testStage(fps = 30) {
@@ -45,13 +48,42 @@ function beyond(nodes: SystemNode[], p: Vector3) {
 }
 
 describe('Intake', () => {
-  it('clouds ease in and out: still at both ends, quickest over the middle', () => {
-    expect(easeInOut(0)).toBe(0);
-    expect(easeInOut(1)).toBe(1);
-    expect(easeInOut(0.5)).toBeCloseTo(0.5);
-    const step = (t: number) => easeInOut(t + 0.01) - easeInOut(t);
-    expect(step(0)).toBeLessThan(step(0.45) / 10);
-    expect(step(0.99 - 0.01)).toBeLessThan(step(0.45) / 10);
+  it('clouds drift at one fixed speed (no ramp), easing only as they puff in and out, and a group floats together', async () => {
+    const { stage, run } = testStage(30);
+    const lead = new Cloud();
+    const escort = new Cloud();
+    const offset = new Vector3(2, 0.2, 1);
+    const ticket = new Ticket(undefined, { label: false });
+    const speeds: number[] = [];
+    const gaps: number[] = [];
+    const sizes: number[] = [];
+    let last = new Vector3();
+    let done = false;
+    void cloudDrop(stage, lead, ticket, new Vector3(), { height: 3, keep: true, escorts: [{ cloud: escort, offset }] }).then(() => (done = true));
+    await run(30, () => {
+      if (done || !lead.visible) return;
+      if (last.lengthSq() > 0) speeds.push(lead.position.distanceTo(last) * 30);
+      last = lead.position.clone();
+      gaps.push(escort.position.clone().sub(lead.position).distanceTo(offset));
+      sizes.push(lead.materialized);
+    });
+    expect(done).toBe(true);
+    // Same speed at the start, over the drop, and at the end: no ramp.
+    const mid = speeds.slice(2, -2);
+    for (const v of mid) expect(v).toBeCloseTo(DRIFT_SPEED, 1);
+    // The escort never leaves its place in the group.
+    for (const g of gaps) expect(g).toBeLessThan(1e-6);
+    // The ease is at the start and the stop: it puffs in, holds, and puffs out.
+    expect(sizes[0]).toBeLessThan(0.1);
+    expect(Math.max(...sizes)).toBe(1);
+    expect(sizes[sizes.length - 1]).toBeLessThan(0.1);
+  });
+
+  it('groups are seeded and spread out around the lead cloud', () => {
+    const a = groupOffsets(seededRandom(4), 2);
+    const b = groupOffsets(seededRandom(4), 2);
+    expect(a.map((v) => v.toArray())).toEqual(b.map((v) => v.toArray()));
+    for (const v of a) expect(Math.hypot(v.x, v.z)).toBeGreaterThan(1.5);
   });
 
   it('drops just outside one node, and all around a big system: the ring follows the footprint', () => {

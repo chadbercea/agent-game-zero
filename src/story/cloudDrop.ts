@@ -8,8 +8,14 @@ import { tween } from './timeline';
 const ACROSS = new Vector3(1, 0, -1).normalize();
 /** How far off its target a cloud starts and ends its drift (off the edge of the action). */
 const REACH = 9;
-/** Average drift speed, world units per second (it eases in and out around this). */
-const DRIFT_SPEED = 2.6;
+/**
+ * Drift speed, world units per second: fixed and unhurried (ILI-984). A
+ * cloud doesn't speed up or slow down across the sky; its ease in and out is
+ * only at the start and the stop, as it puffs into being and away.
+ */
+export const DRIFT_SPEED = 1.4;
+/** Clouds float by in groups of up to this many. */
+export const MAX_GROUP = 3;
 /** How long a dropped ticket takes to fall. */
 const FALL_SECONDS = 0.6;
 
@@ -22,6 +28,22 @@ export interface DropOptions {
   keep?: boolean;
   /** Called the moment the ticket lands. */
   onLand?: () => void;
+  /** Clouds floating along with this one, each held at its offset from it (see groupOffsets). */
+  escorts?: { cloud: Cloud; offset: Vector3 }[];
+}
+
+/**
+ * Where the other clouds in a group float, relative to the one that drops
+ * the ticket: a little ahead or behind, off to one side, a touch higher or
+ * lower. From a seeded random generator, so a seeded run groups the same way.
+ */
+export function groupOffsets(random: () => number, count: number): Vector3[] {
+  const side = new Vector3(1, 0, 1).normalize();
+  return Array.from({ length: count }, (_, i) => {
+    const along = (i % 2 === 0 ? -1 : 1) * (1.8 + random() * 1.4);
+    const across = (random() < 0.5 ? -1 : 1) * (0.8 + random() * 1);
+    return ACROSS.clone().multiplyScalar(along).addScaledVector(side, across).setY((random() - 0.5) * 0.6);
+  });
 }
 
 /**
@@ -38,28 +60,33 @@ export async function cloudDrop(
   cloud: Cloud,
   ticket: Ticket,
   target: Vector3,
-  { height, tilt = 0, keep = false, onLand = () => {} }: DropOptions,
+  { height, tilt = 0, keep = false, onLand = () => {}, escorts = [] }: DropOptions,
 ): Promise<void> {
   const dir = ACROSS.clone().applyAxisAngle(new Vector3(0, 1, 0), tilt);
   const from = target.clone().addScaledVector(dir, -REACH).setY(height);
   const to = target.clone().addScaledVector(dir, REACH).setY(height);
   const seconds = (REACH * 2) / DRIFT_SPEED;
-  cloud.visible = true;
-  cloud.materialized = 0;
+  const group = [cloud, ...escorts.map((e) => e.cloud)];
+  for (const c of group) {
+    c.visible = true;
+    c.materialized = 0;
+  }
   ticket.visible = false;
   let dropped = false;
   let landed: Promise<void> = Promise.resolve();
   await tween(stage, seconds, (t) => {
-    // Eases in from rest and out to rest (ILI-972): slow at the edges, quickest over the drop.
-    cloud.position.lerpVectors(from, to, easeInOut(t));
-    // Puffs in over the first stretch, out over the last.
-    cloud.materialized = Math.min(1, t / 0.18, (1 - t) / 0.18);
+    // One steady speed all the way across (ILI-984); the group floats along together.
+    cloud.position.lerpVectors(from, to, t);
+    for (const e of escorts) e.cloud.position.copy(cloud.position).add(e.offset);
+    // The ease in and out is the start and the stop: puffing into being over the first stretch, away over the last.
+    const m = Math.min(1, t / 0.18, (1 - t) / 0.18);
+    for (const c of group) c.materialized = m;
     if (!dropped && t >= 0.5) {
       dropped = true;
       landed = fall(stage, ticket, target, height, keep).then(onLand);
     }
   });
-  cloud.visible = false;
+  for (const c of group) c.visible = false;
   await landed;
 }
 
@@ -86,9 +113,4 @@ async function fall(stage: SceneHost, ticket: Ticket, target: Vector3, from: num
   });
   ticket.visible = false;
   ticket.scale.setScalar(scale);
-}
-
-/** A pronounced ease-in-out (cubic): still at both ends, halfway at the middle, so the drop stays centered. */
-export function easeInOut(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }

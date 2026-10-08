@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../../stage/specimen';
-import { cloudDrop } from '../../story/cloudDrop';
+import { seededRandom } from '../../core/scatter';
+import { cloudDrop, groupOffsets } from '../../story/cloudDrop';
 import { tween, wait } from '../../story/timeline';
 import { SystemNode } from '../node/SystemNode';
 import { Ticket } from '../ticket/Ticket';
@@ -81,23 +82,29 @@ export const Materialize: StoryObj = {
   },
 };
 
-/** A cloud drifts across, drops a ticket onto Jira as it passes over, and drifts on; the ticket is taken in. Loops. */
+/** A group of clouds floats across at one steady speed; the first drops a ticket onto Jira as it passes over; the ticket is taken in. Loops. */
 export const DriftAndDrop: StoryObj = {
   render: () => {
-    const { root, stage } = specimenStage({ viewSize: 7, focusY: 1.2 });
+    const { root, stage } = specimenStage({ viewSize: 11, focusY: 1.6 });
     const jira = new SystemNode({ kind: 'jira' });
     stage.add(jira);
-    const cloud = new Cloud();
+    // A group of three: the first drops the ticket, the other two float along with it.
+    const [cloud, ...others] = [new Cloud({ shape: 0 }), new Cloud({ shape: 1 }), new Cloud({ shape: 4 })];
+    const offsets = groupOffsets(seededRandom(2), others.length);
     const ticket = new Ticket(undefined, { label: false });
     ticket.scale.setScalar(0.38);
-    stage.add(cloud, ticket);
+    stage.add(cloud, ...others, ticket);
     stage.onTick((dt) => {
-      cloud.update(dt);
+      for (const c of [cloud, ...others]) c.update(dt);
       ticket.update(dt);
     });
     void (async () => {
       for (;;) {
-        await cloudDrop(stage, cloud, ticket, jira.position, { height: 3, tilt: 0.15 });
+        await cloudDrop(stage, cloud, ticket, jira.position, {
+          height: 3,
+          tilt: 0.15,
+          escorts: others.map((c, i) => ({ cloud: c, offset: offsets[i] })),
+        });
         await wait(stage, 1);
       }
     })();
