@@ -17,7 +17,7 @@ import { FACE_CAMERA, type SpawnedDrone } from '../stage/spawnDrone';
 import type { SceneHost, Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
-import { budOut, graphPathKinds, linkRoute } from './crew';
+import { budOut, graphPathKinds, linkRoute, travelRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
 import { fullSystem } from './fullSystem';
 import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
@@ -400,7 +400,7 @@ export class StoryV2 {
     await this.call('bitbucket');
     const toBitbucket = new CurvePath<Vector3>();
     toBitbucket.add(this.ownRoute(scene.act1.map, 'github'));
-    toBitbucket.add(this.graphRoute('github', 'bitbucket'));
+    toBitbucket.add(this.travel('github', 'bitbucket'));
     drone.flash = 1;
     const spots = [-SIDE, SIDE].map((side) => bitbucket.position.clone().addScaledVector(SCREEN_RIGHT, side));
     const tucked = tuck(stage, bitbucket);
@@ -481,7 +481,7 @@ export class StoryV2 {
           // The rest of the grid is Rovo's: out to GitHub, then along the graph through the tunnel.
           const path = new CurvePath<Vector3>();
           path.add(this.ownRoute(scene.act1.map, 'github'));
-          path.add(this.graphRoute('github', kind));
+          path.add(this.travel('github', kind));
           return path;
         },
         rovoRouteTo: (kind) => this.ownRoute(scene.act2.map, kind),
@@ -524,11 +524,20 @@ export class StoryV2 {
     return calling;
   }
 
-  /** The graph's way between two tools, through tools on the grid only. */
+  /** The graph's way between two tools, through tools on the grid only: what work products ride. */
   private graphRoute(from: SystemKind, to: SystemKind): Curve<Vector3> {
+    return linkRoute(this.graph, ...this.hops(from, to));
+  }
+
+  /** A sub-agent's way between two tools: straight within a system, through the tunnel between them. */
+  private travel(from: SystemKind, to: SystemKind): Curve<Vector3> {
+    return travelRoute(this.graph, ...this.hops(from, to));
+  }
+
+  private hops(from: SystemKind, to: SystemKind): SystemKind[] {
     const hops = graphPathKinds(this.graph, from, to, (k) => this.called.has(k));
     if (!hops) throw new Error(`StoryV2: no way along the graph from ${from} to ${to}`);
-    return linkRoute(this.graph, ...hops);
+    return hops;
   }
 
   private node(kind: SystemKind): SystemNode {

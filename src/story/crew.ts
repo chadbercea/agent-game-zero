@@ -76,7 +76,26 @@ export function graphPathKinds(
   return path;
 }
 
-/** The graph's route through these tools in order, each link turned to run the right way. */
+/**
+ * A sub-agent's way through these tools in order. Inside a system it flies
+ * straight from tool to tool, off the grid; between systems it rides the
+ * link (its feeder, through the secure gateway, the far feeder), since that
+ * is the only way across.
+ */
+export function travelRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePath<Vector3> {
+  const path = new CurvePath<Vector3>();
+  for (let i = 1; i < kinds.length; i++) {
+    const [a, b] = [kinds[i - 1], kinds[i]];
+    const link = graph.links.find((l) => (l.from.kind === a && l.to.kind === b) || (l.from.kind === b && l.to.kind === a));
+    if (!link) throw new Error(`travelRoute: no graph link between ${a} and ${b}`);
+    const [from, to] = link.from.kind === a ? [link.from, link.to] : [link.to, link.from];
+    if (link.crosses) path.add(link.from.kind === a ? link.route : reversed(link.route));
+    else path.add(new LineCurve3(from.position.clone().setY(0), to.position.clone().setY(0)));
+  }
+  return path;
+}
+
+/** The graph's route through these tools in order, each link turned to run the right way (what work products ride). */
 export function linkRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePath<Vector3> {
   const path = new CurvePath<Vector3>();
   for (let i = 1; i < kinds.length; i++) {
