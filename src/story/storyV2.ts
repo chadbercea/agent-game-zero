@@ -13,7 +13,7 @@ import type { SystemKind } from '../primitives/node/emblems';
 import { EMBLEM_SCALE, type SystemNode } from '../primitives/node/SystemNode';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { attachSignal } from '../stage/attachSignal';
-import { FACE_CAMERA, type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
+import { FACE_CAMERA, type SpawnedDrone } from '../stage/spawnDrone';
 import type { SceneHost, Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
@@ -27,6 +27,7 @@ import { leaveBase } from './leaveBase';
 import { opening } from './opening';
 import { absorb, handOff } from './request';
 import { revealMap } from './revealMap';
+import { Roster } from './roster';
 import { type OutputLine, type OutputPlace, shipOutput } from './shipOutput';
 import type { SystemMap } from './SystemMap';
 import type { TeamworkGraph } from './TeamworkGraph';
@@ -107,8 +108,15 @@ export class StoryV2 {
   private cleanups: (() => void)[] = [];
   /** Volume of work across the grid: what hover cards report. */
   readonly volume: Volume;
+  /** Every drone comes and goes through here, in one sequence per run (see `roster.log`). */
+  readonly roster: Roster;
 
-  constructor(private readonly stage: SceneHost) {
+  /** `seed` sets the run's ambient variation (crew, helpers, clouds): the same seed plays the same run every time. */
+  constructor(
+    private readonly stage: SceneHost,
+    private readonly seed = 5,
+  ) {
+    this.roster = new Roster(stage);
     this.scene = twoActScene(stage);
     // Nothing's mapped yet: each system shows only once its agent gets access.
     this.scene.act1.map.hide();
@@ -127,7 +135,7 @@ export class StoryV2 {
       this.gateway.update(dt);
       this.charge.update(dt);
     });
-    this.humans = new HumanLoop(stage, this.nodes(), 7);
+    this.humans = new HumanLoop(stage, this.nodes(), seed + 2);
     this.volume = new Volume(stage, this.scene, () => this.workers(), 11);
   }
 
@@ -194,15 +202,16 @@ export class StoryV2 {
 
   /** Play from the top through `through`, in order. */
   async play(through: V2Beat = V2_BEATS[V2_BEATS.length - 1]): Promise<void> {
-    const { stage } = this;
+    const { stage, roster } = this;
     const upTo = V2_BEATS.indexOf(through);
+    roster.begin();
     // Beat 1: a cloud drops DEMO-1 in front of D3V1N's home; D3V1N floats in and notices it.
-    await opening(stage, this, {
-      spot: D3V1N_REQUEST,
-      cloudHeight: V2_CLOUD_HEIGHT,
-      droneFrom: D3V1N_FROM,
-      droneTo: HOME,
-    });
+    await opening(
+      stage,
+      this,
+      { spot: D3V1N_REQUEST, cloudHeight: V2_CLOUD_HEIGHT, droneFrom: D3V1N_FROM, droneTo: HOME },
+      (step) => step === 'drone' && roster.arrive(this.drone),
+    );
     if (upTo < 1) return;
     await wait(stage, 0.6);
     if (!(await this.ownSystem())) return;
@@ -247,7 +256,7 @@ export class StoryV2 {
     // One sub-agent to GitHub, along D3V1N's trace, to start a branch.
     const github = this.node('github');
     const route = this.ownRoute(map, 'github');
-    const sub = await budOut(stage, drone, `${drone.name}.1`, route, github.position);
+    const sub = await budOut(stage, drone, `${drone.name}.1`, route, github.position, 4.2, undefined, this.roster.spawn);
     sub.drone.rotation.y = FACE_CAMERA;
     this.first = { sub, at: 'github', spot: github.position.clone() };
     this.cleanups.push(() => {
@@ -293,7 +302,7 @@ export class StoryV2 {
     const { gate, map } = scene.act2;
 
     // Rovo flies in from off the grid to its home, then to its gate.
-    const rovo = spawnDrone(stage, ROVO_FROM.x, ROVO_FROM.z, {
+    const rovo = this.roster.spawn(stage, ROVO_FROM.x, ROVO_FROM.z, {
       name: 'Rovo',
       lineage: 'cyan',
       showLabel: true,
@@ -313,7 +322,7 @@ export class StoryV2 {
     await wait(stage, 0.4);
 
     // A Rovo sub-agent builds the bridge.
-    const builder = spawnDrone(stage, rovo.drone.position.x, rovo.drone.position.z, {
+    const builder = this.roster.spawn(stage, rovo.drone.position.x, rovo.drone.position.z, {
       name: `${rovo.drone.name}.1`,
       lineage: rovo.drone.lineage,
       subAgent: true,
@@ -386,7 +395,7 @@ export class StoryV2 {
     const writers = await Promise.all(
       spots.map(async (spot, i): Promise<Writer> => {
         await wait(stage, i * 0.45);
-        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, toBitbucket, spot, 4.2, watch);
+        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, toBitbucket, spot, 4.2, watch, this.roster.spawn);
         return { sub, at: 'bitbucket', spot };
       }),
     );
@@ -465,10 +474,11 @@ export class StoryV2 {
         rovoRouteTo: (kind) => this.ownRoute(scene.act2.map, kind),
         boost: graph.boost,
         watch: this.throughGateway(),
+        spawn: this.roster.spawn,
         onCommit: () => this.output?.commit(),
         pullBack: camera.to,
       },
-      5,
+      this.seed,
     );
     this.cleanups.push(stop);
   }
@@ -525,28 +535,34 @@ export class StoryV2 {
     };
   }
 
-  /** Fade everything out and put the stage back as it was before the opening. */
+  /**
+   * Fade everything out and put the stage back as it was before the opening.
+   * Work stops first; then every drone still out leaves through the roster,
+   * newest first (Rovo after its helpers and D3V1N's crew), and D3V1N last.
+   */
   async reset(): Promise<void> {
-    const { stage, scene, drone, ticket, gateway, graph, charge } = this;
-    const rovo = this.rovo;
-    await tween(stage, 0.8, (t) => {
-      charge.level = Math.min(charge.level, 1 - t);
-      gateway.built = Math.min(gateway.built, 1 - t);
-      gateway.lockDrop = Math.min(gateway.lockDrop, 1 - t);
-      if (rovo) rovo.drone.fade = 1 - t;
-    });
+    const { stage, scene, drone, ticket, gateway, graph, charge, roster } = this;
+    roster.freeze();
     for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
+    await Promise.all([
+      roster.clear(),
+      tween(stage, 0.8, (t) => {
+        charge.level = Math.min(charge.level, 1 - t);
+        gateway.built = Math.min(gateway.built, 1 - t);
+        gateway.lockDrop = Math.min(gateway.lockDrop, 1 - t);
+      }),
+    ]);
     ticket.visible = false;
     graph.hide();
     gateway.conduit.streams = 0;
     scene.act2.signal?.detach();
     scene.act2.signal = null;
-    rovo?.despawn();
     this.rovo = null;
     scene.act2.gate.state = 'off';
     const { gate, signal } = scene.act1;
     if (gate.state !== 'off') await leaveBase(stage, { drone, gate, signal }, HOME);
-    await tween(stage, 0.6, (t) => (drone.fade = 1 - t));
+    if (drone.fade > 0) roster.depart(drone);
+    await tween(stage, 0.6, (t) => (drone.fade = Math.min(drone.fade, 1 - t)));
     drone.scale.setScalar(1);
     drone.status = 'waiting';
     scene.act1.map.hide();

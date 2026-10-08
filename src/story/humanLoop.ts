@@ -33,7 +33,7 @@ interface Visit {
  * `start()` sets it going; `stop()` lets the clouds out finish and stops new ones.
  */
 export class HumanLoop {
-  private readonly random: () => number;
+  private random: () => number;
   private readonly pool: Visit[] = [];
   private out = 0;
   private running = false;
@@ -50,14 +50,16 @@ export class HumanLoop {
   constructor(
     private readonly stage: SceneHost,
     private readonly nodes: Record<SystemKind, SystemNode>,
-    seed = 1,
+    private readonly seed = 1,
   ) {
     this.random = seededRandom(seed);
   }
 
+  /** Set it going. Each start replays the same seeded sequence of clouds. */
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.random = seededRandom(this.seed);
     this.countdown = this.between(GAP) * 0.5;
     this.untick = this.stage.onTick((dt) => {
       this.countdown -= dt;

@@ -12,6 +12,7 @@ import type { SceneHost } from '../stage/Stage';
 import { type Boost, shoot } from './beam';
 import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
+import type { Spawner } from './roster';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 
@@ -46,6 +47,8 @@ export interface FullSystemCast {
   boost: Boost;
   /** Runs every frame a sub-agent is flying out (e.g. to see it through the gateway). */
   watch?: (drone: Drone) => void;
+  /** How sub-agents come into being (the story's roster, so they're in the sequence). */
+  spawn?: Spawner;
   /** A product landed in GitHub (the output line turns it into a little block). */
   onCommit: () => void;
   /** Pull the camera back to the whole grid (0–1), if the stage has one to move. */
@@ -61,7 +64,7 @@ export interface FullSystemCast {
  * only way it can, along D3V1N's line through the secure gateway and on
  * along the graph. Each works its tool (its job, or its signal) and keeps
  * sending its product along the graph to GitHub, which feeds the output line:
- * blocks keep flowing into the portal. Rovo helps here and there: a few of
+ * blocks keep flowing into the portal. Once the crew is out, Rovo helps here and there: a few of
  * its own sub-agents drop in on its tools for a while, then go home, and
  * others go elsewhere. Count, placement, timing and paths come from a seeded
  * generator. The camera pulls back to take it all in. No captions: one agent,
@@ -108,11 +111,14 @@ export async function fullSystem(
     [plan[i], plan[j]] = [plan[j], plan[i]];
   }
 
+  // They go out one after another, in that order, a seeded gap apart.
+  let start = 0;
+  const starts = plan.map((_, i) => (start += i ? between([0.45, 1.1]) : 0));
   const crew = Promise.all(
     plan.map(async ({ at, spot }, i) => {
-      await wait(stage, i * between([0.45, 1.1]));
+      await wait(stage, starts[i]);
       if (!running) return;
-      const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch);
+      const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch, cast.spawn);
       if (!running) return sub.despawn();
       const node = nodes[at];
       node.light = 'working';
@@ -120,7 +126,8 @@ export async function fullSystem(
     }),
   );
 
-  // Rovo's helpers: a few at a time, dropping in on its tools for a while.
+  // Once D3V1N's crew is all out, Rovo's helpers: a few at a time, dropping in on its tools for a while.
+  await crew;
   let helpers = 0;
   const helpersOut = new Set<SpawnedDrone>();
   const helping = (async () => {
@@ -136,7 +143,6 @@ export async function fullSystem(
     }
   })();
 
-  await crew;
   onStep('full');
   return () => {
     running = false;
@@ -176,7 +182,7 @@ function work(
   const hops = graphPathKinds(graph, at, 'github');
   const toGithub = hops && hops.length > 1 ? linkRoute(graph, ...hops) : null;
   const seconds = hasJob(at) ? JOB_SECONDS[at] * 0.6 : 0;
-  let t = Math.random() * 0.5;
+  let t = between([0, 0.5]);
   let next = between(SHIP_EVERY);
   const untick = stage.onTick((dt) => {
     if (job && seconds) {
@@ -203,7 +209,7 @@ function work(
 /** A Rovo helper: buds off Rovo, goes to one of its tools, helps for a while, comes back and docks. */
 async function help(
   stage: SceneHost,
-  { rovo, nodes, rovoRouteTo, watch }: FullSystemCast,
+  { rovo, nodes, rovoRouteTo, watch, spawn }: FullSystemCast,
   at: SystemKind,
   name: string,
   seconds: number,
@@ -214,7 +220,7 @@ async function help(
   const spot = node.position.clone().add(HELPER_SPOT);
   const way = rovoRouteTo(at);
   const route: Curve<Vector3> = way.getLength() > 0.05 ? way : new LineCurve3(node.position.clone(), spot.clone());
-  const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch);
+  const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch, spawn);
   // Stopped while it was on its way out: it never gets to work.
   if (!running()) return sub.despawn();
   out.add(sub);
