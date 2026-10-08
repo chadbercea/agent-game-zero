@@ -18,6 +18,8 @@ function loop(through: OneTicketBeat, hold: number, from?: OneTicketBeat) {
   const { root, stage } = specimenStage(VIEW);
   stage.centerOn(A_CENTER.clone().setY(VIEW.focusY));
   const story = new OneTicket(stage);
+  // Handy from the browser console (and for automated captures), like __stage.
+  Object.assign(window, { __story: story });
   void (async () => {
     for (;;) {
       await wait(stage, 0.8);
@@ -79,15 +81,16 @@ export const VersionA: StoryObj = {
 /** Version B's layout on screen, from a camera that never moves. */
 const VIEW_B = { viewSize: 12, focusY: 1.4 };
 
-/** Play Version B through `beat`, hold, clear, and go again. */
-function loopB(through: BBeat, hold: number) {
+/** Play Version B through `beat` (from `from`, the beats before it already done), hold, clear, and go again. */
+function loopB(through: BBeat, hold: number, from?: BBeat) {
   const { root, stage } = specimenStage(VIEW_B);
   stage.centerOn(B_CENTER.clone().setY(VIEW_B.focusY));
   const story = new OneTicketB(stage);
+  Object.assign(window, { __story: story });
   void (async () => {
     for (;;) {
       await wait(stage, 0.8);
-      await story.play(through);
+      await story.play(through, from);
       await wait(stage, hold);
       await story.reset();
     }
@@ -107,4 +110,27 @@ function loopB(through: BBeat, hold: number) {
 export const B13: StoryObj = {
   name: 'B1–3',
   render: () => loopB('b3', 3),
+};
+
+/**
+ * Version B, beats 4 to 6, on loop, starting with D3V1N home carrying all
+ * five. They merge into the plan, the same as Version A. D3V1N stays home:
+ * its commits go out through the gateway and along the graph, a branch grows
+ * off Bitbucket and they land on it, and the PR opens carrying DEMO-990. A
+ * Graph Line draws from the PR back to DEMO-990, which picks up the branch,
+ * commits and PR on its own. No captions.
+ */
+export const B46: StoryObj = {
+  name: 'B4–6',
+  render: () => loopB('b6', 4, 'b4'),
+};
+
+/**
+ * Version B straight through, beats 1 to 6, on loop: about 15 seconds. One
+ * gateway instead of four gates, context already connected, and a record
+ * that keeps itself. No captions.
+ */
+export const VersionB: StoryObj = {
+  name: 'Version B',
+  render: () => loopB('b6', 4),
 };
