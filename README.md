@@ -14,6 +14,8 @@ The sandbox plays the reworked story on one isometric grid with two systems: D3V
 5. **Output:** an output line draws from GitHub to an assembler behind D3V1N's system. Every commit sends a little block down it, and eight fuse into a bigger block, which rides a conveyor belt through a portal.
 6. **Full system:** D3V1N's crew spreads across both systems (its own tools along its traces, Rovo's through the tunnel), Rovo's helpers come and go on its tools, and the camera pulls back. Crew size, placement and timing come from a seeded generator.
 
+Every drone comes and goes through one roster (`src/story/roster.ts`), so they spawn and despawn in one defined sequence: the same order at the same story times every loop, for a given seed (`new StoryV2(stage, seed)`). D3V1N's crew goes out one after another, and Rovo's helpers start once the crew is out. Drones fade out rather than pop. On reset, everyone still out leaves newest first, and D3V1N leaves last. `story.roster.log` holds the run's sequence.
+
 From beat 2 on, the human in the loop: clouds drift by at seeded random times, each dropping an issue into Jira, Confluence or Notion, whichever are online.
 
 A work ledger simulates today's volume across the grid: every tool keeps busy with everyone else's work, and whoever is working in the scene finishes pieces at their own pace. **Hover anything** for its volume of work:

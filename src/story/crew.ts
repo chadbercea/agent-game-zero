@@ -4,6 +4,7 @@ import { DroneFlight } from '../animation/DroneFlight';
 import { type Drone, HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import type { SystemKind } from '../primitives/node/emblems';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
+import type { Spawner } from './roster';
 import type { SceneHost } from '../stage/Stage';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween } from './timeline';
@@ -25,8 +26,10 @@ export async function budOut(
   speed = 4.2,
   /** Runs every frame of the flight out (e.g. to see it through a tunnel). */
   watch: (drone: Drone) => void = () => {},
+  /** How it comes into being (the story's roster, so it's in the sequence). */
+  spawn: Spawner = spawnDrone,
 ): Promise<SpawnedDrone> {
-  const sub = spawnDrone(stage, parent.position.x, parent.position.z, {
+  const sub = spawn(stage, parent.position.x, parent.position.z, {
     name,
     lineage: parent.lineage,
     subAgent: true,

@@ -19,7 +19,22 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*.browser.test.ts'],
           environment: 'node',
+        },
+      },
+      {
+        // Story logic that needs a DOM (labels, canvas textures) but no rendering: runs in a real browser.
+        test: {
+          name: 'browser',
+          include: ['src/**/*.browser.test.ts'],
+          testTimeout: 120_000,
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+          },
         },
       },
       {
