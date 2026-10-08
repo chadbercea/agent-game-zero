@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
 import { A_CENTER, OneTicket, type OneTicketBeat } from './oneTicket';
+import { B_CENTER, type BBeat, OneTicketB } from './oneTicketB';
 import { wait } from './timeline';
 
 const meta: Meta = {
@@ -73,4 +74,37 @@ export const A57: StoryObj = {
 export const VersionA: StoryObj = {
   name: 'Version A',
   render: () => loop('a7', 4),
+};
+
+/** Version B's layout on screen, from a camera that never moves. */
+const VIEW_B = { viewSize: 12, focusY: 1.4 };
+
+/** Play Version B through `beat`, hold, clear, and go again. */
+function loopB(through: BBeat, hold: number) {
+  const { root, stage } = specimenStage(VIEW_B);
+  stage.centerOn(B_CENTER.clone().setY(VIEW_B.focusY));
+  const story = new OneTicketB(stage);
+  void (async () => {
+    for (;;) {
+      await wait(stage, 0.8);
+      await story.play(through);
+      await wait(stage, hold);
+      await story.reset();
+    }
+  })();
+  return root;
+}
+
+/**
+ * Version B, beats 1 to 3, on loop: the same work with the Atlassian
+ * Teamwork Graph. DEMO-990 lands in Jira and pings D3V1N. D3V1N flies
+ * through the one secured gateway (it flashes green) and asks Rovo once.
+ * Rovo walks the lines that are already there (Jira to Confluence to Figma,
+ * and Jira to Code search), and hands back the issue, the PRD, the design,
+ * related issues and the code in one delivery: five on D3V1N's stack. No
+ * captions.
+ */
+export const B13: StoryObj = {
+  name: 'B1–3',
+  render: () => loopB('b3', 3),
 };
