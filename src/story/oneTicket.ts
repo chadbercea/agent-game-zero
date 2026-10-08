@@ -56,18 +56,18 @@ export const A_CENTER = A_LAYOUT.home.clone().lerp(A_LAYOUT.nodes[A_KINDS.length
  * its link points), clear of D3V1N hovering over the node.
  */
 const TICKET_BESIDE = STEP.clone().multiplyScalar(0.5);
-const TICKET_SCALE = 0.7;
+export const TICKET_SCALE = 0.7;
 /** How long the gate thinks: with the flights either side, a crossing takes about three seconds. */
-const THINK_SECONDS = 0.9;
+export const THINK_SECONDS = 0.9;
 /**
  * No leg of a trip (home to gate, gate to node, and back) takes longer than
  * this: far stops are flown faster, so Version A stays about 30 s.
  */
-const LEG_SECONDS = 0.75;
+export const LEG_SECONDS = 0.75;
 /** Carried products stack above D3V1N (clear of its name tag), in its own hover frame. */
-const STACK_FROM = 1.7;
-const STACK_STEP = 0.5;
-const CARRY_SCALE = 2;
+export const STACK_FROM = 1.7;
+export const STACK_STEP = 0.5;
+export const CARRY_SCALE = 2;
 /** The plan: one bigger block, the carried stack merged. */
 const PLAN_SCALE = 1.6;
 /** D3V1N's branch grows off GitHub this far, up-left on screen along a grid line, into open floor. */
@@ -360,11 +360,8 @@ export class OneTicket {
     drone.status = 'waiting';
   }
 
-  /** D3V1N hops straight to a floor point: at cruise speed, or faster for a long leg (see LEG_SECONDS). */
   private hop(to: Vector3): Promise<void> {
-    const { drone } = this;
-    const distance = Math.hypot(to.x - drone.position.x, to.z - drone.position.z);
-    return fly(this.stage, DroneFlight.to(drone, to, { speed: Math.max(FLIGHT_SPEED, distance / LEG_SECONDS) }));
+    return hop(this.stage, this.drone, to);
   }
 
   /** A link pops up on the doc D3V1N just read. */
@@ -432,6 +429,12 @@ export class OneTicket {
     drone.status = 'waiting';
     this.d3v1n.animator.restart();
   }
+}
+
+/** A drone hops straight to a floor point: at cruise speed, or faster for a long leg (see LEG_SECONDS). */
+export function hop(stage: SceneHost, drone: Drone, to: Vector3): Promise<void> {
+  const distance = Math.hypot(to.x - drone.position.x, to.z - drone.position.z);
+  return fly(stage, DroneFlight.to(drone, to, { speed: Math.max(FLIGHT_SPEED, distance / LEG_SECONDS) }));
 }
 
 /**
