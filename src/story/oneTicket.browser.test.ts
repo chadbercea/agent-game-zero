@@ -52,7 +52,7 @@ describe('OneTicket, Version A beats 1–2', () => {
     const linear = story.stop('linear');
     const seen = new Map<string, Set<string>>(story.stops.map((s) => [s.kind, new Set<string>()]));
     let leftHome = -1;
-    let green = -1;
+    let atNode = -1;
     let ticketMovingWhileDroneMoves = false;
     let lastDrone = drone.position.clone();
     let lastCard = 0;
@@ -67,7 +67,7 @@ describe('OneTicket, Version A beats 1–2', () => {
         const cardMoved = Math.abs(story.ticket.card.position.y - lastCard) > 1e-6;
         if (droneMoved && cardMoved && story.ticket.visible) ticketMovingWhileDroneMoves = true;
         if (droneMoved && leftHome < 0) leftHome = t;
-        if (linear.gate.state === 'open' && green < 0) green = t;
+        if (atNode < 0 && linear.gate.state === 'open' && drone.position.distanceTo(linear.node.position) < 1e-3) atNode = t;
         lastDrone = drone.position.clone();
         lastCard = story.ticket.card.position.y;
       },
@@ -82,9 +82,9 @@ describe('OneTicket, Version A beats 1–2', () => {
     expect([...seen.get('linear')!]).toEqual(expect.arrayContaining(['thinking', 'open']));
     for (const kind of ['notion', 'figma', 'github']) expect([...seen.get(kind)!]).toEqual(['off']);
     for (const states of seen.values()) expect(states.has('denied')).toBe(false);
-    // Crossing the gate (home to green) takes about three seconds.
-    expect(green - leftHome).toBeGreaterThan(2);
-    expect(green - leftHome).toBeLessThan(4);
+    // Crossing the gate (home, through the check, on to the node) takes about three seconds.
+    expect(atNode - leftHome).toBeGreaterThan(2.5);
+    expect(atNode - leftHome).toBeLessThan(3.5);
     // One thing moves at a time: the ticket's drop never overlaps D3V1N's flight.
     expect(ticketMovingWhileDroneMoves).toBe(false);
     // Home, carrying exactly one product: the Linear issue. The gate closed behind it.
@@ -133,14 +133,61 @@ describe('OneTicket, Version A beats 1–2', () => {
     expect(story.stop('github').gate.state).toBe('off');
   });
 
+  it('plays Version A end to end in about 30 s: plan, code in GitHub, a PR, Linear updated by hand', async () => {
+    const { stage, run, now } = testStage();
+    const story = new OneTicket(stage);
+    const lit: string[] = [];
+    const last = new Map(story.stops.map((s) => [s.kind, s.gate.state]));
+    let ticketGreen = false;
+    let played = false;
+    void story.play('a7').then(() => (played = true));
+    await run(
+      120,
+      () => played,
+      () => {
+        for (const s of story.stops) {
+          if (s.gate.state === 'open' && last.get(s.kind) !== 'open') lit.push(s.kind);
+          last.set(s.kind, s.gate.state);
+        }
+        if (story.pr.visible && story.ticket.glow > 0.9) ticketGreen = true;
+      },
+    );
+    expect(played).toBe(true);
+    expect(now()).toBeGreaterThan(25);
+    expect(now()).toBeLessThan(35);
+    // Four separate stops, then back to Linear to update the ticket.
+    expect(lit).toEqual(['linear', 'notion', 'figma', 'github', 'linear']);
+    expect(story.stops.map((s) => s.gate.visible)).toEqual([true, true, true, true]);
+    // The stack became the plan; the branch grew with three commits on it; the PR opened; the ticket was updated.
+    expect(story.carried).toHaveLength(0);
+    expect(story.plan.visible).toBe(true);
+    expect(story.branch.drawn).toBe(1);
+    expect(story.commits).toHaveLength(3);
+    expect(story.pr.visible).toBe(true);
+    expect(ticketGreen).toBe(true);
+    expect(story.drone.position.distanceTo(A_LAYOUT.home)).toBeLessThan(1e-3);
+  });
+
+  it('plays A5–7 on its own, starting from D3V1N home with all three carried', async () => {
+    const { stage, run } = testStage();
+    const story = new OneTicket(stage);
+    let played = false;
+    void story.play('a7', 'a5').then(() => (played = true));
+    expect(story.carried.map((p) => p.kind)).toEqual(['linear', 'notion', 'figma']);
+    expect(story.ticket.visible && story.link.visible && story.prdLink.visible).toBe(true);
+    await run(60, () => played);
+    expect(played).toBe(true);
+    expect(story.plan.visible && story.pr.visible).toBe(true);
+  });
+
   it('resets to an empty-handed D3V1N at home with no ticket, and plays the same again', async () => {
     const { stage, run } = testStage();
     const story = new OneTicket(stage);
     for (let i = 0; i < 2; i++) {
       let done = false;
-      void story.play('a4').then(() => (done = true));
-      await run(90, () => done);
-      expect(story.carried).toHaveLength(3);
+      void story.play('a7').then(() => (done = true));
+      await run(120, () => done);
+      expect(story.plan.visible).toBe(true);
       done = false;
       void story.reset().then(() => (done = true));
       await run(10, () => done);
@@ -149,6 +196,9 @@ describe('OneTicket, Version A beats 1–2', () => {
       expect(story.ticket.visible).toBe(false);
       expect(story.link.visible).toBe(false);
       expect(story.prdLink.visible).toBe(false);
+      expect(story.plan.visible || story.pr.visible).toBe(false);
+      expect(story.commits).toHaveLength(0);
+      expect(story.branch.drawn).toBe(0);
       expect(story.stops.every((s) => s.gate.state === 'off')).toBe(true);
     }
   });
