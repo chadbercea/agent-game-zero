@@ -2,13 +2,13 @@ import type { DroneAnimator } from '../animation/DroneAnimator';
 import { GateAnimator } from '../animation/GateAnimator';
 import type { Drone } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
-import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
+import { ATLASSIAN_KINDS } from '../primitives/node/emblems';
 import { type AttachedSignal, attachSignal } from '../stage/attachSignal';
 import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { type CrewMember, fanOut, keepWorking, workOne } from './fanOut';
-import { ACT1_GATE, ATLASSIAN_GATE, GATEWAY, HOME, storyLayout } from './layout';
+import { ACT1_GATE, ATLASSIAN_GATE, D3V1N_KINDS, GATEWAY, HOME, storyLayout } from './layout';
 import { revealMap } from './revealMap';
 import { SystemMap } from './SystemMap';
 import { TeamworkGraph } from './TeamworkGraph';
@@ -106,7 +106,7 @@ export function twoActScene(stage: SceneHost): TwoActScene {
     feeders,
     act1: {
       gate: gate1,
-      map: new SystemMap(stage, gate1, JOB_KINDS, { layout: layout1 }),
+      map: new SystemMap(stage, gate1, D3V1N_KINDS, { layout: layout1 }),
       signal: attachSignal(stage, drone, gate1),
     },
     act2: { gate: gate2, map: new SystemMap(stage, gate2, ATLASSIAN_KINDS, { layout: layout2 }), signal: null },

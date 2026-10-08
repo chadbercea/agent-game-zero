@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { GateAnimator } from '../animation/GateAnimator';
 import { Gate } from '../primitives/gate/Gate';
-import { ATLASSIAN_KINDS, JOB_KINDS } from '../primitives/node/emblems';
+import { ATLASSIAN_KINDS } from '../primitives/node/emblems';
 import { specimenStage } from '../stage/specimen';
 import type { Stage } from '../stage/Stage';
 import { Vector3 } from 'three';
-import { ACT1_GATE, ATLASSIAN_GATE, STORY_CENTER, storyLayout } from './layout';
+import { ACT1_GATE, ATLASSIAN_GATE, D3V1N_KINDS, STORY_CENTER, storyLayout } from './layout';
 import { SystemMap } from './SystemMap';
 
 const meta: Meta = {
@@ -24,7 +24,7 @@ function gateAt(stage: Stage, position: typeof ACT1_GATE): Gate {
 }
 
 /**
- * Layout check: D3V1N's system (Figma, GitHub, Notion) and Rovo's Atlassian
+ * Layout check: D3V1N's system (Linear, Notion, Figma, GitHub) and Rovo's Atlassian
  * system (Code search, Confluence, Jira, Bitbucket) side by side on the one
  * grid, the layout the story uses, with every tool shown at once (in the
  * story, tools come up only as agents call them).
@@ -36,7 +36,7 @@ export const Layout: StoryObj = {
     const {
       maps: [layout1, layout2],
     } = storyLayout();
-    new SystemMap(stage, gateAt(stage, ACT1_GATE), JOB_KINDS, { layout: layout1 }).showAll();
+    new SystemMap(stage, gateAt(stage, ACT1_GATE), D3V1N_KINDS, { layout: layout1 }).showAll();
     new SystemMap(stage, gateAt(stage, ATLASSIAN_GATE), ATLASSIAN_KINDS, { layout: layout2 }).showAll();
     return root;
   },
