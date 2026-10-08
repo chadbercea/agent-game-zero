@@ -38,12 +38,11 @@ export const Opening: StoryObj = {
 };
 
 /**
- * Beats 1 and 2, on loop. D3V1N takes the ticket, flies to its gate and
- * gets access (yellow, then green). Its own system maps out the way it
- * always has: traces draw over the faint grid, Figma, GitHub and Notion
- * rise, and the lines fade off. One sub-agent rides the trace to GitHub
- * and starts a branch. Clouds start drifting by, dropping issues into
- * Notion. No captions.
+ * Beats 1 and 2, on loop. D3V1N takes the ticket and calls its gate, which
+ * pops up out of the floor; it flies there and gets access (yellow, then
+ * green). It calls GitHub, and only GitHub comes up: its trace draws over
+ * the faint grid, the tool rises, and the line fades off. One sub-agent
+ * rides the trace to GitHub and starts a branch. No captions.
  */
 export const OwnSystem: StoryObj = {
   name: '02 Own System',
@@ -51,11 +50,11 @@ export const OwnSystem: StoryObj = {
 };
 
 /**
- * Beats 1 to 3, on loop. Rovo arrives on its own, gets access at the
- * Atlassian gate, and its Teamwork Graph maps out. One of its sub-agents
+ * Beats 1 to 3, on loop. Rovo arrives on its own, calls its gate, gets
+ * access, and calls Jira, which comes up on its own. One of its sub-agents
  * builds the secure bridge between the systems (the glass tunnel, the lock)
- * and dissolves back into Rovo. The graph's lines draw in to the tunnel's
- * ends and data streams through it: the super tunnel. Power comes through
+ * and dissolves back into Rovo. The graph's lines draw in between GitHub and
+ * Jira, through the tunnel's ends, and data streams through it: the super tunnel. Power comes through
  * to D3V1N, and it charges up. No captions.
  */
 export const RovoBridge: StoryObj = {
@@ -65,7 +64,7 @@ export const RovoBridge: StoryObj = {
 
 /**
  * Beats 1 to 4, on loop. Juiced, D3V1N runs three sub-agents: its first
- * stays on GitHub, two ride the graph through the super tunnel to Bitbucket.
+ * stays on GitHub, D3V1N calls Bitbucket up, and two ride the graph through the super tunnel to it.
  * All three build branches fast, and commits keep landing in GitHub. No
  * captions.
  */
@@ -86,7 +85,8 @@ export const ShipOutput: StoryObj = {
 };
 
 /**
- * The whole play, on loop. D3V1N's crew spreads across both systems, Rovo's
+ * The whole play, on loop. D3V1N's crew spreads across both systems, calling
+ * up each tool it heads for (Notion, Figma, Code search, Confluence), Rovo's
  * helpers come and go on its tools, products keep flowing to GitHub and out
  * the portal, and the camera pulls back to take it all in. No captions.
  */

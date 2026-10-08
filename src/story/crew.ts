@@ -50,7 +50,13 @@ export async function budOut(
 }
 
 /** The tools along the shortest hop-by-hop path between two tools on the graph (both ends included), or null. */
-export function graphPathKinds(graph: TeamworkGraph, from: SystemKind, to: SystemKind): SystemKind[] | null {
+export function graphPathKinds(
+  graph: TeamworkGraph,
+  from: SystemKind,
+  to: SystemKind,
+  /** Only through these tools (e.g. the ones on the grid so far). */
+  among: (kind: SystemKind) => boolean = () => true,
+): SystemKind[] | null {
   const came = new Map<SystemKind, SystemKind | null>([[from, null]]);
   const queue = [from];
   while (queue.length) {
@@ -58,7 +64,7 @@ export function graphPathKinds(graph: TeamworkGraph, from: SystemKind, to: Syste
     if (at === to) break;
     for (const l of graph.links) {
       const next = l.from.kind === at ? l.to.kind : l.to.kind === at ? l.from.kind : null;
-      if (next && !came.has(next)) {
+      if (next && !came.has(next) && among(next)) {
         came.set(next, at);
         queue.push(next);
       }

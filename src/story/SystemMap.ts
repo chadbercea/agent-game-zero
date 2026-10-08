@@ -51,6 +51,9 @@ export class SystemMap {
   private lineLevel = 0;
   /** Per branch: a sub-agent is out working along it, so its line stays drawn. */
   private readonly active: boolean[] = [];
+  /** Per branch: it's being called up on its own (see revealNode), so its line and grid show. */
+  private readonly calling: boolean[] = [];
+  private readonly callLevel: number[] = [];
   private readonly branchLevel: number[] = [];
   private time = 0;
   private readonly untick: () => void;
@@ -81,6 +84,8 @@ export class SystemMap {
       this.polylines.push(polyline);
       this.routes.push(roundedPath(polyline, BEND_RADIUS));
       this.active.push(false);
+      this.calling.push(false);
+      this.callLevel.push(0);
       this.branchLevel.push(0);
       stage.add(patch, branch, node);
     });
@@ -93,6 +98,8 @@ export class SystemMap {
     this.linesVisible = false;
     this.lineLevel = 0;
     this.active.fill(false);
+    this.calling.fill(false);
+    this.callLevel.fill(0);
     this.branchLevel.fill(0);
     for (const node of this.nodes) {
       node.visible = false;
@@ -123,6 +130,18 @@ export class SystemMap {
     this.branchLevel.fill(level);
   }
 
+  /**
+   * Node `i` is being called up on its own: its line and its patch of grid
+   * show at once while it draws and rises, then fade when released.
+   */
+  setCalling(i: number, calling: boolean): void {
+    this.calling[i] = calling;
+    if (!calling) return;
+    this.revealed = true;
+    this.branchLevel[i] = 1;
+    this.callLevel[i] = 1;
+  }
+
   /** Keep branch `i`'s line drawn while a sub-agent works along it; release to let it fade. */
   setActive(i: number, active: boolean): void {
     this.active[i] = active;
@@ -149,13 +168,14 @@ export class SystemMap {
     this.branches.forEach((branch, i) => {
       // A line stays while its sub-agent works along it, or while the map is hovered or pinned.
       if (this.revealed) {
-        const target = this.linesVisible || this.active[i] ? 1 : 0;
+        const target = this.linesVisible || this.active[i] || this.calling[i] ? 1 : 0;
         this.branchLevel[i] = MathUtils.lerp(this.branchLevel[i], target, k);
       }
+      this.callLevel[i] = MathUtils.lerp(this.callLevel[i], this.calling[i] ? 1 : 0, k);
       branch.material.opacity = LINE_OPACITY * this.branchLevel[i];
       branch.visible = this.branchLevel[i] > 0.01 && branch.drawn > 0;
-      // The grid patch comes up with its branch as it draws and fades after the reveal (or hover).
-      this.patches[i].opacity = this.lineLevel * branch.drawn;
+      // The grid patch comes up with its branch as it draws and fades after the reveal (or hover, or its own call).
+      this.patches[i].opacity = Math.max(this.lineLevel, this.callLevel[i]) * branch.drawn;
     });
   }
 }

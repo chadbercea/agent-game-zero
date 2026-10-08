@@ -49,6 +49,10 @@ export interface FullSystemCast {
   watch?: (drone: Drone) => void;
   /** How sub-agents come into being (the story's roster, so they're in the sequence). */
   spawn?: Spawner;
+  /** Call a tool up onto the grid before a sub-agent heads there (resolves once it's up). */
+  call?: (kind: SystemKind) => Promise<void>;
+  /** Whether a tool is on the grid (products only travel through tools that are). All are, if left out. */
+  onGrid?: (kind: SystemKind) => boolean;
   /** A product landed in GitHub (the output line turns it into a little block). */
   onCommit: () => void;
   /** Pull the camera back to the whole grid (0–1), if the stage has one to move. */
@@ -81,6 +85,11 @@ export async function fullSystem(
   const { drone, rovo, nodes, routeTo, pullBack } = cast;
   const random = seededRandom(seed);
   const between = ([lo, hi]: [number, number]) => lo + random() * (hi - lo);
+  // Each part draws from its own seeded stream, so frame timing can never change who gets which number.
+  const stream = (salt: number) => {
+    const r = seededRandom(seed * 7919 + salt);
+    return ([lo, hi]: [number, number]) => lo + r() * (hi - lo);
+  };
   const stops: (() => void)[] = [];
   let running = true;
 
@@ -111,33 +120,39 @@ export async function fullSystem(
     [plan[i], plan[j]] = [plan[j], plan[i]];
   }
 
-  // They go out one after another, in that order, a seeded gap apart.
-  let start = 0;
-  const starts = plan.map((_, i) => (start += i ? between([0.45, 1.1]) : 0));
-  const crew = Promise.all(
-    plan.map(async ({ at, spot }, i) => {
-      await wait(stage, starts[i]);
-      if (!running) return;
-      const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch, cast.spawn);
-      if (!running) return sub.despawn();
-      const node = nodes[at];
-      node.light = 'working';
-      stops.push(work(stage, sub, at, spot, cast, between));
-    }),
-  );
+  // They go out one after another, in that order, a seeded gap apart (each calls its tool up first, if need be).
+  const gaps = plan.map((_, i) => (i ? between([0.45, 1.1]) : 0));
+  const flights: Promise<void>[] = [];
+  for (const [i, { at, spot }] of plan.entries()) {
+    await wait(stage, gaps[i]);
+    if (!running) break;
+    await cast.call?.(at);
+    if (!running) break;
+    flights.push(
+      (async () => {
+        const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch, cast.spawn);
+        if (!running) return sub.despawn();
+        nodes[at].light = 'working';
+        stops.push(work(stage, sub, at, spot, cast, stream(100 + i)));
+      })(),
+    );
+  }
+  const crew = Promise.all(flights);
 
   // Once D3V1N's crew is all out, Rovo's helpers: a few at a time, dropping in on its tools for a while.
   await crew;
   let helpers = 0;
   const helpersOut = new Set<SpawnedDrone>();
+  const helpRandom = seededRandom(seed * 7919 + 1);
+  const helpBetween = ([lo, hi]: [number, number]) => lo + helpRandom() * (hi - lo);
   const helping = (async () => {
     let n = 1;
     while (running) {
-      await wait(stage, between(HELP_GAP));
+      await wait(stage, helpBetween(HELP_GAP));
       if (!running || helpers >= MAX_HELPERS) continue;
-      const at = ROVO_GROUND[Math.floor(random() * ROVO_GROUND.length)];
+      const at = ROVO_GROUND[Math.floor(helpRandom() * ROVO_GROUND.length)];
       helpers++;
-      void help(stage, cast, at, `${rovo.name}.${++n}`, between(HELP_FOR), () => running, helpersOut).finally(
+      void help(stage, cast, at, `${rovo.name}.${++n}`, helpBetween(HELP_FOR), () => running, helpersOut).finally(
         () => helpers--,
       );
     }
@@ -163,7 +178,7 @@ function work(
   sub: SpawnedDrone,
   at: SystemKind,
   spot: Vector3,
-  { nodes, graph, boost, onCommit }: FullSystemCast,
+  { nodes, graph, boost, onCommit, onGrid }: FullSystemCast,
   between: (range: [number, number]) => number,
 ): () => void {
   const node = nodes[at];
@@ -179,8 +194,11 @@ function work(
   } else {
     signal = attachSignal(stage, sub.drone, node);
   }
-  const hops = graphPathKinds(graph, at, 'github');
-  const toGithub = hops && hops.length > 1 ? linkRoute(graph, ...hops) : null;
+  // The way to GitHub, through tools on the grid: worked out each time, as the grid grows.
+  const toGithub = () => {
+    const hops = graphPathKinds(graph, at, 'github', onGrid);
+    return hops && hops.length > 1 ? linkRoute(graph, ...hops) : null;
+  };
   const seconds = hasJob(at) ? JOB_SECONDS[at] * 0.6 : 0;
   let t = between([0, 0.5]);
   let next = between(SHIP_EVERY);
@@ -191,9 +209,10 @@ function work(
       job.progress = MathUtils.clamp(t, 0, 1);
     }
     next -= dt;
-    if (next > 0 || !toGithub) return;
+    if (next > 0) return;
     next = between(SHIP_EVERY);
-    void shoot(stage, toGithub, 6.5, boost, at).then(onCommit);
+    const route = toGithub();
+    if (route) void shoot(stage, route, 6.5, boost, at).then(onCommit);
   });
   return () => {
     untick();
@@ -209,13 +228,15 @@ function work(
 /** A Rovo helper: buds off Rovo, goes to one of its tools, helps for a while, comes back and docks. */
 async function help(
   stage: SceneHost,
-  { rovo, nodes, rovoRouteTo, watch, spawn }: FullSystemCast,
+  { rovo, nodes, rovoRouteTo, watch, spawn, call }: FullSystemCast,
   at: SystemKind,
   name: string,
   seconds: number,
   running: () => boolean,
   out: Set<SpawnedDrone>,
 ): Promise<void> {
+  await call?.(at);
+  if (!running()) return;
   const node = nodes[at];
   const spot = node.position.clone().add(HELPER_SPOT);
   const way = rovoRouteTo(at);
@@ -225,7 +246,16 @@ async function help(
   if (!running()) return sub.despawn();
   out.add(sub);
   const signal = attachSignal(stage, sub.drone, node);
-  for (let t = 0; t < seconds && running(); t += 0.25) await wait(stage, 0.25);
+  // Help for a while (one timer, so it doesn't drift with the frame rate), or until everything stops.
+  await new Promise<void>((resolve) => {
+    let t = 0;
+    const untick = stage.onTick((dt) => {
+      t += dt;
+      if (t < seconds && running()) return;
+      untick();
+      resolve();
+    });
+  });
   signal.detach();
   if (!running()) return;
   // Home again: back the way it came, and into Rovo.
