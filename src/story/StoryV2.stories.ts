@@ -5,7 +5,7 @@ import { StoryV2, type V2Beat } from './storyV2';
 import { wait } from './timeline';
 
 const meta: Meta = {
-  title: 'Story Rework v2',
+  title: 'Story',
   parameters: { layout: 'fullscreen' },
 };
 export default meta;

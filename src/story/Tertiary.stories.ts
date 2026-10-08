@@ -16,7 +16,7 @@ interface TertiaryArgs {
 }
 
 const meta: Meta<TertiaryArgs> = {
-  title: 'Story Rework v2/Parts/Tertiary Nodes',
+  title: 'Story Parts/Tertiary Nodes',
   parameters: { layout: 'fullscreen' },
   argTypes: {
     agents: { control: { type: 'range', min: 1, max: 6, step: 1 } },
