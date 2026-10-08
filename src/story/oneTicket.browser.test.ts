@@ -1,7 +1,7 @@
 import { Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { SceneHost } from '../stage/Stage';
-import { A_KINDS, A_LAYOUT, OneTicket } from './oneTicket';
+import { A_CENTER, A_KINDS, A_LAYOUT, OneTicket } from './oneTicket';
 
 /** A stage with no renderer: a scene root and a clock the test drives a frame at a time. */
 function testStage(fps = 30) {
@@ -43,6 +43,14 @@ describe('OneTicket, Version A beats 1–2', () => {
       expect(gate.position.x + gate.position.z).toBeGreaterThan(node.position.x + node.position.z);
     }
     expect(A_KINDS).toHaveLength(4);
+  });
+
+  it('puts home, the first thing on the grid, at the origin, dead center of the fixed camera (ILI-977)', () => {
+    expect(A_LAYOUT.home.length()).toBe(0);
+    expect(A_CENTER.equals(A_LAYOUT.home)).toBe(true);
+    // Everything else lays out from it, to the right on screen, in the same order.
+    const screenX = (p: { x: number; z: number }) => p.x - p.z;
+    for (const p of [...A_LAYOUT.nodes, ...A_LAYOUT.gates]) expect(screenX(p)).toBeGreaterThan(screenX(A_LAYOUT.home));
   });
 
   it('lands ILI-990, crosses only the Linear gate, reads it, and comes home carrying the issue', async () => {

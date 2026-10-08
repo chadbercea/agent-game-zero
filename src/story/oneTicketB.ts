@@ -37,7 +37,7 @@ export const B_KINDS: readonly SystemKind[] = ['jira', 'confluence', 'figma', 'c
 export const B_GATEWAY: SharedRun = { along: 'x', from: 2.5, to: 5.5, low: -0.5, high: 0.5 };
 
 /**
- * Where Version B sits on the grid. D3V1N's home on the left; the gateway
+ * Where Version B sits on the grid. D3V1N's home at the origin (dead center); the gateway
  * in the middle; the Atlassian side on the right: Jira straight out of the
  * tunnel, Confluence behind it and Figma beyond, Code search beside Jira and
  * Bitbucket in front of that. Rovo waits down in front, clear of the tunnel and the lines.
@@ -63,8 +63,8 @@ export const B_LINKS: readonly [SystemKind | 'gateway', SystemKind][] = [
   ['codesearch', 'bitbucket'],
 ];
 
-/** Middle of the whole layout, for a fixed camera that frames all of it. */
-export const B_CENTER = new Vector3(5.5, 0, 0);
+/** The fixed camera frames home: D3V1N's home, the first thing placed, sits dead center (ILI-977), and the gateway and the Atlassian side lay out from it. */
+export const B_CENTER = B_LAYOUT.home.clone();
 
 /** D3V1N waits this far past the tunnel's far end, toward Rovo: out of it (so going back in is a crossing of its own) and clear of the DEMO-990 card. */
 const EXIT_CLEAR = new Vector3(0.6, 0, 1.2);
