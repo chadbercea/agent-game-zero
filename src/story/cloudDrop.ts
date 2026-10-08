@@ -8,7 +8,7 @@ import { tween } from './timeline';
 const ACROSS = new Vector3(1, 0, -1).normalize();
 /** How far off its target a cloud starts and ends its drift (off the edge of the action). */
 const REACH = 9;
-/** Drift speed, world units per second. */
+/** Average drift speed, world units per second (it eases in and out around this). */
 const DRIFT_SPEED = 2.6;
 /** How long a dropped ticket takes to fall. */
 const FALL_SECONDS = 0.6;
@@ -50,7 +50,8 @@ export async function cloudDrop(
   let dropped = false;
   let landed: Promise<void> = Promise.resolve();
   await tween(stage, seconds, (t) => {
-    cloud.position.lerpVectors(from, to, t);
+    // Eases in from rest and out to rest (ILI-972): slow at the edges, quickest over the drop.
+    cloud.position.lerpVectors(from, to, easeInOut(t));
     // Puffs in over the first stretch, out over the last.
     cloud.materialized = Math.min(1, t / 0.18, (1 - t) / 0.18);
     if (!dropped && t >= 0.5) {
@@ -85,4 +86,9 @@ async function fall(stage: SceneHost, ticket: Ticket, target: Vector3, from: num
   });
   ticket.visible = false;
   ticket.scale.setScalar(scale);
+}
+
+/** A pronounced ease-in-out (cubic): still at both ends, halfway at the middle, so the drop stays centered. */
+export function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
