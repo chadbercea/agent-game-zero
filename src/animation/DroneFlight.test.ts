@@ -1,4 +1,4 @@
-import { Object3D, QuadraticBezierCurve3, Vector3 } from 'three';
+import { Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DroneFlight, FLIGHT_SPEED } from './DroneFlight';
 
@@ -38,16 +38,23 @@ describe('DroneFlight', () => {
     expect(flight.done).toBe(true);
   });
 
-  it('rides a curve through its middle, not a straight line', () => {
+  it('flies straight: the floor track is the line from start to target, nothing else', () => {
     const drone = fakeDrone(0, 0);
-    const branch = new QuadraticBezierCurve3(new Vector3(0, 0, 0), new Vector3(2, 0, 3), new Vector3(4, 0, 0));
-    const flight = DroneFlight.along(drone, branch);
-    let maxZ = 0;
-    run(flight, 10, () => (maxZ = Math.max(maxZ, drone.position.z)));
+    const target = new Vector3(4, 0, 3);
+    const flight = DroneFlight.to(drone, target);
+    let off = 0;
+    run(flight, 10, () => {
+      // Distance from the straight line through (0,0) and the target.
+      const { x, z } = drone.position;
+      off = Math.max(off, Math.abs(x * target.z - z * target.x) / target.length());
+    });
     expect(flight.done).toBe(true);
-    expect(drone.position.distanceTo(new Vector3(4, 0, 0))).toBeLessThan(1e-6);
-    expect(maxZ).toBeGreaterThan(1); // followed the bend
-    expect(drone.position.y).toBe(0);
+    expect(drone.position.distanceTo(target)).toBeLessThan(1e-6);
+    expect(off).toBeLessThan(1e-6);
+  });
+
+  it('has no way to ride a curve: agents only fly straight', () => {
+    expect((DroneFlight as unknown as Record<string, unknown>).along).toBeUndefined();
   });
 
   it('leans into travel without turning, and levels out after landing', () => {

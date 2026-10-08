@@ -33,7 +33,8 @@ const velocity = new Vector3();
 const UP = new Vector3(0, 1, 0);
 
 /**
- * Moves a drone's floor anchor along a path, so it always floats at hover
+ * Moves a drone's floor anchor in a straight line to its target (agents
+ * never ride lines or arcs: ILI-969), so it always floats at hover
  * height above where it's heading. The drone keeps facing the camera; it
  * leans into its direction of travel like a real quadcopter instead of
  * turning. DroneAnimator keeps running underneath (bob, rotors, status).
@@ -66,11 +67,6 @@ export class DroneFlight {
   static to(drone: FlightBody, target: Vector3, options: FlightOptions = {}): DroneFlight {
     const from = drone.position.clone().setY(0);
     return new DroneFlight(drone, new LineCurve3(from, target.clone().setY(0)), { lift: HOP_LIFT, ...options });
-  }
-
-  /** Ride along a curve (e.g. a branch line) from its start to its end. */
-  static along(drone: FlightBody, path: Curve<Vector3>, options: FlightOptions = {}): DroneFlight {
-    return new DroneFlight(drone, path, options);
   }
 
   update(dt: number): void {
