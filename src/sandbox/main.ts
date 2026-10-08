@@ -1,6 +1,8 @@
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { Inspector } from '../stage/Inspector';
 import { Stage } from '../stage/Stage';
 import { OneTicketFull } from '../story/oneTicketFull';
+import { oneTicketInspectables } from '../story/oneTicketInspect';
 import { wait } from '../story/timeline';
 
 /**
@@ -13,6 +15,9 @@ import { wait } from '../story/timeline';
 
 const stage = new Stage(document.getElementById('stage')!, { viewSize: 15 });
 const story = new OneTicketFull(stage, (center) => stage.centerOn(center.clone().setY(0.6)));
+
+// Hover anything to highlight it; click it for its details on the right.
+const inspector = new Inspector(stage, oneTicketInspectables(story));
 
 const settings = { autoRun: true, pauseBetweenRuns: 1.5 };
 let running = false;
@@ -43,4 +48,4 @@ gui.add({ run: () => void run() }, 'run').name('Play A then B');
 gui.add(settings, 'autoRun').name('Auto-run');
 gui.add(settings, 'pauseBetweenRuns', 0.5, 8, 0.5).name('Pause between runs (s)');
 
-Object.assign(window, { sandbox: { stage, story, run, settings }, __stage: stage });
+Object.assign(window, { sandbox: { stage, story, inspector, run, settings }, __stage: stage });
