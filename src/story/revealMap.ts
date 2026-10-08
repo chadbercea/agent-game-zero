@@ -1,3 +1,4 @@
+import type { Object3D } from 'three';
 import type { SceneHost } from '../stage/Stage';
 import type { SystemMap } from './SystemMap';
 import { tween, wait } from './timeline';
@@ -28,6 +29,28 @@ export async function revealMap(stage: Pick<SceneHost, 'onTick'>, map: SystemMap
   map.linesVisible = true;
   await wait(stage, LINGER_SECONDS);
   map.linesVisible = false;
+}
+
+/**
+ * One node called up on its own (an agent calls it): its branch draws out
+ * from the gate over its patch of faint grid, and the node rises as the line
+ * reaches it. Resolves once the node is up; the line and grid linger, then
+ * fade, on their own. A node already up resolves at once.
+ */
+export async function revealNode(stage: Pick<SceneHost, 'onTick'>, map: SystemMap, i: number): Promise<void> {
+  if (map.nodes[i].visible) return;
+  map.setCalling(i, true);
+  const branch = map.branches[i];
+  await tween(stage, DRAW_SECONDS, (t) => (branch.drawn = easeOutCubic(t)));
+  await tween(stage, RISE_SECONDS, (t) => map.setRise(i, easeOutBack(t)));
+  void wait(stage, LINGER_SECONDS).then(() => map.setCalling(i, false));
+}
+
+/** A gate called up: it pops up out of the floor. Already up: resolves at once. */
+export async function revealGate(stage: Pick<SceneHost, 'onTick'>, gate: Object3D): Promise<void> {
+  if (gate.visible) return;
+  gate.visible = true;
+  await tween(stage, RISE_SECONDS, (t) => gate.scale.setScalar(Math.max(0.001, easeOutBack(t))));
 }
 
 function easeOutCubic(t: number): number {

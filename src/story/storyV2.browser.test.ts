@@ -2,7 +2,7 @@ import { Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import type { SceneHost } from '../stage/Stage';
-import { StoryV2 } from './storyV2';
+import { StoryV2, type V2Beat } from './storyV2';
 
 /** A stage with no renderer: a scene root and a clock the test drives a frame at a time (`fps` frames a second). */
 function testStage(fps = 30) {
@@ -73,5 +73,24 @@ describe('StoryV2 drone sequence', () => {
     const [one, two] = await Promise.all([playOnce(new StoryV2(a.stage), a.run), playOnce(new StoryV2(b.stage), b.run)]);
     const order = (log: string[]) => log.map((e) => e.split(' @')[0]);
     expect(order(two)).toEqual(order(one));
+  });
+
+  it('puts gates and tools on the grid only as agents call them', async () => {
+    const onGrid = async (through: V2Beat) => {
+      const { stage, run } = testStage();
+      const story = new StoryV2(stage);
+      let played = false;
+      void story.play(through).then(() => (played = true));
+      await run(400, () => played);
+      expect(played).toBe(true);
+      const nodes = Object.values(story.nodes()).filter((n) => n.visible).map((n) => n.kind).sort();
+      const gates = [story.scene.act1.gate.visible, story.scene.act2.gate.visible];
+      return { nodes, gates };
+    };
+    expect(await onGrid('opening')).toEqual({ nodes: [], gates: [false, false] });
+    expect(await onGrid('own-system')).toEqual({ nodes: ['github'], gates: [true, false] });
+    expect(await onGrid('rovo-bridge')).toEqual({ nodes: ['github', 'jira'], gates: [true, true] });
+    expect(await onGrid('juiced-crew')).toEqual({ nodes: ['bitbucket', 'github', 'jira'], gates: [true, true] });
+    expect((await onGrid('full-system')).nodes).toHaveLength(7);
   });
 });

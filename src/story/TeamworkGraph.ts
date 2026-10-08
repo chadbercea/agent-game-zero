@@ -59,6 +59,8 @@ export class TeamworkGraph {
   readonly links: GraphLink[] = [];
   /** Every drawn line: in-system links and feeders, each once. */
   readonly edges: GraphEdge[] = [];
+  /** Per edge, the tools it touches (a feeder: its one node; a link: both ends). */
+  private readonly edgeKinds: SystemKind[][] = [];
   /** Information highways: glass conduits over shared runs (see sharedRuns), never over the gateway. */
   readonly conduits: Conduit[] = [];
   private readonly gateway?: SharedRun;
@@ -88,18 +90,19 @@ export class TeamworkGraph {
     const byKind = new Map(groups.flat().map((n) => [n.kind, n]));
     const system = new Map(groups.flatMap((g, i) => g.map((n) => [n.kind, i] as const)));
     const drawn: Vector3[][] = [];
-    const draw = (polyline: Vector3[], insetStart: number) => {
+    const draw = (polyline: Vector3[], insetStart: number, kinds: SystemKind[]) => {
       const edge = new GraphEdge(roundedPath(trimPolyline(polyline, insetStart, NODE_INSET), BEND_RADIUS));
       stage.add(edge);
       this.edges.push(edge);
+      this.edgeKinds.push(kinds);
       drawn.push(polyline);
       return edge;
     };
 
     // Feeders first: from each tunnel port (the line starts right at the end face) out to its node.
-    for (const [, feeder] of feeders) {
+    for (const [kind, feeder] of feeders) {
       if (!byKind.size) continue;
-      const edge = draw(feeder, 0);
+      const edge = draw(feeder, 0, [kind]);
       this.feeders.push({ edge, opacity: edge.material.opacity });
     }
 
@@ -118,7 +121,7 @@ export class TeamworkGraph {
         continue;
       }
       const polyline = lines.get(link) ?? gridRoute(snapToGrid(from.position), snapToGrid(to.position));
-      draw(polyline, NODE_INSET);
+      draw(polyline, NODE_INSET, [link.a, link.b]);
       this.links.push({ from, to, route: roundedPath(polyline, BEND_RADIUS), link, crosses });
     }
 
@@ -143,16 +146,16 @@ export class TeamworkGraph {
   }
 
   /**
-   * How connected the gateway is (0–1): 1 while every feeder line is fully
-   * drawn and solid, falling as they fade, 0 once any of them is undrawn (or
-   * there are none).
+   * How connected the gateway is (0–1): 1 while the feeder lines that are
+   * drawn in are solid, falling as they fade, 0 when none are drawn in yet
+   * (or they've gone). A feeder still drawing, or one to a tool nobody has
+   * called, doesn't count either way.
    */
   get feedersConnected(): number {
-    if (!this.feeders.length) return 0;
+    const connected = this.feeders.filter(({ edge }) => edge.drawn >= 1);
+    if (!connected.length) return 0;
     let level = 1;
-    for (const { edge, opacity } of this.feeders) {
-      level = Math.min(level, edge.drawn >= 1 ? edge.material.opacity / opacity : 0);
-    }
+    for (const { edge, opacity } of connected) level = Math.min(level, edge.material.opacity / opacity);
     return MathUtils.clamp(level, 0, 1);
   }
 
@@ -195,6 +198,21 @@ export class TeamworkGraph {
         await tween(stage, CONDUIT_SECONDS, (t) => this.conduits.forEach((c) => (c.level = t * t * (3 - 2 * t))));
       })(),
     ]);
+  }
+
+  /**
+   * Draw in the lines among `called` tools that aren't drawn yet (a feeder
+   * once its tool is called, a link once both its ends are), one after
+   * another. Lines to tools nobody has called stay undrawn.
+   */
+  async revealAmong(stage: Pick<SceneHost, 'onTick'>, called: ReadonlySet<SystemKind>): Promise<void> {
+    const due = this.edges.filter((edge, i) => edge.drawn === 0 && this.edgeKinds[i].every((k) => called.has(k)));
+    await Promise.all(
+      due.map(async (edge, i) => {
+        await wait(stage, i * STAGGER_SECONDS);
+        await tween(stage, DRAW_SECONDS, (t) => (edge.drawn = 1 - (1 - t) ** 3));
+      }),
+    );
   }
 
   /** Fade the whole web out and reset it. */

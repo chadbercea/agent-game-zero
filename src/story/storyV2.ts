@@ -26,7 +26,7 @@ import { D3V1N_REQUEST, GATEWAY, HOME, ROVO_HOME } from './layout';
 import { leaveBase } from './leaveBase';
 import { opening } from './opening';
 import { absorb, handOff } from './request';
-import { revealMap } from './revealMap';
+import { revealGate, revealNode } from './revealMap';
 import { Roster } from './roster';
 import { type OutputLine, type OutputPlace, shipOutput } from './shipOutput';
 import type { SystemMap } from './SystemMap';
@@ -106,6 +106,11 @@ export class StoryV2 {
   private stopFirstJob: () => void = () => {};
   private output: OutputLine | null = null;
   private cleanups: (() => void)[] = [];
+  /** Tools an agent has called up so far: only these are on the grid. */
+  private readonly called = new Set<SystemKind>();
+  private readonly calls = new Map<SystemKind, Promise<void>>();
+  /** Rovo's Teamwork Graph is up: called tools get its lines too. */
+  private graphUp = false;
   /** Volume of work across the grid: what hover cards report. */
   readonly volume: Volume;
   /** Every drone comes and goes through here, in one sequence per run (see `roster.log`). */
@@ -121,6 +126,8 @@ export class StoryV2 {
     // Nothing's mapped yet: each system shows only once its agent gets access.
     this.scene.act1.map.hide();
     this.scene.act2.map.hide();
+    // Gates aren't on the grid either until their agent calls them.
+    this.scene.act1.gate.visible = this.scene.act2.gate.visible = false;
     this.graph = teamworkGraph(stage, this.scene);
     // The tunnel's data flows only while the graph's feeder lines are connected to its ends.
     this.graph.feed(this.gateway.conduit);
@@ -235,21 +242,23 @@ export class StoryV2 {
   }
 
   /**
-   * Beat 2: D3V1N in its own system. It takes the ticket, flies to its gate
-   * and checks access (yellow, then green), and its system maps out the way
-   * it always has: traces draw out over the faint grid, the tools rise, and
-   * the lines fade off. It sends one sub-agent along its trace to GitHub,
-   * which starts a branch and keeps working. From here on, clouds drift by
-   * and drop issues into the human tools that are online (Notion, for now).
-   * Resolves false if the gate denies access.
+   * Beat 2: D3V1N in its own system. It takes the ticket and calls its gate,
+   * which pops up out of the floor; it flies there and checks access
+   * (yellow, then green). Then it calls GitHub, and only GitHub: its trace
+   * draws out over the faint grid, the tool rises, and the line fades off.
+   * Its other tools stay off the grid until someone calls them. It sends one
+   * sub-agent along the trace to GitHub, which starts a branch and keeps
+   * working. From here on, clouds drift by and drop issues into whichever
+   * human tools are on the grid. Resolves false if the gate denies access.
    */
   private async ownSystem(): Promise<boolean> {
     const { stage, drone, ticket, scene } = this;
     const { gate, map } = scene.act1;
     await handOff(stage, ticket, drone);
     await absorb(stage, ticket);
+    await revealGate(stage, gate);
     if (!(await accessCheck(stage, drone, gate))) return false;
-    await revealMap(stage, map);
+    await this.call('github');
     this.humans.start();
     this.cleanups.push(() => this.humans.stop());
 
@@ -316,8 +325,10 @@ export class StoryV2 {
     ]);
     rovo.drone.flash = 1;
     scene.act2.signal = attachSignal(stage, rovo.drone, gate);
+    // Rovo calls its gate, gets access, and calls Jira: where D3V1N's ticket lives.
+    await revealGate(stage, gate);
     if (!(await accessCheck(stage, rovo.drone, gate))) return;
-    await revealMap(stage, map);
+    await this.call('jira');
     rovo.drone.status = 'working';
     await wait(stage, 0.4);
 
@@ -350,8 +361,9 @@ export class StoryV2 {
     builder.despawn();
     rovo.drone.flash = 1;
 
-    // The graph's lines draw in and connect to the tunnel's ends; data streams through it.
-    await graph.reveal(stage);
+    // The graph's lines draw in among the tools on the grid and connect to the tunnel's ends; data streams through it.
+    this.graphUp = true;
+    await graph.revealAmong(stage, this.called);
     await tween(stage, 1, (t) => (gateway.conduit.streams = t));
 
     // Power from Rovo, along the graph and through the tunnel, to D3V1N: it charges up.
@@ -381,12 +393,14 @@ export class StoryV2 {
    * graph and back through the tunnel.
    */
   private async juicedCrew(): Promise<void> {
-    const { stage, drone, graph, scene } = this;
+    const { stage, drone, scene } = this;
     const github = this.node('github');
     const bitbucket = this.node('bitbucket');
+    // D3V1N calls Bitbucket: it comes up on Rovo's side, with its graph lines.
+    await this.call('bitbucket');
     const toBitbucket = new CurvePath<Vector3>();
     toBitbucket.add(this.ownRoute(scene.act1.map, 'github'));
-    toBitbucket.add(linkRoute(graph, ...(graphPathKinds(graph, 'github', 'bitbucket') ?? ['github', 'jira', 'bitbucket'])));
+    toBitbucket.add(this.graphRoute('github', 'bitbucket'));
     drone.flash = 1;
     const spots = [-SIDE, SIDE].map((side) => bitbucket.position.clone().addScaledVector(SCREEN_RIGHT, side));
     const tucked = tuck(stage, bitbucket);
@@ -421,9 +435,8 @@ export class StoryV2 {
     job.rotation.y = FACE_CAMERA;
     job.scale.setScalar(w.at === 'bitbucket' ? 0.8 : 1);
     stage.add(job);
-    const hops = graphPathKinds(graph, 'bitbucket', 'github');
     const feed: Curve<Vector3> =
-      w.at === 'github' || !hops ? new LineCurve3(w.spot.clone(), githubAt.clone()) : linkRoute(graph, ...hops);
+      w.at === 'github' ? new LineCurve3(w.spot.clone(), githubAt.clone()) : this.graphRoute('bitbucket', 'github');
     let t = (i * 0.37) % 1;
     let since = i * 0.3;
     const untick = stage.onTick((dt) => {
@@ -468,13 +481,15 @@ export class StoryV2 {
           // The rest of the grid is Rovo's: out to GitHub, then along the graph through the tunnel.
           const path = new CurvePath<Vector3>();
           path.add(this.ownRoute(scene.act1.map, 'github'));
-          path.add(linkRoute(graph, ...(graphPathKinds(graph, 'github', kind) ?? ['github', kind])));
+          path.add(this.graphRoute('github', kind));
           return path;
         },
         rovoRouteTo: (kind) => this.ownRoute(scene.act2.map, kind),
         boost: graph.boost,
         watch: this.throughGateway(),
         spawn: this.roster.spawn,
+        call: (kind) => this.call(kind),
+        onGrid: (kind) => this.called.has(kind),
         onCommit: () => this.output?.commit(),
         pullBack: camera.to,
       },
@@ -486,6 +501,34 @@ export class StoryV2 {
   /** A gate's own trace out to one of its tools. */
   private ownRoute(map: SystemMap, kind: SystemKind): Curve<Vector3> {
     return map.routes[map.nodes.findIndex((n) => n.kind === kind)];
+  }
+
+  /**
+   * An agent calls a tool: it comes up on the grid (its trace from its gate
+   * draws out over the faint grid, the tool rises, the line fades off), and
+   * once Rovo's graph is up, the graph's lines to it draw in too. Calling a
+   * tool that's already up (or coming up) waits for it.
+   */
+  call(kind: SystemKind): Promise<void> {
+    let calling = this.calls.get(kind);
+    if (!calling) {
+      calling = (async () => {
+        const { act1, act2 } = this.scene;
+        const map = act1.map.nodes.some((n) => n.kind === kind) ? act1.map : act2.map;
+        await revealNode(this.stage, map, map.nodes.findIndex((n) => n.kind === kind));
+        this.called.add(kind);
+        if (this.graphUp) await this.graph.revealAmong(this.stage, this.called);
+      })();
+      this.calls.set(kind, calling);
+    }
+    return calling;
+  }
+
+  /** The graph's way between two tools, through tools on the grid only. */
+  private graphRoute(from: SystemKind, to: SystemKind): Curve<Vector3> {
+    const hops = graphPathKinds(this.graph, from, to, (k) => this.called.has(k));
+    if (!hops) throw new Error(`StoryV2: no way along the graph from ${from} to ${to}`);
+    return linkRoute(this.graph, ...hops);
   }
 
   private node(kind: SystemKind): SystemNode {
@@ -565,6 +608,14 @@ export class StoryV2 {
     await tween(stage, 0.6, (t) => (drone.fade = Math.min(drone.fade, 1 - t)));
     drone.scale.setScalar(1);
     drone.status = 'waiting';
+    // Gates sink back into the floor; everything called goes off the grid again.
+    await tween(stage, 0.4, (t) => {
+      for (const g of [scene.act1.gate, scene.act2.gate]) if (g.visible) g.scale.setScalar(Math.max(0.001, 1 - t));
+    });
+    scene.act1.gate.visible = scene.act2.gate.visible = false;
+    this.called.clear();
+    this.calls.clear();
+    this.graphUp = false;
     scene.act1.map.hide();
     scene.act2.map.hide();
     for (const node of Object.values(this.nodes())) node.dim = 0;
