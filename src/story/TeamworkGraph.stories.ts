@@ -6,7 +6,7 @@ import { tween, wait } from './timeline';
 import { twoActScene, teamworkGraph } from './twoActs';
 
 const meta: Meta = {
-  title: 'Story/09 Teamwork Graph',
+  title: 'Story Parts/Teamwork Graph',
   parameters: { layout: 'fullscreen' },
 };
 export default meta;

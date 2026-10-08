@@ -16,7 +16,7 @@ interface CheckArgs {
 }
 
 const meta: Meta<CheckArgs> = {
-  title: 'Story/03 Access Check',
+  title: 'Story Parts/Access Check',
   parameters: { layout: 'fullscreen' },
   args: { works: true },
 };
@@ -48,27 +48,6 @@ export const Check: Story = {
       for (;;) {
         await wait(stage, 1);
         await accessCheck(stage, drone, gate);
-        await wait(stage, 2.5);
-        await leaveBase(stage, { drone, gate, signal }, HOME);
-      }
-    })();
-    return root;
-  },
-};
-
-/** Denied, the system gets fixed, retry, access granted. */
-export const Retry: Story = {
-  render: () => {
-    const { root, stage } = specimenStage({ viewSize: 7, focusY: 0.6 });
-    const { gate, drone, signal } = scene(stage, false);
-    void (async () => {
-      for (;;) {
-        gate.works = false;
-        await wait(stage, 1);
-        await accessCheck(stage, drone, gate); // red: drone Stopped at the gate
-        await wait(stage, 2.5);
-        gate.works = true;
-        await accessCheck(stage, drone, gate); // retry: green
         await wait(stage, 2.5);
         await leaveBase(stage, { drone, gate, signal }, HOME);
       }

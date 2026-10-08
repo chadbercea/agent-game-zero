@@ -9,7 +9,7 @@ import { ACT1_GATE, ATLASSIAN_GATE, STORY_CENTER, storyLayout } from './layout';
 import { SystemMap } from './SystemMap';
 
 const meta: Meta = {
-  title: 'Story/07 Two Systems',
+  title: 'Story Parts/Two Systems',
   parameters: { layout: 'fullscreen' },
 };
 export default meta;
@@ -24,9 +24,10 @@ function gateAt(stage: Stage, position: typeof ACT1_GATE): Gate {
 }
 
 /**
- * Layout check: Act 1's system (Figma, GitHub, Notion) and the Atlassian
+ * Layout check: D3V1N's system (Figma, GitHub, Notion) and Rovo's Atlassian
  * system (Code search, Confluence, Jira, Bitbucket) side by side on the one
- * grid, both fully revealed.
+ * grid, the layout the story uses, with every tool shown at once (in the
+ * story, tools come up only as agents call them).
  */
 export const Layout: StoryObj = {
   render: () => {
