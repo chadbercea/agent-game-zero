@@ -13,6 +13,7 @@ import { type Boost, shoot } from './beam';
 import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
 import type { Spawner } from './roster';
+import type { Claim } from './tertiary';
 import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 
@@ -53,6 +54,12 @@ export interface FullSystemCast {
   call?: (kind: SystemKind) => Promise<void>;
   /** Whether a tool is on the grid (products only travel through tools that are). All are, if left out. */
   onGrid?: (kind: SystemKind) => boolean;
+  /**
+   * An agent's place at a tool (see Tertiaries): the tool itself if it's
+   * free, otherwise a tertiary node of its own off the tool. Without it,
+   * agents sharing a tool sit side by side over it.
+   */
+  claim?: (kind: SystemKind) => Claim;
   /** A product landed in GitHub (the output line turns it into a little block). */
   onCommit: () => void;
   /** Pull the camera back to the whole grid (0–1), if the stage has one to move. */
@@ -130,10 +137,14 @@ export async function fullSystem(
     if (!running) break;
     flights.push(
       (async () => {
-        const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch, cast.spawn);
-        if (!running) return sub.despawn();
+        const place = cast.claim?.(at) ?? { spot, tertiary: null, release: () => {} };
+        const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), place.spot, 4.6, cast.watch, cast.spawn);
+        if (!running) {
+          place.release();
+          return sub.despawn();
+        }
         nodes[at].light = 'working';
-        stops.push(work(stage, sub, at, spot, cast, stream(100 + i)));
+        stops.push(work(stage, sub, at, place, cast, stream(100 + i)));
       })(),
     );
   }
@@ -177,18 +188,20 @@ function work(
   stage: SceneHost,
   sub: SpawnedDrone,
   at: SystemKind,
-  spot: Vector3,
+  place: Claim,
   { nodes, graph, boost, onCommit, onGrid }: FullSystemCast,
   between: (range: [number, number]) => number,
 ): () => void {
-  const node = nodes[at];
+  const { spot, tertiary } = place;
+  // It works the tool itself, or its own tertiary node off the tool.
+  const node = tertiary ?? nodes[at];
   let job: Job | undefined;
   let signal: ReturnType<typeof attachSignal> | undefined;
   if (hasJob(at)) {
     job = new Job(at);
     job.position.copy(spot);
     job.rotation.y = FACE_CAMERA;
-    job.scale.setScalar(0.8);
+    job.scale.setScalar(tertiary ? 0.6 : 0.8);
     stage.add(job);
     node.emblem.visible = false;
   } else {
@@ -209,7 +222,8 @@ function work(
       job.progress = MathUtils.clamp(t, 0, 1);
     }
     next -= dt;
-    if (next > 0) return;
+    // A tertiary's work flows into its tool along its trace; the tool's own agent ships to GitHub.
+    if (next > 0 || tertiary) return;
     next = between(SHIP_EVERY);
     const route = toGithub();
     if (route) void shoot(stage, route, 6.5, boost, at).then(onCommit);
@@ -218,9 +232,12 @@ function work(
     untick();
     signal?.detach();
     job?.removeFromParent();
-    node.emblem.visible = true;
-    node.emblem.scale.setScalar(EMBLEM_SCALE);
-    node.light = 'off';
+    if (!tertiary) {
+      node.emblem.visible = true;
+      node.emblem.scale.setScalar(EMBLEM_SCALE);
+      node.light = 'off';
+    }
+    place.release();
     sub.despawn();
   };
 }
@@ -228,7 +245,7 @@ function work(
 /** A Rovo helper: buds off Rovo, goes to one of its tools, helps for a while, comes back and docks. */
 async function help(
   stage: SceneHost,
-  { rovo, nodes, rovoRouteTo, watch, spawn, call }: FullSystemCast,
+  { rovo, nodes, rovoRouteTo, watch, spawn, call, claim }: FullSystemCast,
   at: SystemKind,
   name: string,
   seconds: number,
@@ -238,14 +255,19 @@ async function help(
   await call?.(at);
   if (!running()) return;
   const node = nodes[at];
-  const spot = node.position.clone().add(HELPER_SPOT);
+  // Its place at the tool: a tertiary of its own if someone's already on it.
+  const place = claim?.(at) ?? { spot: node.position.clone().add(HELPER_SPOT), tertiary: null, release: () => {} };
+  const { spot } = place;
   const way = rovoRouteTo(at);
   const route: Curve<Vector3> = way.getLength() > 0.05 ? way : new LineCurve3(node.position.clone(), spot.clone());
   const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch, spawn);
   // Stopped while it was on its way out: it never gets to work.
-  if (!running()) return sub.despawn();
+  if (!running()) {
+    place.release();
+    return sub.despawn();
+  }
   out.add(sub);
-  const signal = attachSignal(stage, sub.drone, node);
+  const signal = attachSignal(stage, sub.drone, place.tertiary ?? node);
   // Help for a while (one timer, so it doesn't drift with the frame rate), or until everything stops.
   await new Promise<void>((resolve) => {
     let t = 0;
@@ -257,6 +279,7 @@ async function help(
     });
   });
   signal.detach();
+  place.release();
   if (!running()) return;
   // Home again: back the way it came, and into Rovo.
   const back = new CurvePath<Vector3>();

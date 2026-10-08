@@ -27,6 +27,7 @@ import { leaveBase } from './leaveBase';
 import { opening } from './opening';
 import { absorb, handOff } from './request';
 import { revealGate, revealNode } from './revealMap';
+import { Tertiaries } from './tertiary';
 import { Roster } from './roster';
 import { type OutputLine, type OutputPlace, shipOutput } from './shipOutput';
 import type { SystemMap } from './SystemMap';
@@ -53,9 +54,6 @@ const BUD_SCALE = 0.25;
 const BRANCH_SECONDS = JOB_SECONDS.github * 0.5;
 /** Seconds between commits each writer sends to GitHub. */
 const COMMIT_EVERY = 0.65;
-/** Two sub-agents share Bitbucket: side by side over the node, this far either side along screen-right. */
-const SIDE = 0.42;
-const SCREEN_RIGHT = new Vector3(1, 0, -1).normalize();
 
 /**
  * The output line on this grid: from GitHub back past D3V1N's system to an
@@ -73,13 +71,15 @@ const OUTPUT = {
 const WHOLE_CENTER = new Vector3(5.5, 0, -2.5);
 
 /** How close a sub-agent has to be to a tool to count as working at it. */
-const AT_NODE = 1.2;
+const AT_NODE = 1.6;
 
 /** A branch being written on a tool, and how to stop it. */
 interface Writer {
   sub: SpawnedDrone;
   at: SystemKind;
   spot: Vector3;
+  /** The tertiary node it works, if the tool already had someone on it. */
+  tertiary?: SystemNode | null;
 }
 
 /**
@@ -115,6 +115,8 @@ export class StoryV2 {
   readonly volume: Volume;
   /** Every drone comes and goes through here, in one sequence per run (see `roster.log`). */
   readonly roster: Roster;
+  /** Agents sharing a tool: each one after the first works a tertiary node of its own off it. */
+  readonly tertiaries: Tertiaries;
 
   /** `seed` sets the run's ambient variation (crew, helpers, clouds): the same seed plays the same run every time. */
   constructor(
@@ -122,6 +124,7 @@ export class StoryV2 {
     private readonly seed = 5,
   ) {
     this.roster = new Roster(stage);
+    this.tertiaries = new Tertiaries(stage, () => this.floorTaken());
     this.scene = twoActScene(stage);
     // Nothing's mapped yet: each system shows only once its agent gets access.
     this.scene.act1.map.hide();
@@ -265,6 +268,7 @@ export class StoryV2 {
     // One sub-agent to GitHub, along D3V1N's trace, to start a branch.
     const github = this.node('github');
     const route = this.ownRoute(map, 'github');
+    this.cleanups.push(this.tertiaries.claim(github).release);
     const sub = await budOut(stage, drone, `${drone.name}.1`, route, github.position, 4.2, undefined, this.roster.spawn);
     sub.drone.rotation.y = FACE_CAMERA;
     this.first = { sub, at: 'github', spot: github.position.clone() };
@@ -402,15 +406,17 @@ export class StoryV2 {
     toBitbucket.add(this.ownRoute(scene.act1.map, 'github'));
     toBitbucket.add(this.travel('github', 'bitbucket'));
     drone.flash = 1;
-    const spots = [-SIDE, SIDE].map((side) => bitbucket.position.clone().addScaledVector(SCREEN_RIGHT, side));
     const tucked = tuck(stage, bitbucket);
     this.cleanups.push(() => untuck(bitbucket));
     const watch = this.throughGateway();
+    // Two go to Bitbucket: the first works the tool itself, the second a tertiary node of its own off it.
     const writers = await Promise.all(
-      spots.map(async (spot, i): Promise<Writer> => {
+      [0, 1].map(async (i): Promise<Writer> => {
         await wait(stage, i * 0.45);
-        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, toBitbucket, spot, 4.2, watch, this.roster.spawn);
-        return { sub, at: 'bitbucket', spot };
+        const place = this.tertiaries.claim(bitbucket);
+        this.cleanups.push(place.release);
+        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, toBitbucket, place.spot, 4.2, watch, this.roster.spawn);
+        return { sub, at: 'bitbucket', spot: place.spot, tertiary: place.tertiary };
       }),
     );
     this.cleanups.push(() => writers.forEach((w) => w.sub.despawn()));
@@ -433,8 +439,9 @@ export class StoryV2 {
     const job = new Job('github');
     job.position.copy(w.spot);
     job.rotation.y = FACE_CAMERA;
-    job.scale.setScalar(w.at === 'bitbucket' ? 0.8 : 1);
+    job.scale.setScalar(w.tertiary ? 0.6 : w.at === 'bitbucket' ? 0.8 : 1);
     stage.add(job);
+    if (w.tertiary) w.tertiary.emblem.visible = false;
     const feed: Curve<Vector3> =
       w.at === 'github' ? new LineCurve3(w.spot.clone(), githubAt.clone()) : this.graphRoute('bitbucket', 'github');
     let t = (i * 0.37) % 1;
@@ -444,7 +451,8 @@ export class StoryV2 {
       t = (t + dt / BRANCH_SECONDS) % 1.2;
       job.progress = MathUtils.clamp(t, 0, 1);
       since += dt;
-      if (since < COMMIT_EVERY) return;
+      // A tertiary's work flows into its tool along its trace; the tool's own writer sends the commits on.
+      if (since < COMMIT_EVERY || w.tertiary) return;
       since = 0;
       void shoot(stage, feed, w.at === 'github' ? 3 : 7, graph.boost, w.at).then(() => {
         w.sub.drone.flash = Math.max(w.sub.drone.flash, 0.5);
@@ -490,6 +498,7 @@ export class StoryV2 {
         spawn: this.roster.spawn,
         call: (kind) => this.call(kind),
         onGrid: (kind) => this.called.has(kind),
+        claim: (kind) => this.tertiaries.claim(this.node(kind)),
         onCommit: () => this.output?.commit(),
         pullBack: camera.to,
       },
@@ -538,6 +547,21 @@ export class StoryV2 {
     const hops = graphPathKinds(this.graph, from, to, (k) => this.called.has(k));
     if (!hops) throw new Error(`StoryV2: no way along the graph from ${from} to ${to}`);
     return hops;
+  }
+
+  /** Where things stand on the floor (or will), for placing tertiary nodes clear of them. */
+  private floorTaken(): Vector3[] {
+    const { act1, act2 } = this.scene;
+    const taken = [
+      // Every tool and gate, called up yet or not: a tool that comes up later mustn't land on a tertiary.
+      ...Object.values(this.nodes()).map((n) => n.position),
+      act1.gate.position,
+      act2.gate.position,
+      // The tunnel, end to end, and the output line.
+      ...[GATEWAY.from, (GATEWAY.from + GATEWAY.to) / 2, GATEWAY.to].map((x) => new Vector3(x, 0, (GATEWAY.low + GATEWAY.high) / 2)),
+    ];
+    if (this.output) taken.push(OUTPUT.assembler, OUTPUT.beltFrom, OUTPUT.portal);
+    return taken;
   }
 
   private node(kind: SystemKind): SystemNode {
@@ -596,6 +620,7 @@ export class StoryV2 {
     const { stage, scene, drone, ticket, gateway, graph, charge, roster } = this;
     roster.freeze();
     for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
+    this.tertiaries.clear();
     await Promise.all([
       roster.clear(),
       tween(stage, 0.8, (t) => {

@@ -64,7 +64,7 @@ export const RovoBridge: StoryObj = {
 
 /**
  * Beats 1 to 4, on loop. Juiced, D3V1N runs three sub-agents: its first
- * stays on GitHub, D3V1N calls Bitbucket up, and two ride the graph through the super tunnel, then fly straight to it.
+ * stays on GitHub, D3V1N calls Bitbucket up, and two ride the graph through the super tunnel, then fly straight to it: the first works Bitbucket, the second a tertiary node that buds off it and feeds into it.
  * All three build branches fast, and commits keep landing in GitHub. No
  * captions.
  */

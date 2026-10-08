@@ -54,6 +54,8 @@ describe('StoryV2 drone sequence', () => {
     expect(story.roster.names).toEqual([]);
     const drones = root.children.filter((o): o is Drone => o instanceof Drone);
     expect(drones).toEqual([story.drone]);
+    // Tertiary nodes went with their agents.
+    expect(story.tertiaries.count).toBe(0);
     expect(story.drone.fade).toBe(0);
   });
 
@@ -76,6 +78,7 @@ describe('StoryV2 drone sequence', () => {
   });
 
   it('puts gates and tools on the grid only as agents call them', async () => {
+    let tertiaryCount = 0;
     const onGrid = async (through: V2Beat) => {
       const { stage, run } = testStage();
       const story = new StoryV2(stage);
@@ -85,12 +88,15 @@ describe('StoryV2 drone sequence', () => {
       expect(played).toBe(true);
       const nodes = Object.values(story.nodes()).filter((n) => n.visible).map((n) => n.kind).sort();
       const gates = [story.scene.act1.gate.visible, story.scene.act2.gate.visible];
+      tertiaryCount = story.tertiaries.count;
       return { nodes, gates };
     };
     expect(await onGrid('opening')).toEqual({ nodes: [], gates: [false, false] });
     expect(await onGrid('own-system')).toEqual({ nodes: ['github'], gates: [true, false] });
     expect(await onGrid('rovo-bridge')).toEqual({ nodes: ['github', 'jira'], gates: [true, true] });
     expect(await onGrid('juiced-crew')).toEqual({ nodes: ['bitbucket', 'github', 'jira'], gates: [true, true] });
+    // Two of D3V1N's crew on Bitbucket: the second works a tertiary node off it.
+    expect(tertiaryCount).toBe(1);
     expect((await onGrid('full-system')).nodes).toHaveLength(7);
   });
 });
