@@ -73,20 +73,67 @@ describe('OneTicketB, Version B beats 1–3', () => {
     expect(story.drone.position.distanceTo(B_LAYOUT.home)).toBeLessThan(1e-3);
   });
 
+  it('plays Version B end to end in about 15 s: one gateway, a linked record at DEMO-990, no trip back', async () => {
+    const { stage, run, now } = testStage();
+    const story = new OneTicketB(stage);
+    let played = false;
+    let leftHomeAfterPlan = false;
+    void story.play('b6').then(() => (played = true));
+    await run(
+      40,
+      () => played,
+      () => {
+        if (story.plan.visible && story.drone.position.distanceTo(B_LAYOUT.home) > 1e-3) leftHomeAfterPlan = true;
+      },
+    );
+    expect(played).toBe(true);
+    expect(now()).toBeGreaterThan(12);
+    expect(now()).toBeLessThan(18);
+    // The plan, from five.
+    expect(story.plan.visible).toBe(true);
+    expect(story.carried).toHaveLength(0);
+    // Code through the gateway: the branch off Bitbucket, three commits on it, the PR carrying DEMO-990.
+    expect(story.branch.drawn).toBe(1);
+    expect(story.commits).toHaveLength(3);
+    expect(story.pr.visible).toBe(true);
+    expect(story.pr.request.title).toContain('DEMO-990');
+    // Jira recorded it on its own: the line from the PR is in, the issue shows the record, D3V1N never went back.
+    expect(story.recordLine.drawn).toBe(1);
+    expect(story.record.visible).toBe(true);
+    expect(leftHomeAfterPlan).toBe(false);
+    // One gateway, crossed there and back once.
+    expect(story.crossings).toBe(2);
+  });
+
+  it('plays B4–6 on its own, starting from D3V1N home with all five', async () => {
+    const { stage, run } = testStage();
+    const story = new OneTicketB(stage);
+    let played = false;
+    void story.play('b6', 'b4').then(() => (played = true));
+    expect(story.carried).toHaveLength(5);
+    expect(story.ticket.visible).toBe(true);
+    await run(20, () => played);
+    expect(played).toBe(true);
+    expect(story.record.visible).toBe(true);
+  });
+
   it('resets clean and plays the same again', async () => {
     const { stage, run } = testStage();
     const story = new OneTicketB(stage);
     for (let i = 0; i < 2; i++) {
       let done = false;
-      void story.play('b3').then(() => (done = true));
-      await run(30, () => done);
-      expect(story.carried).toHaveLength(5);
+      void story.play('b6').then(() => (done = true));
+      await run(40, () => done);
+      expect(story.record.visible).toBe(true);
       done = false;
       void story.reset().then(() => (done = true));
       await run(10, () => done);
       expect(story.carried).toHaveLength(0);
       expect(story.ticket.visible).toBe(false);
       expect(story.walked).toHaveLength(0);
+      expect(story.plan.visible || story.pr.visible || story.record.visible).toBe(false);
+      expect(story.commits).toHaveLength(0);
+      expect(story.branch.drawn + story.recordLine.drawn).toBe(0);
       expect([...story.nodes.values()].every((n) => n.light === 'off')).toBe(true);
     }
   });

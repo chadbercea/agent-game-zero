@@ -136,10 +136,7 @@ export class OneTicket {
     this.prdLink = linkMarker('figma');
     this.prdLink.visible = false;
     this.prd.card.add(this.prdLink);
-    this.plan = new Mesh(new RoundedBoxGeometry(BIG_BLOCK, BIG_BLOCK, BIG_BLOCK, 3, 0.05), productMaterial());
-    this.plan.castShadow = true;
-    this.plan.visible = false;
-    this.drone.rig.hover.add(this.plan);
+    this.plan = planBlock(this.drone);
     const github = this.stop('github').node.position;
     this.branch = new Branch(
       new LineCurve3(github.clone().add(new Vector3(-0.5, 0, 0)), github.clone().add(new Vector3(-0.5 - BRANCH_LENGTH, 0, 0))),
@@ -265,26 +262,8 @@ export class OneTicket {
    * design) closes up and merges into one bigger block. About 1.5 s.
    */
   private async makePlan(): Promise<void> {
-    const { stage, drone, plan } = this;
-    drone.status = 'waiting';
-    const parts = [...this.carried];
-    const from = parts.map((p) => p.position.clone());
-    const center = new Vector3(0, STACK_FROM + ((parts.length - 1) * STACK_STEP) / 2, 0);
-    await tween(stage, 0.9, (t) => {
-      const e = t * t * (3 - 2 * t);
-      parts.forEach((p, i) => {
-        p.position.lerpVectors(from[i], center, e);
-        p.scale.setScalar(CARRY_SCALE * (1 - 0.6 * e));
-      });
-    });
-    for (const p of this.carried.splice(0)) p.dispose();
-    plan.position.copy(center);
-    plan.visible = true;
-    drone.flash = 1;
-    await tween(stage, 0.6, (t) => {
-      plan.scale.setScalar(PLAN_SCALE * (0.4 + 0.6 * easeOutBack(t)));
-      plan.position.y = center.y + (STACK_FROM - center.y) * t;
-    });
+    this.drone.status = 'waiting';
+    await mergeIntoPlan(this.stage, this.drone, this.carried, this.plan);
   }
 
   /**
@@ -429,6 +408,41 @@ export class OneTicket {
     drone.status = 'waiting';
     this.d3v1n.animator.restart();
   }
+}
+
+/** The plan, hidden until the carried stack merges into it: one bigger block, riding with `drone`. */
+export function planBlock(drone: Drone): Mesh {
+  const plan = new Mesh(new RoundedBoxGeometry(BIG_BLOCK, BIG_BLOCK, BIG_BLOCK, 3, 0.05), productMaterial());
+  plan.castShadow = true;
+  plan.visible = false;
+  drone.rig.hover.add(plan);
+  return plan;
+}
+
+/**
+ * The plan (both versions): a drone's carried stack closes up and merges
+ * into one bigger block, which pops in at the bottom of the stack. About
+ * 1.5 s. Empties `carried`.
+ */
+export async function mergeIntoPlan(stage: SceneHost, drone: Drone, carried: Product[], plan: Mesh): Promise<void> {
+  const parts = [...carried];
+  const from = parts.map((p) => p.position.clone());
+  const center = new Vector3(0, STACK_FROM + ((parts.length - 1) * STACK_STEP) / 2, 0);
+  await tween(stage, 0.9, (t) => {
+    const e = t * t * (3 - 2 * t);
+    parts.forEach((p, i) => {
+      p.position.lerpVectors(from[i], center, e);
+      p.scale.setScalar(CARRY_SCALE * (1 - 0.6 * e));
+    });
+  });
+  for (const p of carried.splice(0)) p.dispose();
+  plan.position.copy(center);
+  plan.visible = true;
+  drone.flash = 1;
+  await tween(stage, 0.6, (t) => {
+    plan.scale.setScalar(PLAN_SCALE * (0.4 + 0.6 * easeOutBack(t)));
+    plan.position.y = center.y + (STACK_FROM - center.y) * t;
+  });
 }
 
 /** A drone hops straight to a floor point: at cruise speed, or faster for a long leg (see LEG_SECONDS). */

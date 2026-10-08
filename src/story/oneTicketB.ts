@@ -1,5 +1,8 @@
-import { type Curve, LineCurve3, Vector3 } from 'three';
-import { NODE_FOOTPRINT } from '../core/grid';
+import { type Curve, CurvePath, Group, LineCurve3, type Mesh, Vector3 } from 'three';
+import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
+import { NEUTRAL } from '../core/palette';
+import { Branch } from '../primitives/branch/Branch';
+import { roundedPath } from '../primitives/branch/gridPath';
 import type { SharedRun } from '../core/sharedRuns';
 import type { Drone } from '../primitives/drone/Drone';
 import { Gateway } from '../primitives/gateway/Gateway';
@@ -11,16 +14,18 @@ import { Ticket } from '../primitives/ticket/Ticket';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { beam, shoot } from './beam';
-import { CARRY_SCALE, hop, STACK_FROM, STACK_STEP, TICKET_SCALE } from './oneTicket';
+import { CARRY_SCALE, hop, mergeIntoPlan, planBlock, STACK_FROM, STACK_STEP, TICKET_SCALE } from './oneTicket';
 import { dropTicket, handOff } from './request';
 import { tween, wait } from './timeline';
 
 /** Version B's beats, in order. */
-export const B_BEATS = ['b1', 'b2', 'b3'] as const;
+export const B_BEATS = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] as const;
 export type BBeat = (typeof B_BEATS)[number];
 
 /** The same work as Version A, as a Jira issue assigned to D3V1N. */
 export const DEMO_990 = { key: 'DEMO-990', title: 'Add dark mode' };
+/** The pull request, carrying the issue key. */
+export const DEMO_990_PR = { key: 'PR', title: 'DEMO-990 Add dark mode' };
 
 /** The Atlassian side's tools, as the milestone lists them. */
 export const B_KINDS: readonly SystemKind[] = ['jira', 'confluence', 'figma', 'codesearch', 'bitbucket'];
@@ -65,6 +70,12 @@ export const B_CENTER = new Vector3(5.5, 0, 0);
 const EXIT_CLEAR = new Vector3(0.6, 0, 1.2);
 /** The DEMO-990 card waits beside Jira, up-left on screen, clear of Rovo and the lines. */
 const TICKET_BESIDE = new Vector3(-1.5, 0, -1.5);
+/** D3V1N's branch grows off Bitbucket this far, up-left on screen along a grid line, into open floor. */
+const BRANCH_LENGTH = 2;
+/** Commits land on the branch at these points along it. */
+const COMMITS_AT = [0.35, 0.65, 0.95];
+/** What DEMO-990 picks up on its own: the branch, the commits, the pull request. */
+export const RECORD = ['branch', 'commits', 'pr'] as const;
 /** What Rovo gathers, in the order it stacks: ticket, PRD, design, related issues, code. */
 export const B_CONTEXT: readonly { from: SystemKind; product: SystemKind }[] = [
   { from: 'jira', product: 'jira' },
@@ -93,6 +104,18 @@ export class OneTicketB {
   readonly walked: SystemKind[] = [];
   /** Times D3V1N has entered the tunnel. */
   crossings = 0;
+  /** The plan: what the carried stack merges into (B4). */
+  readonly plan: Mesh;
+  /** D3V1N's branch off Bitbucket (B5). */
+  readonly branch: Branch;
+  /** Commits landed on the branch. */
+  readonly commits: Product[] = [];
+  /** The pull request, at the end of the branch (B5). */
+  readonly pr = new Ticket(DEMO_990_PR);
+  /** The Graph Line from the PR back to DEMO-990 (B6): Jira picking it up on its own. */
+  readonly recordLine: GraphEdge;
+  /** What DEMO-990 shows it has picked up (B6): branch, commits, PR, under the card. */
+  readonly record: Group;
 
   constructor(private readonly stage: SceneHost) {
     this.d3v1n = spawnDrone(stage, B_LAYOUT.home.x, B_LAYOUT.home.z, { name: 'D3V1N', showLabel: true, status: 'waiting' });
@@ -115,11 +138,24 @@ export class OneTicketB {
     });
     this.ticket.scale.setScalar(TICKET_SCALE);
     this.ticket.visible = false;
-    stage.add(this.gateway, this.ticket);
+    this.plan = planBlock(this.drone);
+    const bitbucket = B_LAYOUT.nodes.bitbucket;
+    const branchFrom = bitbucket.clone().add(new Vector3(-NODE_FOOTPRINT / 2, 0, 0));
+    this.branch = new Branch(new LineCurve3(branchFrom, branchFrom.clone().add(new Vector3(-BRANCH_LENGTH, 0, 0))), NEUTRAL.packet);
+    this.pr.scale.setScalar(TICKET_SCALE);
+    this.pr.visible = false;
+    this.recordLine = new GraphEdge(this.recordPath());
+    this.recordLine.drawn = 0;
+    this.record = recordChips();
+    this.record.visible = false;
+    this.ticket.card.add(this.record);
+    stage.add(this.gateway, this.ticket, this.branch, this.pr, this.recordLine);
     stage.onTick((dt) => {
       this.gateway.update(dt);
       this.ticket.update(dt);
       for (const { edge } of this.lines) edge.update(dt);
+      this.recordLine.update(dt);
+      this.pr.update(dt);
       this.watchTunnel();
     });
   }
@@ -134,18 +170,42 @@ export class OneTicketB {
     return node;
   }
 
-  /** Play the beats in order through `through`. */
-  async play(through: BBeat = B_BEATS[B_BEATS.length - 1]): Promise<void> {
+  /**
+   * Play the beats in order through `through`. With `from`, the beats before
+   * it are already done when the run starts, so a segment can play on its own.
+   */
+  async play(through: BBeat = B_BEATS[B_BEATS.length - 1], from: BBeat = B_BEATS[0]): Promise<void> {
     const beats: Record<BBeat, () => Promise<void>> = {
       b1: () => this.ticketLands(),
       b2: () => this.askRovo(),
       b3: () => this.connectedContext(),
+      b4: () => this.makePlan(),
+      b5: () => this.writeCode(),
+      b6: () => this.recordItself(),
     };
+    const first = B_BEATS.indexOf(from);
     const last = B_BEATS.indexOf(through);
-    for (let i = 0; i <= last; i++) {
-      if (i > 0) await wait(this.stage, 0.3);
+    this.prime(first);
+    for (let i = first; i <= last; i++) {
+      if (i > first) await wait(this.stage, 0.25);
       await beats[B_BEATS[i]]();
     }
+  }
+
+  /** Put the stage where it stands once the first `done` beats have played, without playing them. */
+  private prime(done: number): void {
+    if (done < 1) return;
+    this.ticket.position.copy(B_LAYOUT.nodes.jira).add(TICKET_BESIDE);
+    this.ticket.visible = true;
+    if (done < 3) return;
+    B_CONTEXT.forEach(({ product }, i) => {
+      const p = new Product(product);
+      p.rotation.y -= this.drone.rotation.y;
+      p.position.set(0, STACK_FROM + i * STACK_STEP, 0);
+      p.scale.setScalar(CARRY_SCALE);
+      this.drone.rig.hover.add(p);
+      this.carried.push(p);
+    });
   }
 
   /** B1: DEMO-990 lands in Jira, beside the Jira node, and pings D3V1N at home: it's assigned. */
@@ -232,6 +292,84 @@ export class OneTicketB {
     drone.status = 'waiting';
   }
 
+  /** B4: the plan. Home, D3V1N's five merge into one bigger block, the same merge as Version A. */
+  private async makePlan(): Promise<void> {
+    this.drone.status = 'waiting';
+    await mergeIntoPlan(this.stage, this.drone, this.carried, this.plan);
+  }
+
+  /**
+   * B5: through the gateway, a branch grows off Bitbucket. D3V1N stays home:
+   * its commits ride out through the tunnel (it flashes green) and along the
+   * graph to Bitbucket, and land on the branch one after another. Then the
+   * pull request opens at the branch's end, carrying DEMO-990.
+   */
+  private async writeCode(): Promise<void> {
+    const { stage, drone, branch } = this;
+    drone.status = 'working';
+    const route = this.commitRoute();
+    const toBitbucket = route.getLength();
+    await Promise.all(
+      COMMITS_AT.map(async (at, i) => {
+        await wait(stage, i * 0.3);
+        drone.flash = 1;
+        this.gateway.grant();
+        await shoot(stage, route, Math.max(9, toBitbucket / 1.1), undefined, 'github');
+        branch.drawn = Math.max(branch.drawn, at + 0.05);
+        this.land(at);
+      }),
+    );
+    branch.drawn = 1;
+    drone.status = 'waiting';
+    await dropTicket(stage, this.pr, branch.curve.getPointAt(1).add(new Vector3(0, 0, 0.6)));
+    this.pr.glow = 1;
+  }
+
+  /**
+   * B6: Jira records it on its own. A Graph Line draws from the PR back to
+   * DEMO-990, and the issue picks up the branch, the commits and the PR (they
+   * show under its card). D3V1N stays home: nobody updates it by hand.
+   */
+  private async recordItself(): Promise<void> {
+    const { stage, ticket, record, recordLine } = this;
+    await tween(stage, 0.9, (t) => (recordLine.drawn = t * t * (3 - 2 * t)));
+    ticket.glow = 1;
+    record.visible = true;
+    await tween(stage, 0.35, (t) => record.scale.setScalar(Math.max(0.001, t)));
+  }
+
+  /** A commit's way out: home, through the tunnel, and along the graph (Jira, Code search) to Bitbucket. */
+  private commitRoute(): CurvePath<Vector3> {
+    const [near, far] = this.gateway.ends;
+    const route = new CurvePath<Vector3>();
+    route.add(new LineCurve3(B_LAYOUT.home.clone(), near.clone()));
+    route.add(new LineCurve3(near.clone(), far.clone()));
+    route.add(this.edge('gateway', 'jira').path);
+    route.add(new LineCurve3(this.edge('gateway', 'jira').path.getPointAt(1), this.edge('jira', 'codesearch').path.getPointAt(0)));
+    route.add(this.edge('jira', 'codesearch').path);
+    route.add(new LineCurve3(this.edge('jira', 'codesearch').path.getPointAt(1), this.edge('codesearch', 'bitbucket').path.getPointAt(0)));
+    route.add(this.edge('codesearch', 'bitbucket').path);
+    return route;
+  }
+
+  /** A commit lands on the branch at `at` (0–1 along it). */
+  private land(at: number): void {
+    const commit = new Product('github');
+    commit.scale.setScalar(1.6);
+    commit.position.copy(this.branch.curve.getPointAt(at)).setY(0.2);
+    this.stage.add(commit);
+    this.commits.push(commit);
+  }
+
+  /** From the PR, back along open floor to DEMO-990: along the grid, round one corner. */
+  private recordPath(): Curve<Vector3> {
+    const bitbucket = B_LAYOUT.nodes.bitbucket;
+    const prAt = bitbucket.clone().add(new Vector3(-NODE_FOOTPRINT / 2 - BRANCH_LENGTH, 0, 0.6));
+    const ticketAt = B_LAYOUT.nodes.jira.clone().add(TICKET_BESIDE);
+    const corner = new Vector3(ticketAt.x, 0, prAt.z);
+    return roundedPath([prAt, corner, ticketAt], BEND_RADIUS);
+  }
+
   /** The walk reaches a tool: it lights up. */
   private reach(kind: SystemKind): void {
     this.walked.push(kind);
@@ -274,7 +412,25 @@ export class OneTicketB {
       ticket.opacity = Math.min(ticket.opacity, 1 - t);
       for (const p of this.carried) p.scale.setScalar(CARRY_SCALE * Math.max(0.001, 1 - t));
     });
+    const { plan, pr, branch, recordLine, record } = this;
+    const planScale = plan.scale.x;
+    await tween(stage, 0.5, (t) => {
+      pr.opacity = Math.min(pr.opacity, 1 - t);
+      branch.material.opacity = Math.min(branch.material.opacity, 0.8 * (1 - t));
+      recordLine.material.opacity = Math.min(recordLine.material.opacity, 0.85 * (1 - t));
+      for (const c of this.commits) c.scale.setScalar(1.6 * Math.max(0.001, 1 - t));
+      plan.scale.setScalar(Math.max(0.001, planScale * (1 - t)));
+    });
     for (const p of this.carried.splice(0)) p.dispose();
+    for (const c of this.commits.splice(0)) c.dispose();
+    plan.visible = false;
+    pr.visible = false;
+    pr.opacity = 1;
+    branch.drawn = 0;
+    branch.material.opacity = 0.8;
+    recordLine.drawn = 0;
+    recordLine.material.opacity = 0.85;
+    record.visible = false;
     ticket.visible = false;
     ticket.opacity = 1;
     for (const node of this.nodes.values()) node.light = 'off';
@@ -288,3 +444,28 @@ export class OneTicketB {
   }
 }
 
+/**
+ * What an issue shows it has picked up, in a row under its card: a short
+ * dotted branch, a commit, and the pull request (that system's product).
+ */
+function recordChips(): Group {
+  const row = new Group();
+  const face = new Group();
+  face.rotation.y = Math.PI / 4;
+  row.add(face);
+  const branch = new Branch(new LineCurve3(new Vector3(-0.2, 0, 0), new Vector3(0.2, 0, 0)), NEUTRAL.packet);
+  branch.drawn = 1;
+  branch.rotation.x = Math.PI / 2;
+  branch.position.x = -0.42;
+  const commit = new Product('github');
+  commit.rotation.y = 0;
+  commit.position.x = 0;
+  const pr = new Product('bitbucket');
+  pr.rotation.y = 0;
+  pr.position.x = 0.4;
+  for (const chip of [commit, pr]) chip.scale.setScalar(1.4);
+  face.add(branch, commit, pr);
+  // Just under the card.
+  face.position.y = -0.62;
+  return row;
+}
