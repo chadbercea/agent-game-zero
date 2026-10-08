@@ -26,24 +26,33 @@ function testStage() {
 const onStage = (root: Object3D) => root.children.filter((o): o is SystemNode => o instanceof SystemNode);
 
 describe('Tertiaries', () => {
-  it('gives the first agent the tool and every agent after it a smaller tertiary of its own, feeding the tool', async () => {
+  it('every agent that uses the tool builds a smaller tertiary of its own, the first included; none sits on the tool', async () => {
     const { root, stage, run } = testStage();
     const tool = new SystemNode({ kind: 'bitbucket' });
     stage.add(tool);
     const tertiaries = new Tertiaries(stage, () => [tool.position]);
-    const claims = [0, 1, 2, 3].map(() => tertiaries.claim(tool));
-    expect(claims[0].tertiary).toBeNull();
-    expect(claims[0].spot.distanceTo(tool.position)).toBe(0);
-    expect(claims.slice(1).every((c) => c.tertiary?.kind === 'bitbucket')).toBe(true);
+    // Chad's example: three tickets on Bitbucket, three agents, three tertiaries.
+    const claims = [0, 1, 2].map(() => tertiaries.claim(tool));
+    expect(claims.every((c) => c.tertiary?.kind === 'bitbucket')).toBe(true);
     expect(tertiaries.count).toBe(3);
+    for (const c of claims) expect(c.spot.distanceTo(tool.position)).toBeGreaterThanOrEqual(1);
     // Each on a spot of its own, clear of the tool and each other.
     const spots = claims.map((c) => c.spot);
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) expect(spots[i].distanceTo(spots[j])).toBeGreaterThanOrEqual(1);
     await run(2);
-    for (const c of claims.slice(1)) expect(c.tertiary!.scale.x).toBeCloseTo(TERTIARY_SCALE, 3);
-    // Work flows in: products on stage riding the traces.
+    for (const c of claims) expect(c.tertiary!.scale.x).toBeCloseTo(TERTIARY_SCALE, 3);
+    // Work flows in: products on stage riding the traces into the tool.
     await run(1.5);
     expect(root.children.some((o) => o.constructor.name === 'Product')).toBe(true);
+  });
+
+  it('a lone agent builds one too: no head count decides it', () => {
+    const { stage } = testStage();
+    const tool = new SystemNode({ kind: 'github' });
+    const tertiaries = new Tertiaries(stage, () => [tool.position]);
+    const only = tertiaries.claim(tool);
+    expect(only.tertiary).not.toBeNull();
+    expect(tertiaries.count).toBe(1);
   });
 
   it('takes a tertiary away when its work ends, and puts it back in the same place next time', async () => {
@@ -58,8 +67,9 @@ describe('Tertiaries', () => {
     second.release();
     second.release();
     await run(1);
-    expect(tertiaries.count).toBe(0);
-    expect(onStage(root)).toEqual([tool]);
+    // Only the first agent's tertiary is left.
+    expect(tertiaries.count).toBe(1);
+    expect(onStage(root)).toEqual([tool, first.tertiary]);
     const again = tertiaries.claim(tool);
     expect(again.tertiary).not.toBeNull();
     expect(again.spot.distanceTo(where)).toBe(0);

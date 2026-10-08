@@ -269,20 +269,22 @@ export class StoryV2 {
     this.humans.start();
     this.cleanups.push(() => this.humans.stop());
 
-    // One sub-agent straight out to GitHub, to start a branch.
+    // One sub-agent straight out to GitHub, on a tertiary of its own off it, to start a branch.
     const github = this.node('github');
-    this.cleanups.push(this.tertiaries.claim(github).release);
-    const sub = await budOut(stage, drone, `${drone.name}.1`, github.position, 4.2, undefined, this.roster.spawn);
+    const place = this.tertiaries.claim(github);
+    this.cleanups.push(place.release);
+    const sub = await budOut(stage, drone, `${drone.name}.1`, place.spot, 4.2, undefined, this.roster.spawn);
     sub.drone.rotation.y = FACE_CAMERA;
-    this.first = { sub, at: 'github', spot: github.position.clone() };
+    this.first = { sub, at: 'github', spot: place.spot.clone(), tertiary: place.tertiary };
     this.cleanups.push(() => {
       this.first?.sub.despawn();
       this.first = null;
     });
     github.light = 'working';
     const job = new Job('github');
-    job.position.copy(github.position);
+    job.position.copy(place.spot);
     job.rotation.y = FACE_CAMERA;
+    job.scale.setScalar(0.6);
     stage.add(job);
     let t = 0;
     const untick = stage.onTick((dt) => {
