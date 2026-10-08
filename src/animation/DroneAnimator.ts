@@ -1,5 +1,6 @@
 import { MathUtils } from 'three';
 import type { Status } from '../core/palette';
+import { hashSeed } from '../core/scatter';
 import { statusSignal } from './statusSignal';
 import { type Drone, HALO_OPACITY, HOVER_HEIGHT, RING_GLOW } from '../primitives/drone/Drone';
 
@@ -47,11 +48,27 @@ export class DroneAnimator {
   /** Desynchronizes crowds of drones. */
   private readonly phase: number;
 
-  constructor(private readonly drone: Drone, seed = Math.random()) {
+  /** `seed` (0–1) sets the drone's own rhythm; by default it comes from the drone's name, so the same drone always moves the same way. */
+  constructor(
+    private readonly drone: Drone,
+    private readonly seed = hashSeed(drone.name) / 2 ** 32,
+  ) {
     this.lastStatus = drone.status;
     this.current = { ...PROFILES[drone.status] };
     this.phase = seed * Math.PI * 2;
     this.time = seed * 10;
+  }
+
+  /** Back to how it started (for a drone that stays on stage between runs, so every run plays the same). */
+  restart(): void {
+    this.lastStatus = this.drone.status;
+    Object.assign(this.current, PROFILES[this.drone.status]);
+    this.time = this.seed * 10;
+    this.rotorAngle = 0;
+    this.bobPhase = 0;
+    this.shake = 0;
+    this.kick = 0;
+    this.update(0);
   }
 
   update(dt: number): void {
