@@ -4,7 +4,17 @@ import { SYSTEM_KINDS, type SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { HUMAN_TOOLS, HumanLoop } from './humanLoop';
-import { REWORK } from './rework';
+
+/** Somewhere on the floor for each tool, apart from each other. */
+const SPOT: Record<SystemKind, [number, number]> = {
+  jira: [3, -0.5],
+  github: [-3, -1.5],
+  notion: [-6.5, 0],
+  figma: [-1, -5],
+  confluence: [3.5, -5],
+  bitbucket: [6, -3],
+  codesearch: [6.5, 0.5],
+};
 
 type Tick = (dt: number, elapsed: number) => void;
 
@@ -21,7 +31,7 @@ function setup(online: SystemKind[], seed = 7) {
   const nodes = {} as Record<SystemKind, SystemNode>;
   for (const kind of SYSTEM_KINDS) {
     const node = Object.assign(new Object3D(), { kind, dim: online.includes(kind) ? 0 : 1 }) as unknown as SystemNode;
-    node.position.copy(REWORK.nodes[kind]);
+    node.position.set(SPOT[kind][0], 0, SPOT[kind][1]);
     nodes[kind] = node;
   }
   const loop = new HumanLoop(stage, nodes, seed);

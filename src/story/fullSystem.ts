@@ -1,28 +1,26 @@
 import { type Curve, CurvePath, LineCurve3, MathUtils, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { seededRandom } from '../core/scatter';
-import { inRun } from '../core/sharedRuns';
 import { reversed } from '../primitives/branch/gridPath';
 import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
-import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { Job } from '../primitives/job/Job';
 import { hasJob, type SystemKind } from '../primitives/node/emblems';
-import { EMBLEM_SCALE } from '../primitives/node/SystemNode';
+import { EMBLEM_SCALE, type SystemNode } from '../primitives/node/SystemNode';
 import { attachSignal } from '../stage/attachSignal';
 import { FACE_CAMERA, type SpawnedDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
-import { shoot } from './beam';
-import { budOut, graphPathKinds, viaGateway } from './crew';
+import { type Boost, shoot } from './beam';
+import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
-import { linkRoute, REWORK, type ReworkScene } from './rework';
+import type { TeamworkGraph } from './TeamworkGraph';
 import { fly, tween, wait } from './timeline';
 
 export type FullSystemStep = 'scale' | 'full';
 
 /** The tools D3V1N's crew spreads to now (GitHub and Bitbucket already have beat 4's crew). */
-const NEW_GROUND: readonly SystemKind[] = ['notion', 'figma', 'codesearch', 'confluence'];
+export const NEW_GROUND: readonly SystemKind[] = ['notion', 'figma', 'codesearch', 'confluence'];
 /** Where Rovo's helpers drop in: its own system's tools. */
-const ROVO_GROUND: readonly SystemKind[] = ['confluence', 'codesearch', 'bitbucket', 'jira'];
+export const ROVO_GROUND: readonly SystemKind[] = ['confluence', 'codesearch', 'bitbucket', 'jira'];
 const SCREEN_RIGHT = new Vector3(1, 0, -1).normalize();
 /** Two of D3V1N's sub-agents on one tool sit this far either side; Rovo's helper sits in front. */
 const SIDE = 0.42;
@@ -37,7 +35,17 @@ const MAX_HELPERS = 3;
 export interface FullSystemCast {
   drone: Drone;
   rovo: Drone;
-  scene: ReworkScene;
+  /** Every tool on the grid, by kind. */
+  nodes: Record<SystemKind, SystemNode>;
+  graph: TeamworkGraph;
+  /** D3V1N's way out to a tool: along its own lines, and through the secure gateway for the rest. */
+  routeTo: (kind: SystemKind) => Curve<Vector3>;
+  /** Rovo's way out to one of its tools (a route that ends where it starts is fine: it just hops beside the tool). */
+  rovoRouteTo: (kind: SystemKind) => Curve<Vector3>;
+  /** Where packets ride faster and glow (the secure gateway). */
+  boost: Boost;
+  /** Runs every frame a sub-agent is flying out (e.g. to see it through the gateway). */
+  watch?: (drone: Drone) => void;
   /** A product landed in GitHub (the output line turns it into a little block). */
   onCommit: () => void;
   /** Pull the camera back to the whole grid (0–1), if the stage has one to move. */
@@ -63,10 +71,11 @@ export interface FullSystemCast {
  */
 export async function fullSystem(
   stage: SceneHost,
-  { drone, rovo, scene, onCommit, pullBack }: FullSystemCast,
+  cast: FullSystemCast,
   seed = 1,
   onStep: (step: FullSystemStep) => void = () => {},
 ): Promise<() => void> {
+  const { drone, rovo, nodes, routeTo, pullBack } = cast;
   const random = seededRandom(seed);
   const between = ([lo, hi]: [number, number]) => lo + random() * (hi - lo);
   const stops: (() => void)[] = [];
@@ -78,20 +87,20 @@ export async function fullSystem(
   // Where D3V1N's new sub-agents go: one on each new tool, then one or two more doubled up, by the seed.
   const plan: { at: SystemKind; spot: Vector3 }[] = [];
   const doubled = new Set<SystemKind>();
-  for (const at of NEW_GROUND) plan.push({ at, spot: scene.nodes[at].position.clone() });
+  for (const at of NEW_GROUND) plan.push({ at, spot: nodes[at].position.clone() });
   const extra = 1 + Math.floor(random() * 2);
   for (let i = 0; i < extra; i++) {
     const at = NEW_GROUND[Math.floor(random() * NEW_GROUND.length)];
     if (doubled.has(at)) continue;
     doubled.add(at);
-    plan.push({ at, spot: scene.nodes[at].position.clone() });
+    plan.push({ at, spot: nodes[at].position.clone() });
   }
   for (const p of plan) {
     if (!doubled.has(p.at)) continue;
     // Doubled up: the two sit side by side.
     const first = plan.find((q) => q.at === p.at)!;
-    first.spot = scene.nodes[p.at].position.clone().addScaledVector(SCREEN_RIGHT, -SIDE);
-    p.spot = scene.nodes[p.at].position.clone().addScaledVector(SCREEN_RIGHT, SIDE);
+    first.spot = nodes[p.at].position.clone().addScaledVector(SCREEN_RIGHT, -SIDE);
+    p.spot = nodes[p.at].position.clone().addScaledVector(SCREEN_RIGHT, SIDE);
   }
   // Shuffle the order they go out in.
   for (let i = plan.length - 1; i > 0; i--) {
@@ -99,16 +108,15 @@ export async function fullSystem(
     [plan[i], plan[j]] = [plan[j], plan[i]];
   }
 
-  const boost = { at: (p: Vector3) => inRun(REWORK.gateway, p), speed: 2, glow: GRAPH_COLOR };
   const crew = Promise.all(
     plan.map(async ({ at, spot }, i) => {
       await wait(stage, i * between([0.45, 1.1]));
       if (!running) return;
-      const sub = await budOut(stage, drone, `D3V1N.${4 + i}`, viaGateway(scene, at), spot, 4.6);
+      const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), spot, 4.6, cast.watch);
       if (!running) return sub.despawn();
-      const node = scene.nodes[at];
+      const node = nodes[at];
       node.light = 'working';
-      stops.push(work(stage, sub, at, spot, scene, onCommit, boost, between));
+      stops.push(work(stage, sub, at, spot, cast, between));
     }),
   );
 
@@ -122,7 +130,7 @@ export async function fullSystem(
       if (!running || helpers >= MAX_HELPERS) continue;
       const at = ROVO_GROUND[Math.floor(random() * ROVO_GROUND.length)];
       helpers++;
-      void help(stage, rovo, scene, at, `Rovo.${++n}`, between(HELP_FOR), () => running, helpersOut).finally(
+      void help(stage, cast, at, `${rovo.name}.${++n}`, between(HELP_FOR), () => running, helpersOut).finally(
         () => helpers--,
       );
     }
@@ -149,12 +157,10 @@ function work(
   sub: SpawnedDrone,
   at: SystemKind,
   spot: Vector3,
-  scene: ReworkScene,
-  onCommit: () => void,
-  boost: Parameters<typeof shoot>[3],
+  { nodes, graph, boost, onCommit }: FullSystemCast,
   between: (range: [number, number]) => number,
 ): () => void {
-  const node = scene.nodes[at];
+  const node = nodes[at];
   let job: Job | undefined;
   let signal: ReturnType<typeof attachSignal> | undefined;
   if (hasJob(at)) {
@@ -167,8 +173,8 @@ function work(
   } else {
     signal = attachSignal(stage, sub.drone, node);
   }
-  const hops = graphPathKinds(scene.graph, at, 'github');
-  const toGithub = hops && hops.length > 1 ? linkRoute(scene.graph, ...hops) : null;
+  const hops = graphPathKinds(graph, at, 'github');
+  const toGithub = hops && hops.length > 1 ? linkRoute(graph, ...hops) : null;
   const seconds = hasJob(at) ? JOB_SECONDS[at] * 0.6 : 0;
   let t = Math.random() * 0.5;
   let next = between(SHIP_EVERY);
@@ -194,23 +200,23 @@ function work(
   };
 }
 
-/** A Rovo helper: buds off Rovo, goes to one of its tools along the graph, helps for a while, comes back and docks. */
+/** A Rovo helper: buds off Rovo, goes to one of its tools, helps for a while, comes back and docks. */
 async function help(
   stage: SceneHost,
-  rovo: Drone,
-  scene: ReworkScene,
+  { rovo, nodes, rovoRouteTo, watch }: FullSystemCast,
   at: SystemKind,
   name: string,
   seconds: number,
   running: () => boolean,
   out: Set<SpawnedDrone>,
 ): Promise<void> {
-  const node = scene.nodes[at];
+  const node = nodes[at];
   const spot = node.position.clone().add(HELPER_SPOT);
-  const hops = at === 'jira' ? null : graphPathKinds(scene.graph, 'jira', at);
-  const route: Curve<Vector3> =
-    hops && hops.length > 1 ? linkRoute(scene.graph, ...hops) : new LineCurve3(node.position.clone(), spot.clone());
-  const sub = await budOut(stage, rovo, name, route, spot, 4.2);
+  const way = rovoRouteTo(at);
+  const route: Curve<Vector3> = way.getLength() > 0.05 ? way : new LineCurve3(node.position.clone(), spot.clone());
+  const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch);
+  // Stopped while it was on its way out: it never gets to work.
+  if (!running()) return sub.despawn();
   out.add(sub);
   const signal = attachSignal(stage, sub.drone, node);
   for (let t = 0; t < seconds && running(); t += 0.25) await wait(stage, 0.25);
