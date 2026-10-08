@@ -8,7 +8,8 @@ let dotGeometry: SphereGeometry | undefined;
 /**
  * Connection primitive: a thin dotted path between two agents, in their
  * lineage color. Hidden in Runtime, revealed in Detail. The group stays at
- * the world origin; dots are placed in world space by ConnectionReveal.
+ * the world origin; dots are placed in world space by whatever draws it
+ * (the Drone / ParentAndSubAgents story places them along its line).
  */
 export class Connection extends Group {
   readonly dots: InstancedMesh;

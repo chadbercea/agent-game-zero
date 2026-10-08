@@ -28,7 +28,7 @@ A work ledger simulates today's volume across the grid: every tool keeps busy wi
 
 The grand total sits in the top-left corner.
 
-The earlier two-act story (Act 1 isolated, denied at review, Act 2 connected) still lives in Storybook under **Teamwork Story**.
+The earlier two-act story (Act 1 isolated, denied at review, Act 2 connected) was removed in ILI-957 and ILI-958; it's in git history.
 
 ## Running
 
@@ -65,7 +65,7 @@ npm run test:unit                              # just the logic tests (Node, no 
 
 `npm test` runs two Vitest projects:
 
-- **unit:** `src/**/*.test.ts` in Node, through injected fakes, so no WebGL is needed. Covers the drone, arrival and signal-link animators; drone flight; grid scatter and shared runs; branches, conduits and graph edges; `Population` and signal attachment; and the story's access check, return home, sub-agent roles and system layout.
+- **unit:** `src/**/*.test.ts` in Node, through injected fakes, so no WebGL is needed. Covers the drone, arrival and signal-link animators; drone flight; grid scatter and shared runs; branches, conduits and graph edges; signal attachment; and the story's access check, crew routes, human loop, volume, ledger and system layout. **browser:** `src/**/*.browser.test.ts` in headless Chromium (DOM, no rendering): the story's drone sequence, what's on the grid per beat, gate cards and tertiary nodes.
 - **storybook:** every Storybook story renders in headless Chromium as a smoke test. It uses software WebGL (SwiftShader), so it works without a GPU. Story files run one at a time because software rendering is CPU-bound.
 
 `--with-deps` installs Chromium's system libraries and needs sudo. Without it, the browser can fail to launch with a missing `.so` such as `libnspr4.so`.
@@ -77,10 +77,10 @@ Layering: **Primitive → Animation → Stage → Story.**
 | Path | Role |
 |---|---|
 | `src/core/` | Palette, grid, shared textures and mesh helpers, seeded scatter, and shared runs (lines that bus together) |
-| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape), Cloud (where requests come from), PhoneCall, Charge (an agent powered up), Assembler, Conveyor, Portal (the output line) |
+| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape), Cloud (where requests come from), Charge (an agent powered up), Assembler, Conveyor, Portal (the output line) |
 | `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
-| `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones, sending packets, attaching signals, and `Population` lineage trees (used in specimens) |
-| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `trickle`, `review`, `trail`, `hoverCards`), the request (`request`), Act 1 (`accessCheck`, `revealMap`, `fanOut`, `returnHome`, `runJob`), Act 2 (`act2`, `roles`, `TeamworkGraph`, `systemLayout`, `beam`), the reworked beats (`cloudDrop`, `opening`, `humanLoop`, `crew`, `shipOutput`, `fullSystem`), and the whole thing (`twoActs` builds the scene, `storyV2` plays it; `teamworkStory` is the earlier two-act version) |
+| `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones and attaching signals |
+| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `review`, `hoverCards`), the request (`request`), access and reveal (`accessCheck`, `revealMap`), work and routes (`fanOut`, `crew`, `TeamworkGraph`, `systemLayout`, `beam`), the beats (`cloudDrop`, `opening`, `humanLoop`, `shipOutput`, `fullSystem`, `tertiary`, `roster`), and the whole thing (`twoActs` builds the scene, `storyV2` plays it) |
 | `src/sandbox/` | Sandbox app: the stage, the totals, and the control panel |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 
