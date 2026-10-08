@@ -28,6 +28,8 @@ export interface OutputPlace {
   /** How fast the belt runs, world units per second (the Conveyor's own pace if left out). */
   beltSpeed?: number;
   portal: Vector3;
+  /** A bigger block just went through the portal (e.g. to bring it out the exit side: ExitLine). */
+  onShipped?: () => void;
 }
 
 /** The output line's parts on the grid. */
@@ -118,7 +120,7 @@ export async function shipOutput(
   const untickShip = stage.onTick(() => {
     if (!running || !assembler.ready) return;
     const block = assembler.take();
-    if (block) void ship(stage, block, conveyor, portal, shipping);
+    if (block) void ship(stage, block, conveyor, portal, shipping).then(() => output.onShipped?.());
   });
   return {
     line,
