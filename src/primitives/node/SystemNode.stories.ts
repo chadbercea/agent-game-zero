@@ -11,13 +11,13 @@ const meta: Meta = {
 export default meta;
 
 /**
- * Every system's emblem: the Act 1 tools (Figma, GitHub, Notion) and the
+ * Every system's emblem: the Act 1 tools (Figma, GitHub, Notion), the
  * Atlassian tools behind the second gate (Code search, Confluence, Jira,
- * Bitbucket). Monochrome; told apart by shape.
+ * Bitbucket), and Linear, the third-party tracker. Monochrome; told apart by shape.
  */
 export const Emblems: StoryObj = {
   render: () => {
-    const { root, stage } = specimenStage({ viewSize: 4.2, focusY: 0.6 });
+    const { root, stage } = specimenStage({ viewSize: 10, focusY: 0.6 });
     SYSTEM_KINDS.forEach((kind, i) => {
       const { x, z } = rowPosition(i, SYSTEM_KINDS.length, 1.9);
       const node = new SystemNode({ kind });
