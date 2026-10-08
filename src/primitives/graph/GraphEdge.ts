@@ -9,6 +9,7 @@ import {
   SphereGeometry,
   Vector3,
 } from 'three';
+import { GridFade } from '../branch/GridFade';
 
 /** The Teamwork Graph's color: its own layer, apart from status, lineage and the gray access traces. */
 export const GRAPH_COLOR = new Color('#5b74d9');
@@ -34,6 +35,8 @@ const point = new Vector3();
 export class GraphEdge extends Group {
   readonly path: Curve<Vector3>;
   readonly material: MeshBasicMaterial;
+  /** The faint grid under it: up while it draws, gone a moment after (see GridFade). */
+  readonly grid: GridFade;
   private readonly dots: InstancedMesh;
   private readonly length: number;
   private readonly capacity: number;
@@ -49,6 +52,8 @@ export class GraphEdge extends Group {
     this.dots = new InstancedMesh((dotGeometry ??= new SphereGeometry(DOT_RADIUS, 6, 4)), this.material, this.capacity);
     this.dots.frustumCulled = false;
     this.add(this.dots);
+    this.grid = new GridFade(path);
+    this.grid.follow(this);
     this.drawn = 0;
   }
 
@@ -58,7 +63,9 @@ export class GraphEdge extends Group {
   }
 
   set drawn(value: number) {
+    const before = this._drawn;
     this._drawn = MathUtils.clamp(value, 0, 1);
+    if (this._drawn > before) this.grid.pulse();
     this.visible = this._drawn > 0;
     this.place();
   }
@@ -72,6 +79,7 @@ export class GraphEdge extends Group {
 
   dispose(): void {
     this.removeFromParent();
+    this.grid.dispose();
     this.dots.dispose();
     this.material.dispose();
   }

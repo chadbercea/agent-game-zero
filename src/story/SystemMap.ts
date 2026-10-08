@@ -3,7 +3,6 @@ import { hashSeed, type RadialMap, radialMap } from '../core/scatter';
 import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT, snapToGrid } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
-import { GridPatch } from '../primitives/branch/GridPatch';
 import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
 import { EMBLEM_HEIGHT, EMBLEM_SCALE, SystemNode } from '../primitives/node/SystemNode';
@@ -40,7 +39,6 @@ export class SystemMap {
   readonly nodes: SystemNode[] = [];
   readonly branches: Branch[] = [];
   /** Faint grid under each branch, fading with distance from it. */
-  readonly patches: GridPatch[] = [];
   /** Each branch's raw grid line (gate port → node center), before rounding. */
   readonly polylines: Vector3[][] = [];
   /** Flight paths from the gate's center to each node's center, along its branch. */
@@ -53,7 +51,6 @@ export class SystemMap {
   private readonly active: boolean[] = [];
   /** Per branch: it's being called up on its own (see revealNode), so its line and grid show. */
   private readonly calling: boolean[] = [];
-  private readonly callLevel: number[] = [];
   private readonly branchLevel: number[] = [];
   private time = 0;
   private readonly untick: () => void;
@@ -77,17 +74,14 @@ export class SystemMap {
       // The drawn line stops at the edges of the gate and node pads instead of running underneath them.
       const drawn = trimPolyline(polyline, BRANCH_INSET_GATE, BRANCH_INSET_NODE);
       const branch = new Branch(roundedPath(drawn, BEND_RADIUS), NEUTRAL.packet);
-      const patch = new GridPatch(drawn);
       this.nodes.push(node);
       this.branches.push(branch);
-      this.patches.push(patch);
       this.polylines.push(polyline);
       this.routes.push(roundedPath(polyline, BEND_RADIUS));
       this.active.push(false);
       this.calling.push(false);
-      this.callLevel.push(0);
       this.branchLevel.push(0);
-      stage.add(patch, branch, node);
+      stage.add(branch, node);
     });
     this.untick = stage.onTick((dt) => this.tick(dt));
   }
@@ -99,7 +93,6 @@ export class SystemMap {
     this.lineLevel = 0;
     this.active.fill(false);
     this.calling.fill(false);
-    this.callLevel.fill(0);
     this.branchLevel.fill(0);
     for (const node of this.nodes) {
       node.visible = false;
@@ -139,7 +132,6 @@ export class SystemMap {
     if (!calling) return;
     this.revealed = true;
     this.branchLevel[i] = 1;
-    this.callLevel[i] = 1;
   }
 
   /** Keep branch `i`'s line drawn while a sub-agent works along it; release to let it fade. */
@@ -151,7 +143,6 @@ export class SystemMap {
     this.untick();
     for (const node of this.nodes) node.dispose();
     for (const branch of this.branches) branch.dispose();
-    for (const patch of this.patches) patch.dispose();
   }
 
   private tick(dt: number): void {
@@ -171,11 +162,11 @@ export class SystemMap {
         const target = this.linesVisible || this.active[i] || this.calling[i] ? 1 : 0;
         this.branchLevel[i] = MathUtils.lerp(this.branchLevel[i], target, k);
       }
-      this.callLevel[i] = MathUtils.lerp(this.callLevel[i], this.calling[i] ? 1 : 0, k);
       branch.material.opacity = LINE_OPACITY * this.branchLevel[i];
       branch.visible = this.branchLevel[i] > 0.01 && branch.drawn > 0;
-      // The grid patch comes up with its branch as it draws and fades after the reveal (or hover, or its own call).
-      this.patches[i].opacity = Math.max(this.lineLevel, this.callLevel[i]) * branch.drawn;
+      // The grid under it follows the shared rule (it comes up as the branch draws, then fades);
+      // a hovered or pinned map, or a node being called, keeps it up a while longer.
+      branch.grid.hold(branch.drawn > 0 && (this.linesVisible || this.calling[i]));
     });
   }
 }
