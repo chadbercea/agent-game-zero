@@ -9,6 +9,7 @@ import {
   SphereGeometry,
   Vector3,
 } from 'three';
+import { GridFade } from './GridFade';
 
 const SPACING = 0.14;
 const DOT_HEIGHT = 0.03;
@@ -19,10 +20,13 @@ let dotGeometry: SphereGeometry | undefined;
  * Branch primitive: a dotted line on the floor along a path (a rounded grid
  * route, see gridPath), connecting a gate to one of its system nodes.
  * `drawn` (0–1) reveals it from the gate outward; `opacity` fades the whole line.
+ * As it draws, the faint grid comes up under it and fades a moment after (`grid`).
  */
 export class Branch extends Group {
   readonly curve: Curve<Vector3>;
   readonly material: MeshBasicMaterial;
+  /** The faint grid under it: up while it draws, gone a moment after (see GridFade). */
+  readonly grid: GridFade;
   private readonly dots: InstancedMesh;
   private readonly total: number;
   private _drawn = 0;
@@ -42,6 +46,8 @@ export class Branch extends Group {
     }
     this.dots.count = 0;
     this.add(this.dots);
+    this.grid = new GridFade(curve);
+    this.grid.follow(this);
   }
 
   /** How much of the branch is drawn, from the gate end (0–1). */
@@ -50,12 +56,15 @@ export class Branch extends Group {
   }
 
   set drawn(value: number) {
+    const before = this._drawn;
     this._drawn = MathUtils.clamp(value, 0, 1);
+    if (this._drawn > before) this.grid.pulse();
     this.dots.count = Math.round(this.total * this._drawn);
   }
 
   dispose(): void {
     this.removeFromParent();
+    this.grid.dispose();
     this.dots.dispose();
     this.material.dispose();
   }
