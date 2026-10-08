@@ -6,6 +6,10 @@ const preview: Preview = {
   // render loops never pile up (matters most for the headless test run).
   beforeEach: () => disposeSpecimenStage,
   parameters: {
+    options: {
+      // The story first (the demos), then the parts it's built from, then the primitives.
+      storySort: { order: ['Story', 'Story Parts', 'Primitives'] },
+    },
     controls: {
       matchers: {
        color: /(background|color)$/i,
