@@ -39,3 +39,15 @@ export const A12: StoryObj = {
   name: 'A1–2',
   render: () => loop('a2', 3),
 };
+
+/**
+ * Version A, beats 1 to 4, on loop. After the ticket, D3V1N follows its link
+ * to Notion, crosses Notion's own gate and reads the PRD, whose acceptance
+ * criteria link on to Figma; it follows that, crosses Figma's own gate and
+ * pulls the design. Home between stops, one gate at a time; the stack it
+ * carries grows to three: ticket, PRD, design. No captions.
+ */
+export const A34: StoryObj = {
+  name: 'A3–4',
+  render: () => loop('a4', 3),
+};

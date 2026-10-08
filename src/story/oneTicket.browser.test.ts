@@ -94,14 +94,53 @@ describe('OneTicket, Version A beats 1–2', () => {
     expect(now()).toBeLessThan(20);
   });
 
+  it('follows the links: Notion, then Figma, each through its own gate, home between, carrying three', async () => {
+    const { stage, run } = testStage();
+    const story = new OneTicket(stage);
+    const { drone } = story;
+    /** Gate states in the order they first changed, one entry per change: who lit, and when. */
+    const lit: string[] = [];
+    let homeVisits = 0;
+    let wasHome = true;
+    const last = new Map(story.stops.map((s) => [s.kind, s.gate.state]));
+    let played = false;
+    void story.play('a4').then(() => (played = true));
+    await run(
+      90,
+      () => played,
+      () => {
+        for (const s of story.stops) {
+          if (s.gate.state !== last.get(s.kind)) lit.push(`${s.kind}:${s.gate.state}`);
+          last.set(s.kind, s.gate.state);
+        }
+        // Never two gates lit at once.
+        expect(story.stops.filter((s) => s.gate.state !== 'off').length).toBeLessThanOrEqual(1);
+        const home = drone.position.distanceTo(A_LAYOUT.home) < 1e-3;
+        if (home && !wasHome) homeVisits++;
+        wasHome = home;
+      },
+    );
+    expect(played).toBe(true);
+    expect(lit).toEqual([
+      'linear:thinking', 'linear:open', 'linear:off',
+      'notion:thinking', 'notion:open', 'notion:off',
+      'figma:thinking', 'figma:open', 'figma:off',
+    ]);
+    expect(homeVisits).toBe(3);
+    expect(story.carried.map((p) => p.kind)).toEqual(['linear', 'notion', 'figma']);
+    expect(story.link.visible && story.prdLink.visible).toBe(true);
+    // GitHub's turn hasn't come.
+    expect(story.stop('github').gate.state).toBe('off');
+  });
+
   it('resets to an empty-handed D3V1N at home with no ticket, and plays the same again', async () => {
     const { stage, run } = testStage();
     const story = new OneTicket(stage);
     for (let i = 0; i < 2; i++) {
       let done = false;
-      void story.play('a2').then(() => (done = true));
-      await run(60, () => done);
-      expect(story.carried).toHaveLength(1);
+      void story.play('a4').then(() => (done = true));
+      await run(90, () => done);
+      expect(story.carried).toHaveLength(3);
       done = false;
       void story.reset().then(() => (done = true));
       await run(10, () => done);
@@ -109,6 +148,7 @@ describe('OneTicket, Version A beats 1–2', () => {
       expect(story.carried).toHaveLength(0);
       expect(story.ticket.visible).toBe(false);
       expect(story.link.visible).toBe(false);
+      expect(story.prdLink.visible).toBe(false);
       expect(story.stops.every((s) => s.gate.state === 'off')).toBe(true);
     }
   });
