@@ -34,27 +34,28 @@ const FEED_EVERY = 1.1;
 const FEED_SPEED = 3;
 const GROW_SECONDS = 0.5;
 
-/** An agent's place at a tool: over the tool itself, or over a tertiary node of its own. */
+/** An agent's place at a tool: over a tertiary node of its own, built off the tool. */
 export interface Claim {
   /** Where the agent hovers and works (floor point). */
   spot: Vector3;
-  /** The tertiary node this agent works, if the tool was already taken. */
+  /** The tertiary node this agent built and works (null only where a scene has no Tertiaries to build one). */
   tertiary: SystemNode | null;
   /** The agent's work there is done: a tertiary shrinks away. Safe to call twice. */
   release: () => void;
 }
 
 /**
- * Tertiary nodes. The first agent at a tool works the tool itself (the
- * secondary node). Every agent after it gets a tertiary node of its own: a
- * smaller node of the same kind buds off the tool on a free spot nearby,
- * joined to it by a short trace, and its work keeps flowing along the trace
- * into the tool. When that agent's work ends, its tertiary shrinks away and
- * the trace goes with it. Spots are picked in a fixed order, so the same
- * claims always put tertiaries in the same places.
+ * Tertiary nodes (ILI-974). An agent that goes to use a tool builds a
+ * tertiary node of its own off it, on demand: every working agent, the
+ * first included. The tool (the secondary) holds no agent itself; it's the
+ * parent its tertiaries feed into. A tertiary is a smaller node of the same
+ * kind that buds off the tool on a free spot nearby, joined to it by a short
+ * trace; the agent's work keeps flowing along the trace into the tool. When
+ * that agent's work ends, its tertiary shrinks away and the trace goes with
+ * it. Spots are picked in a fixed order, so the same claims always put
+ * tertiaries in the same places.
  */
 export class Tertiaries {
-  private readonly agents = new Map<SystemNode, number>();
   private readonly live = new Set<{ node: SystemNode; remove: () => void }>();
 
   /** `keepClear()`: where everything else on the floor is right now (tools, gates, ...), for placing tertiaries. */
@@ -68,33 +69,20 @@ export class Tertiaries {
     return this.live.size;
   }
 
-  /** An agent arrives to work at `node`: its place there. */
+  /**
+   * An agent goes to use `node`: it builds its own tertiary off the tool,
+   * and that's its place. Every claim builds one, however many agents are
+   * already there (or none). `release()` when its work there ends.
+   */
   claim(node: SystemNode): Claim {
-    const n = this.agents.get(node) ?? 0;
-    this.agents.set(node, n + 1);
-    let released = false;
-    const leave = () => {
-      if (released) return false;
-      released = true;
-      this.agents.set(node, Math.max(0, (this.agents.get(node) ?? 1) - 1));
-      return true;
-    };
-    if (n === 0) return { spot: node.position.clone(), tertiary: null, release: () => void leave() };
     const spot = this.freeSpot(node.position);
     const { tertiary, remove } = this.bud(node, spot);
-    return {
-      spot,
-      tertiary,
-      release: () => {
-        if (leave()) remove();
-      },
-    };
+    return { spot, tertiary, release: remove };
   }
 
   /** Everything off the grid at once (resetting the scene). */
   clear(): void {
     for (const t of [...this.live]) t.remove();
-    this.agents.clear();
   }
 
   private freeSpot(center: Vector3): Vector3 {

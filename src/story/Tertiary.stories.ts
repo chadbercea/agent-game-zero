@@ -10,7 +10,7 @@ import { type Claim, Tertiaries } from './tertiary';
 import { fly, tween, wait } from './timeline';
 
 interface TertiaryArgs {
-  /** How many agents work the one tool (the first takes the tool; each one after gets a tertiary node). */
+  /** How many agents work the one tool (each builds a tertiary of its own; none sits on the tool). */
   agents: number;
   kind: SystemKind;
 }
@@ -27,12 +27,13 @@ const meta: Meta<TertiaryArgs> = {
 export default meta;
 
 /**
- * Several agents on one tool, on loop. The first agent works the tool itself;
- * each one after it gets a tertiary node of its own, which buds off the
- * tool (smaller, same kind, a short trace back to it) and keeps feeding its
- * work along the trace into the tool. Then the agents finish one by one,
- * newest first, and each tertiary goes away with its agent. Set how many
- * agents with the control: tertiaries = agents − 1. No captions.
+ * Agents using one tool, on loop (ILI-974). Each agent that goes to use the
+ * tool builds a tertiary node of its own off it, on demand, the first one
+ * included: it buds off the tool (smaller, same kind, a short trace back to
+ * it), the agent settles on it, and its work keeps feeding along the trace
+ * into the tool. The tool itself holds no agent. Then the agents finish one
+ * by one, newest first, and each tertiary goes away with its agent. Set how
+ * many agents with the control: tertiaries = agents. No captions.
  */
 export const OnOneTool: StoryObj<TertiaryArgs> = {
   name: 'Agents on One Tool',
@@ -55,7 +56,8 @@ export const OnOneTool: StoryObj<TertiaryArgs> = {
             tween(stage, 0.5, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (0.3 + 0.7 * t))),
           ]);
           const signal = attachSignal(stage, sub.drone, claim.tertiary ?? node);
-          if (!claim.tertiary) node.light = 'working';
+          // Work flows into the tool from its tertiaries: it lights while any are feeding it.
+          node.light = 'working';
           crew.push({ claim, despawn: sub.despawn, detach: signal.detach });
           await wait(stage, 0.5);
         }

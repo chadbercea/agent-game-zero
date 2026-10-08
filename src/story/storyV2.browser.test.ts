@@ -95,8 +95,8 @@ describe('StoryV2 drone sequence', () => {
     expect(await onGrid('own-system')).toEqual({ nodes: ['github'], gates: [true, false] });
     expect(await onGrid('rovo-bridge')).toEqual({ nodes: ['github', 'jira'], gates: [true, true] });
     expect(await onGrid('juiced-crew')).toEqual({ nodes: ['bitbucket', 'github', 'jira'], gates: [true, true] });
-    // Two of D3V1N's crew on Bitbucket: the second works a tertiary node off it.
-    expect(tertiaryCount).toBe(1);
+    // Every working agent builds its own tertiary (ILI-974): one off GitHub, two off Bitbucket.
+    expect(tertiaryCount).toBe(3);
     expect((await onGrid('full-system')).nodes).toHaveLength(7);
   });
 
