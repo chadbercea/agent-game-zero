@@ -21,9 +21,15 @@ function cloudOn(viewSize = 4) {
   return { root, stage, cloud };
 }
 
-/** One cloud, bobbing and breathing. */
-export const Specimen: StoryObj = {
-  render: () => cloudOn().root,
+/** One cloud, bobbing and breathing. The control sets `materialized` (0–1): how far its puffs have popped in. */
+export const Specimen: StoryObj<{ materialized: number }> = {
+  argTypes: { materialized: { control: { type: 'range', min: 0, max: 1, step: 0.01 } } },
+  args: { materialized: 1 },
+  render: (args) => {
+    const { root, cloud } = cloudOn();
+    cloud.materialized = args.materialized;
+    return root;
+  },
 };
 
 /** Materialize and vanish on loop: the puffs pop in middle-first, then pop away. */

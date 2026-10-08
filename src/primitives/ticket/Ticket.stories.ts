@@ -16,13 +16,24 @@ export default meta;
 
 type Story = StoryObj<TicketArgs>;
 
-/** One ticket, floating over its spot. Edit the key and title. */
-export const Specimen: Story = {
+/**
+ * One ticket, floating over its spot. Controls set its request (`key`,
+ * `title`), `label` (the name tag; the story's small tickets have none),
+ * `glow` (0–1, held here; it settles back on its own in the story) and
+ * `opacity` (0–1, card and label together).
+ */
+export const Specimen: StoryObj<TicketArgs & { label: boolean; glow: number; opacity: number }> = {
+  argTypes: { glow: { control: { type: 'range', min: 0, max: 1, step: 0.01 } }, opacity: { control: { type: 'range', min: 0, max: 1, step: 0.01 } } },
+  args: { label: true, glow: 0, opacity: 1 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 3, focusY: 0.8 });
-    const ticket = new Ticket({ key: args.key, title: args.title });
+    const ticket = new Ticket({ key: args.key, title: args.title }, { label: args.label });
+    ticket.opacity = args.opacity;
     stage.add(ticket);
-    stage.onTick((dt) => ticket.update(dt));
+    stage.onTick((dt) => {
+      ticket.update(dt);
+      ticket.glow = Math.max(ticket.glow, args.glow);
+    });
     return root;
   },
 };
