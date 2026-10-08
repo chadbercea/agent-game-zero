@@ -1,7 +1,6 @@
-import { type Curve, CurvePath, LineCurve3, MathUtils, Vector3 } from 'three';
+import { MathUtils, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { seededRandom } from '../core/scatter';
-import { reversed } from '../primitives/branch/gridPath';
 import { type Drone, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Job } from '../primitives/job/Job';
 import { hasJob, type SystemKind } from '../primitives/node/emblems';
@@ -40,10 +39,6 @@ export interface FullSystemCast {
   /** Every tool on the grid, by kind. */
   nodes: Record<SystemKind, SystemNode>;
   graph: TeamworkGraph;
-  /** D3V1N's way out to a tool: along its own lines, and through the secure gateway for the rest. */
-  routeTo: (kind: SystemKind) => Curve<Vector3>;
-  /** Rovo's way out to one of its tools (a route that ends where it starts is fine: it just hops beside the tool). */
-  rovoRouteTo: (kind: SystemKind) => Curve<Vector3>;
   /** Where packets ride faster and glow (the secure gateway). */
   boost: Boost;
   /** Runs every frame a sub-agent is flying out (e.g. to see it through the gateway). */
@@ -89,7 +84,7 @@ export async function fullSystem(
   seed = 1,
   onStep: (step: FullSystemStep) => void = () => {},
 ): Promise<() => void> {
-  const { drone, rovo, nodes, routeTo, pullBack } = cast;
+  const { drone, rovo, nodes, pullBack } = cast;
   const random = seededRandom(seed);
   const between = ([lo, hi]: [number, number]) => lo + random() * (hi - lo);
   // Each part draws from its own seeded stream, so frame timing can never change who gets which number.
@@ -138,7 +133,7 @@ export async function fullSystem(
     flights.push(
       (async () => {
         const place = cast.claim?.(at) ?? { spot, tertiary: null, release: () => {} };
-        const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, routeTo(at), place.spot, 4.6, cast.watch, cast.spawn);
+        const sub = await budOut(stage, drone, `${drone.name}.${4 + i}`, place.spot, 4.6, cast.watch, cast.spawn);
         if (!running) {
           place.release();
           return sub.despawn();
@@ -245,7 +240,7 @@ function work(
 /** A Rovo helper: buds off Rovo, goes to one of its tools, helps for a while, comes back and docks. */
 async function help(
   stage: SceneHost,
-  { rovo, nodes, rovoRouteTo, watch, spawn, call, claim }: FullSystemCast,
+  { rovo, nodes, watch, spawn, call, claim }: FullSystemCast,
   at: SystemKind,
   name: string,
   seconds: number,
@@ -258,9 +253,7 @@ async function help(
   // Its place at the tool: a tertiary of its own if someone's already on it.
   const place = claim?.(at) ?? { spot: node.position.clone().add(HELPER_SPOT), tertiary: null, release: () => {} };
   const { spot } = place;
-  const way = rovoRouteTo(at);
-  const route: Curve<Vector3> = way.getLength() > 0.05 ? way : new LineCurve3(node.position.clone(), spot.clone());
-  const sub = await budOut(stage, rovo, name, route, spot, 4.2, watch, spawn);
+  const sub = await budOut(stage, rovo, name, spot, 4.2, watch, spawn);
   // Stopped while it was on its way out: it never gets to work.
   if (!running()) {
     place.release();
@@ -281,12 +274,8 @@ async function help(
   signal.detach();
   place.release();
   if (!running()) return;
-  // Home again: back the way it came, and into Rovo.
-  const back = new CurvePath<Vector3>();
-  const end = route.getPoint(1);
-  if (end.distanceTo(spot) > 1e-3) back.add(new LineCurve3(spot.clone(), end));
-  back.add(reversed(route));
-  await fly(stage, DroneFlight.along(sub.drone, back, { speed: 4.2 }));
+  // Home again: straight back, and into Rovo.
+  await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: 4.2 }));
   if (!running()) return;
   await tween(stage, 0.4, (t) => {
     sub.drone.scale.setScalar(SUB_AGENT_SCALE * (1 - t * 0.7));

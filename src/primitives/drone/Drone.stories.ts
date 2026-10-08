@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
-import { Matrix4, QuadraticBezierCurve3, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { DroneFlight } from '../../animation/DroneFlight';
 import { GateAnimator } from '../../animation/GateAnimator';
 import { LINEAGES, type Lineage, STATUSES, type Status } from '../../core/palette';
-import { Connection } from '../connection/Connection';
 import { Gate } from '../gate/Gate';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { spawnDrone } from '../../stage/spawnDrone';
@@ -108,9 +107,9 @@ export const ParentAndSubAgents: Story = {
 };
 
 /**
- * Flight: hop to a gate, ride a curved branch line to the next, hop home.
- * The drone leans into travel but keeps facing the camera; it works while
- * moving and waits while parked.
+ * Flight: straight from gate to gate and home (agents never ride lines:
+ * ILI-969). The drone leans into travel but keeps facing the camera; it
+ * works while moving and waits while parked.
  */
 export const Flight: Story = {
   args: { showLabel: false },
@@ -125,22 +124,10 @@ export const Flight: Story = {
       stage.onTick((dt) => animator.update(dt));
     }
 
-    // A curved branch line on the floor between the second and third gates.
-    const branch = new QuadraticBezierCurve3(spots[1], new Vector3(3.8, 0, -2.2), spots[2]);
-    const line = new Connection(args.lineage);
-    const dots = 40;
-    for (let i = 0; i < dots; i++) {
-      const p = branch.getPointAt(i / (dots - 1));
-      line.dots.setMatrixAt(i, new Matrix4().makeTranslation(p.x, 0.03, p.z));
-    }
-    line.dots.count = dots;
-    line.material.opacity = 0.7;
-    stage.add(line);
-
     const { drone } = spawnDrone(stage, spots[0].x, spots[0].z, { ...args, status: 'waiting' });
     const legs = [
       () => DroneFlight.to(drone, spots[1]),
-      () => DroneFlight.along(drone, branch),
+      () => DroneFlight.to(drone, spots[2]),
       () => DroneFlight.to(drone, spots[0]),
     ];
     let leg = 0;

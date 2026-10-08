@@ -17,7 +17,7 @@ import { FACE_CAMERA, type SpawnedDrone } from '../stage/spawnDrone';
 import type { SceneHost, Stage } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
-import { budOut, graphPathKinds, linkRoute, travelRoute } from './crew';
+import { budOut, graphPathKinds, linkRoute } from './crew';
 import { JOB_SECONDS } from './fanOut';
 import { fullSystem } from './fullSystem';
 import { agentCard, gateCard, type HoverTarget, nodeCard } from './hoverCards';
@@ -260,7 +260,7 @@ export class StoryV2 {
    */
   private async ownSystem(): Promise<boolean> {
     const { stage, drone, ticket, scene } = this;
-    const { gate, map } = scene.act1;
+    const { gate } = scene.act1;
     await handOff(stage, ticket, drone);
     await absorb(stage, ticket);
     await revealGate(stage, gate);
@@ -269,11 +269,10 @@ export class StoryV2 {
     this.humans.start();
     this.cleanups.push(() => this.humans.stop());
 
-    // One sub-agent to GitHub, along D3V1N's trace, to start a branch.
+    // One sub-agent straight out to GitHub, to start a branch.
     const github = this.node('github');
-    const route = this.ownRoute(map, 'github');
     this.cleanups.push(this.tertiaries.claim(github).release);
-    const sub = await budOut(stage, drone, `${drone.name}.1`, route, github.position, 4.2, undefined, this.roster.spawn);
+    const sub = await budOut(stage, drone, `${drone.name}.1`, github.position, 4.2, undefined, this.roster.spawn);
     sub.drone.rotation.y = FACE_CAMERA;
     this.first = { sub, at: 'github', spot: github.position.clone() };
     this.cleanups.push(() => {
@@ -401,14 +400,11 @@ export class StoryV2 {
    * graph and back through the tunnel.
    */
   private async juicedCrew(): Promise<void> {
-    const { stage, drone, scene } = this;
+    const { stage, drone } = this;
     const github = this.node('github');
     const bitbucket = this.node('bitbucket');
     // D3V1N calls Bitbucket: it comes up on Rovo's side, with its graph lines.
     await this.call('bitbucket');
-    const toBitbucket = new CurvePath<Vector3>();
-    toBitbucket.add(this.ownRoute(scene.act1.map, 'github'));
-    toBitbucket.add(this.travel('github', 'bitbucket'));
     drone.flash = 1;
     const tucked = tuck(stage, bitbucket);
     this.cleanups.push(() => untuck(bitbucket));
@@ -419,7 +415,7 @@ export class StoryV2 {
         await wait(stage, i * 0.45);
         const place = this.tertiaries.claim(bitbucket);
         this.cleanups.push(place.release);
-        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, toBitbucket, place.spot, 4.2, watch, this.roster.spawn);
+        const sub = await budOut(stage, drone, `${drone.name}.${i + 2}`, place.spot, 4.2, watch, this.roster.spawn);
         return { sub, at: 'bitbucket', spot: place.spot, tertiary: place.tertiary };
       }),
     );
@@ -476,11 +472,10 @@ export class StoryV2 {
    * and out the portal, and the camera pulls back to take it all in.
    */
   private async fullSystem(): Promise<void> {
-    const { stage, scene, graph, drone } = this;
+    const { stage, graph, drone } = this;
     const rovo = this.rovo!.drone;
     const camera = this.pullBack();
     this.cleanups.push(camera.restore);
-    const own = new Set(scene.act1.map.nodes.map((n) => n.kind));
     const stop = await fullSystem(
       stage,
       {
@@ -488,15 +483,6 @@ export class StoryV2 {
         rovo,
         nodes: this.nodes(),
         graph,
-        routeTo: (kind) => {
-          if (own.has(kind)) return this.ownRoute(scene.act1.map, kind);
-          // The rest of the grid is Rovo's: out to GitHub, then along the graph through the tunnel.
-          const path = new CurvePath<Vector3>();
-          path.add(this.ownRoute(scene.act1.map, 'github'));
-          path.add(this.travel('github', kind));
-          return path;
-        },
-        rovoRouteTo: (kind) => this.ownRoute(scene.act2.map, kind),
         boost: graph.boost,
         watch: this.throughGateway(),
         spawn: this.roster.spawn,
@@ -540,11 +526,6 @@ export class StoryV2 {
   /** The graph's way between two tools, through tools on the grid only: what work products ride. */
   private graphRoute(from: SystemKind, to: SystemKind): Curve<Vector3> {
     return linkRoute(this.graph, ...this.hops(from, to));
-  }
-
-  /** A sub-agent's way between two tools: straight within a system, through the tunnel between them. */
-  private travel(from: SystemKind, to: SystemKind): Curve<Vector3> {
-    return travelRoute(this.graph, ...this.hops(from, to));
   }
 
   private hops(from: SystemKind, to: SystemKind): SystemKind[] {

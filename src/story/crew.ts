@@ -1,4 +1,4 @@
-import { type Curve, CurvePath, LineCurve3, type Vector3 } from 'three';
+import { CurvePath, type Vector3 } from 'three';
 import { reversed } from '../primitives/branch/gridPath';
 import { DroneFlight } from '../animation/DroneFlight';
 import { type Drone, HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
@@ -13,15 +13,14 @@ import { fly, tween } from './timeline';
 const BUD_SCALE = 0.25;
 
 /**
- * Bud a sub-agent off `parent` and fly it out along `route` to `spot` (a
- * last hop from the route's end, if they differ), growing as it goes. It
- * arrives working. Resolves with the sub-agent.
+ * Bud a sub-agent off `parent` and fly it straight out to `spot`, growing as
+ * it goes (agents never ride lines: ILI-969). It arrives working. Resolves
+ * with the sub-agent.
  */
 export async function budOut(
   stage: SceneHost,
   parent: Drone,
   name: string,
-  route: Curve<Vector3>,
   spot: Vector3,
   speed = 4.2,
   /** Runs every frame of the flight out (e.g. to see it through a tunnel). */
@@ -35,14 +34,10 @@ export async function budOut(
     subAgent: true,
     status: 'working',
   });
-  const path = new CurvePath<Vector3>();
-  path.add(route);
-  const end = route.getPoint(1);
-  if (end.distanceTo(spot) > 1e-3) path.add(new LineCurve3(end, spot.clone()));
   const budHover = HOVER_HEIGHT * SUB_AGENT_SCALE * BUD_SCALE;
   const untick = stage.onTick(() => watch(sub.drone));
   await Promise.all([
-    fly(stage, DroneFlight.along(sub.drone, path, { fromHeight: HOVER_HEIGHT - budHover, speed })),
+    fly(stage, DroneFlight.to(sub.drone, spot, { fromHeight: HOVER_HEIGHT - budHover, speed })),
     tween(stage, 0.8, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD_SCALE + (1 - BUD_SCALE) * t))),
   ]);
   untick();
@@ -73,25 +68,6 @@ export function graphPathKinds(
   if (!came.has(to)) return null;
   const path: SystemKind[] = [];
   for (let k: SystemKind | null = to; k; k = came.get(k) ?? null) path.unshift(k);
-  return path;
-}
-
-/**
- * A sub-agent's way through these tools in order. Inside a system it flies
- * straight from tool to tool, off the grid; between systems it rides the
- * link (its feeder, through the secure gateway, the far feeder), since that
- * is the only way across.
- */
-export function travelRoute(graph: TeamworkGraph, ...kinds: SystemKind[]): CurvePath<Vector3> {
-  const path = new CurvePath<Vector3>();
-  for (let i = 1; i < kinds.length; i++) {
-    const [a, b] = [kinds[i - 1], kinds[i]];
-    const link = graph.links.find((l) => (l.from.kind === a && l.to.kind === b) || (l.from.kind === b && l.to.kind === a));
-    if (!link) throw new Error(`travelRoute: no graph link between ${a} and ${b}`);
-    const [from, to] = link.from.kind === a ? [link.from, link.to] : [link.to, link.from];
-    if (link.crosses) path.add(link.from.kind === a ? link.route : reversed(link.route));
-    else path.add(new LineCurve3(from.position.clone().setY(0), to.position.clone().setY(0)));
-  }
   return path;
 }
 

@@ -80,7 +80,7 @@ export async function fanOut(stage: SceneHost, parent: Drone, map: SystemMap): P
       // Bud: start at the parent's hover point, small, and settle down to cruise while growing.
       const budHover = HOVER_HEIGHT * SUB_AGENT_SCALE * BUD_SCALE;
       await Promise.all([
-        fly(stage, DroneFlight.along(sub.drone, map.routes[i], { fromHeight: HOVER_HEIGHT - budHover })),
+        fly(stage, DroneFlight.to(sub.drone, map.routes[i].getPoint(1), { fromHeight: HOVER_HEIGHT - budHover })),
         tween(stage, 0.8, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD_SCALE + (1 - BUD_SCALE) * t))),
       ]);
 
