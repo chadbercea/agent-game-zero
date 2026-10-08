@@ -7,8 +7,8 @@ const preview: Preview = {
   beforeEach: () => disposeSpecimenStage,
   parameters: {
     options: {
-      // The story first (the demos), then the parts it's built from, then the primitives.
-      storySort: { order: ['Story', 'Story Parts', 'Primitives'] },
+      // The narrative first, then the story (the demos), then the parts it's built from, then the primitives.
+      storySort: { order: ['Story Narrative', 'Story', 'Story Parts', 'Primitives'] },
     },
     controls: {
       matchers: {
