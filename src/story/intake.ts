@@ -9,7 +9,7 @@ import { Product } from '../primitives/product/Product';
 import { Ticket } from '../primitives/ticket/Ticket';
 import { spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
-import { cloudDrop } from './cloudDrop';
+import { cloudDrop, groupOffsets, MAX_GROUP } from './cloudDrop';
 import { absorb } from './request';
 import { fly, tween } from './timeline';
 
@@ -131,9 +131,16 @@ export class Intake {
   }
 
   private async sendCloud(): Promise<void> {
-    const cloud = this.clouds.find((c) => !c.visible && !c.userData.busy) ?? this.newCloud();
-    cloud.userData.busy = true;
-    cloud.shape = pickCloudShape(this.random);
+    // Clouds float by in groups (ILI-984): one to three, the first one drops the card.
+    const size = 1 + Math.floor(this.random() * MAX_GROUP);
+    const group = Array.from({ length: size }, () => {
+      const c = this.clouds.find((x) => !x.visible && !x.userData.busy) ?? this.newCloud();
+      c.userData.busy = true;
+      c.shape = pickCloudShape(this.random);
+      return c;
+    });
+    const [cloud] = group;
+    const offsets = groupOffsets(this.random, size - 1);
     this.cloudsOut++;
     const at = this.spot();
     const ticket = new Ticket({ key: 'DEMO', title: 'Issue' }, { label: false });
@@ -145,13 +152,14 @@ export class Intake {
       height: this.between(CLOUD_HEIGHT),
       tilt: this.between(TILT),
       keep: true,
+      escorts: group.slice(1).map((c, i) => ({ cloud: c, offset: offsets[i] })),
       onLand: () => {
         this.drops.push(at.clone());
         this.waiting.push({ ticket, at });
       },
     });
     this.cloudsOut--;
-    cloud.userData.busy = false;
+    for (const c of group) c.userData.busy = false;
   }
 
   /**
