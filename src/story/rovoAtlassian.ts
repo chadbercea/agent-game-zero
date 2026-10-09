@@ -1,15 +1,16 @@
 import { LineCurve3, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
-import { BEND_RADIUS, GATE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
-import type { SystemKind } from '../primitives/node/emblems';
+import { Job as JobAnimation } from '../primitives/job/Job';
+import { hasJob, type SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
@@ -45,11 +46,15 @@ function behindOnScreen(p: Vector3, from: Vector3): boolean {
 export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
 export const DOC_TOOLS: readonly SystemKind[] = ['confluence', 'gdocs'];
 export const EXTRA_TOOLS: readonly SystemKind[] = ['figma', 'codesearch'];
-/** Where a toolset's tools stand around its spot: a little triangle. */
-const TOOL_AT = [new Vector3(-1, 0, 0.6), new Vector3(0.9, 0, 0.7), new Vector3(0.1, 0, -1.1)];
+/** How far a toolset's tools stand out from its spot, each straight along the grid from it. */
+const TOOL_OUT = 1.5;
+/** The four ways out of a spot along the grid. */
+const GRID_WAYS = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)];
 const TOOL_SCALE = 0.85;
 
 const WORK: [number, number] = [1.1, 1.9];
+/** A job animation takes a little longer than plain work, so it reads. */
+const JOB_STRETCH = 1.6;
 const TASK_GAP: [number, number] = [1.6, 3.4];
 const SUB_SPEED = 4;
 /** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
@@ -97,6 +102,8 @@ export class RovoAtlassian {
   readonly jobs: Job[] = [];
   /** Toolsets up right now, by job id. */
   readonly toolsets = new Map<string, SystemNode[]>();
+  /** Lines from sub-agents' spots out to their tools, up right now. */
+  spokes = 0;
   /** Rovo is in Jira (after authenticating). */
   inJira = false;
   out = 0;
@@ -186,7 +193,7 @@ export class RovoAtlassian {
     }
   }
 
-  /** A padlock fades in open over the gate, then snaps shut; the gate goes quiet under it. */
+  /** A padlock fades in open over the gate, then snaps shut. The gate stays lit under it: security is on, not off. */
   private async lockGate(): Promise<void> {
     const { stage, lock } = this;
     await tween(stage, 0.35, (t) => {
@@ -195,7 +202,6 @@ export class RovoAtlassian {
     });
     await wait(stage, 0.15);
     await tween(stage, 0.18, (t) => (lock.shut = t * t));
-    this.gate.state = 'off';
   }
 
   stop(): void {
@@ -240,10 +246,22 @@ export class RovoAtlassian {
     const task = await hub.takeTask(sub.drone.rig.hover);
     await fly(stage, DroneFlight.to(sub.drone, slot, { speed: SUB_SPEED, fromHeight: AT_ROVOS_BODY, lift: 0 }));
 
-    // It spins up its own tools for this task, and ties them back to Jira.
+    // It spins up its own tools for this task, each out along the grid from its spot, and ties them back to
+    // Jira. The tie comes in on the side facing Jira; the tools take the other three.
+    const toJira = JIRA_AT.clone().sub(slot);
+    const tieSide = Math.abs(toJira.x) >= Math.abs(toJira.z) ? new Vector3(Math.sign(toJira.x), 0, 0) : new Vector3(0, 0, Math.sign(toJira.z));
+    const ways = GRID_WAYS.filter((w) => w.dot(tieSide) < 0.5);
+    const spokes: Branch[] = [];
     const tools = kinds.map((kind, i) => {
       const node = new SystemNode({ kind });
-      node.position.copy(slot).add(TOOL_AT[i]);
+      node.position.copy(slot).addScaledVector(ways[i], TOOL_OUT);
+      const spoke = new Branch(
+        new LineCurve3(slot.clone().addScaledVector(ways[i], 0.2), node.position.clone().addScaledVector(ways[i], -(TOOL_SCALE * NODE_FOOTPRINT) / 2 - 0.05)),
+        NEUTRAL.packet,
+      );
+      stage.add(spoke);
+      spokes.push(spoke);
+      this.spokes++;
       // Its name grows in and folds away with it, so it never floats over empty floor.
       node.scale.setScalar(0.001);
       node.labelOpacity = 0;
@@ -251,20 +269,22 @@ export class RovoAtlassian {
       return node;
     });
     this.toolsets.set(job.id, tools);
-    for (const node of tools) {
+    // Each line draws out along the grid, then its tool grows in at the end of it.
+    for (const [i, node] of tools.entries()) {
+      await tween(stage, 0.25, (t) => (spokes[i].drawn = t));
       await tween(stage, 0.3, (t) => {
         node.scale.setScalar(Math.max(0.001, TOOL_SCALE * easeOutBack(t)));
         node.labelOpacity = t;
       });
     }
-    await hub.tie(job.id, slot);
+    await hub.tie(job.id, slot, tieSide);
 
     // Work each tool in turn; what it makes comes to the spot and rides the tie home into Jira.
     for (const node of tools) {
       node.light = 'working';
       sub.drone.flash = 1;
-      await wait(stage, this.between(WORK));
-      await shoot(stage, new LineCurve3(node.position.clone(), slot.clone()), 4, undefined, node.kind);
+      await this.work(node);
+      await shoot(stage, reversed(spokes[tools.indexOf(node)].curve), 4, undefined, node.kind);
       await hub.report(job.id, node.kind);
       node.light = 'off';
     }
@@ -273,14 +293,17 @@ export class RovoAtlassian {
     if (task) await hub.finish(task);
     void hub.untie(job.id);
     await Promise.all(
-      tools.map((node) =>
+      tools.map((node, i) =>
         tween(stage, 0.4, (t) => {
           node.scale.setScalar(Math.max(0.001, TOOL_SCALE * (1 - t)));
           node.labelOpacity = 1 - t;
+          spokes[i].drawn = Math.max(0.001, 1 - t);
         }),
       ),
     );
     for (const node of tools) node.dispose();
+    for (const spoke of spokes) spoke.dispose();
+    this.spokes -= spokes.length;
     this.toolsets.delete(job.id);
     await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, toHeight: AT_ROVOS_BODY, lift: 0 }));
     await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
@@ -288,6 +311,24 @@ export class RovoAtlassian {
     rovo.flash = 1;
     this.freeSlots.push(slot);
     this.out--;
+  }
+
+  /** A tool at work: where the system has a job animation (GitHub and Bitbucket grow a branch, Figma draws), it plays in place of the emblem. */
+  private async work(node: SystemNode): Promise<void> {
+    const { stage } = this;
+    if (!hasJob(node.kind)) return wait(stage, this.between(WORK));
+    const job = new JobAnimation(node.kind);
+    job.position.copy(node.position);
+    job.rotation.y = FACE_CAMERA;
+    job.scale.setScalar(TOOL_SCALE);
+    stage.add(job);
+    const untick = stage.onTick((dt) => job.update(dt));
+    node.emblem.visible = false;
+    await tween(stage, this.between(WORK) * JOB_STRETCH, (t) => (job.progress = t));
+    await wait(stage, 0.2);
+    untick();
+    job.dispose();
+    node.emblem.visible = true;
   }
 
   private pick<T>(from: readonly T[]): T {

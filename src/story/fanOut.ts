@@ -32,7 +32,7 @@ export const FAN_STAGGER = 0.35;
 /** Sub-agents bud off the parent at this fraction of their size and grow on the way out. */
 const BUD_SCALE = 0.25;
 /** Seconds each job takes; different per system so the crew finishes staggered. */
-export const JOB_SECONDS = { figma: 5, github: 6, notion: 4.5 } as const;
+export const JOB_SECONDS = { figma: 5, github: 6, notion: 4.5, bitbucket: 6 } as const;
 
 /**
  * Fan-out (story step 5): the parent spawns one sub-agent per system node.

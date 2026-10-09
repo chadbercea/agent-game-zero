@@ -1,6 +1,8 @@
-import { Object3D, Vector3 } from 'three';
+import { type Curve, Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { Branch } from '../primitives/branch/Branch';
 import { Drone } from '../primitives/drone/Drone';
+import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
 import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, ROVO_START, RovoAtlassian, SLOTS } from './rovoAtlassian';
 
@@ -53,6 +55,38 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(onGrid / (N + 1)).toBeGreaterThan(0.8);
   });
 
+  it('every line on the grid runs along it: tool lines and ties too, and the tool lines go when the work is done', async () => {
+    const { root, stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const offGrid = (curve: Curve<Vector3>) => {
+      let on = 0;
+      for (let i = 0; i <= 100; i++) {
+        const t = curve.getTangentAt(i / 100);
+        if (Math.abs(t.x) < 1e-3 || Math.abs(t.z) < 1e-3) on++;
+      }
+      return on / 101 < 0.75;
+    };
+    let lines = 0;
+    let bad = 0;
+    let maxSpokes = 0;
+    void scene.start();
+    await run(60, () => {
+      maxSpokes = Math.max(maxSpokes, scene.spokes);
+      for (const o of root.children) {
+        const curve = o instanceof Branch ? o.curve : o instanceof GraphEdge ? o.path : null;
+        if (!curve) continue;
+        lines++;
+        if (offGrid(curve)) bad++;
+      }
+    });
+    scene.stop();
+    await run(25);
+    expect(lines).toBeGreaterThan(0);
+    expect(maxSpokes).toBeGreaterThanOrEqual(2);
+    expect(bad).toBe(0);
+    expect(scene.spokes).toBe(0);
+  });
+
   it('comes in progressively: Rovo, then the gate as it flies over and authenticates, then Jira, then work, then the board', async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
@@ -87,7 +121,7 @@ describe('Rovo and Jira, the quarterback', () => {
     // Rovo through, the gate locks behind it.
     expect(scene.lock.shown).toBe(1);
     expect(scene.lock.shut).toBe(1);
-    expect(scene.gate.state).toBe('off');
+    expect(scene.gate.state).toBe('open');
     scene.stop();
   });
 
