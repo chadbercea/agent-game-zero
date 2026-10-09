@@ -5,7 +5,7 @@ The reference for the **Rovo on the Atlassian Grid** story (`src/story/rovoAtlas
 ## Who
 
 - **Rovo is the only real agent.** It authenticates at its gate (the gate locks behind it) and works from **Jira**, the quarterback and system of record.
-- **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They spawn out of Rovo and go home into it.
+- **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They spawn out of Rovo once and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to Rovo (the parent, already talking two-way with Jira; never to the base), and waits where it is for its next ticket. They go home into Rovo only when the work stops.
 
 ## Tasks
 
@@ -15,7 +15,8 @@ The reference for the **Rovo on the Atlassian Grid** story (`src/story/rovoAtlas
 
 ## Systems
 
-- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. TWG apps (Jira, Confluence, Code search, Bitbucket) are **permanent** once called.
+- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. Its core, **Jira, Confluence and Bitbucket**, is prominent and persistent: it comes up as Rovo gets into Jira, each on a plate, a size up. Other TWG apps (Code search) are **permanent** once called.
+- **Bitbucket is the repo** in this story: all the code activity is around it.
 - **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through connectors and **despawn when the Jira issue is done**.
 - **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway.
 

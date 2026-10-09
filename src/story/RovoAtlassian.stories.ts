@@ -12,11 +12,13 @@ export default meta;
  * Rovo and Jira, the quarterback (docs/rovo-mental-model.md). Rovo flies to
  * its gate and authenticates (yellow, then green); the line draws to Jira and
  * Jira comes up; Rovo moves in (the gate locks behind it) and works from
- * there. Tasks keep coming onto Jira's board; for each, Rovo sends a copy of
- * itself (one to three at once) that runs the task's steps: it flies to each
- * system the step needs (a line draws out from Jira, then the system appears),
- * works it while hovering over it, and reports to Jira. Code is squash-merged
- * into the run's repo from its lane (worktree → terminal → repo: written,
+ * there, and the Teamwork Graph's core (Confluence, Bitbucket) comes up around
+ * it. Tasks keep coming onto Jira's board. Rovo's copies of itself stay on:
+ * Rovo hands one a ticket, it runs the task's steps, shoots the finished
+ * ticket back to Rovo and waits for the next. For each step a copy flies to
+ * the system (which comes up for it if it isn't there), works it while
+ * hovering over it, and reports to Jira. Code is squash-merged into Bitbucket
+ * from the copy's own lane (worktree → terminal → repo: written,
  * checked in, CI passes, merged, deployed down the belt into the portal), and
  * the repo's trunk keeps every commit. Teamwork Graph apps
  * stay; third-party tools go when their task is done. Seeded: `seed` changes
