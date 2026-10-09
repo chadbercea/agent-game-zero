@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import { type Object3D, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
 import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT } from '../core/grid';
@@ -15,6 +15,7 @@ import { RepoTrunk } from '../primitives/job/RepoTrunk';
 import { hasJob, SCM_KINDS, type ScmKind, type SystemKind } from '../primitives/node/emblems';
 import { NODE_SCALE, SystemNode } from '../primitives/node/SystemNode';
 import { PAD_TOP } from '../primitives/pad/Pad';
+import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
@@ -30,6 +31,8 @@ import { fly, tween, wait } from './timeline';
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** The middle of everything on the grid, from the mini systems left of Jira to the portal on the right. */
 export const STORY_CENTER = new Vector3(0.9, 0.6, -1.4);
+/** The user's terminal: where a copy updates the user, a short hop up from Jira, clear of the gate and Rovo. */
+export const USER_TERMINAL_AT = new Vector3(-3, 0, -1);
 /** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
@@ -114,7 +117,12 @@ export class RovoAtlassian {
   /** The repo's trunk at the SCM: one commit per merge (its final state). */
   readonly trunk = new RepoTrunk();
   /** Copies at work right now, and the node each is working (always over it). */
-  readonly working = new Map<Drone, SystemNode>();
+  readonly working = new Map<Drone, Object3D>();
+  /** The user's terminal, where a copy reports back (once a task first needs it). */
+  terminal?: Terminal;
+  /** Times a copy has updated the user's terminal. */
+  userReports = 0;
+  private terminalUp?: Promise<Terminal>;
   /** Every copy Rovo can run at once. */
   get crew(): number {
     return this.codeCrew + this.loopCrew;
@@ -312,9 +320,30 @@ export class RovoAtlassian {
       await fly(stage, DroneFlight.to(sub.drone, system.node.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
       from = 0;
       await this.work(sub.drone, system.node, step);
-      // The step reports to Jira along the system's Graph Line.
-      if (step.system !== 'jira') void hub.report(system.tie, step.system);
+      if (step.system !== 'jira') {
+        // A write stays where it was written (write-back); a read brings what it found home to Jira;
+        // either way the step's status rides the system's Graph Line to Jira.
+        if (step.action === 'read') void hub.report(system.tie, step.system);
+        else {
+          this.systems.writeBack(step.system);
+          void hub.report(system.tie);
+        }
+      }
       run.done++;
+    }
+    if (run.task.reportToUser) {
+      // Last, the copy updates the terminal back to the user.
+      const terminal = await this.userTerminal();
+      await fly(stage, DroneFlight.to(sub.drone, terminal.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      from = 0;
+      this.working.set(sub.drone, terminal);
+      terminal.state = 'tail';
+      await wait(stage, this.between(WORK));
+      terminal.pass();
+      await wait(stage, 0.5);
+      terminal.state = 'admin';
+      this.working.delete(sub.drone);
+      this.userReports++;
     }
 
     // The task is done: the card goes home to Done, the copy flies home into Rovo.
@@ -433,6 +462,23 @@ export class RovoAtlassian {
     }
     node.light = 'off';
     this.working.delete(drone);
+  }
+
+  /** The user's terminal, brought up the first time a copy reports back: its line draws from Jira, then it appears. It stays. */
+  private userTerminal(): Promise<Terminal> {
+    this.terminalUp ??= (async () => {
+      const { stage } = this;
+      await this.hub.tie('user-terminal', USER_TERMINAL_AT, undefined, TERMINAL_SIZE / 2 + 0.1);
+      const terminal = new Terminal({ state: 'admin', seed: 7 });
+      terminal.position.copy(USER_TERMINAL_AT);
+      terminal.scale.setScalar(0.001);
+      stage.add(terminal);
+      stage.onTick((dt) => terminal.update(dt));
+      await tween(stage, 0.4, (t) => terminal.scale.setScalar(Math.max(0.001, easeOutBack(t))));
+      this.terminal = terminal;
+      return terminal;
+    })();
+    return this.terminalUp;
   }
 
   private between([lo, hi]: [number, number]): number {

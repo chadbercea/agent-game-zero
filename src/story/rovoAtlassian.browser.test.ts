@@ -232,7 +232,38 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(maxLanes).toBeLessThanOrEqual(scene.codeCrew);
     // Lanes are taken down once their tasks are done.
     expect(scene.lanes.every((l) => l === null)).toBe(true);
-    expect(root.children.some((o) => o instanceof Terminal)).toBe(false);
+    // Only the user's terminal stays; lane terminals go with their lanes.
+    expect(root.children.some((o) => o instanceof Terminal && o !== scene.terminal)).toBe(false);
+  });
+
+  it('mini-system loops: writes stay at the system, third-party tools plug in through a connector, spec loops report to the user\'s terminal, at most loopCrew at once', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    let tooMany = 0;
+    let twgWithPlug = 0;
+    let thirdPartyWithoutPlug = 0;
+    const watch = () => {
+      if (scene.out - scene.codeOut > scene.loopCrew) tooMany++;
+      for (const up of scene.systems.placed.values()) {
+        if (up.permanent && up.connector) twgWithPlug++;
+        if (!up.permanent && !up.connector) thirdPartyWithoutPlug++;
+      }
+    };
+    void scene.start();
+    await run(200, watch);
+    scene.stop();
+    await run(50, watch);
+    expect(tooMany).toBe(0);
+    expect(twgWithPlug).toBe(0);
+    expect(thirdPartyWithoutPlug).toBe(0);
+    // Writes to a Teamwork Graph app stay there.
+    const wroteTwg = scene.tasks.some((t) => t.task.steps.some((st) => st.action !== 'read' && ['confluence', 'codesearch'].includes(st.system)));
+    if (wroteTwg) expect([...scene.systems.placed.values()].some((up) => up.writeBacks.length > 0)).toBe(true);
+    // Every spec loop ended by updating the user's terminal.
+    const specs = scene.tasks.filter((t) => t.task.reportToUser).length;
+    expect(specs).toBeGreaterThan(0);
+    expect(scene.userReports).toBe(specs);
+    expect(scene.terminal).toBeDefined();
   });
 
   it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {

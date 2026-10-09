@@ -19,6 +19,8 @@ export interface Step {
 export interface Task {
   type: TaskType;
   steps: Step[];
+  /** After the last step, the copy updates the user's terminal (the spec loop). */
+  reportToUser?: boolean;
 }
 
 /** Atlassian Teamwork Graph apps: permanent on the grid once first called. */
@@ -66,9 +68,10 @@ export function makeTask(random: () => number, options: TaskOptions): Task {
     case 'slack':
       return { type, steps: [{ system: 'slack', action: 'send' }] };
     case 'spec':
-      // Chad's loop: read Confluence → read Figma (MCP) → update Confluence (then report back to the user).
+      // Chad's loop: read Confluence → read Figma (MCP) → update Confluence → update the terminal back to the user.
       return {
         type,
+        reportToUser: true,
         steps: [
           { system: 'confluence', action: 'read' },
           { system: 'figma', action: 'read' },
