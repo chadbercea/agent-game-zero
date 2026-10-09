@@ -55,6 +55,8 @@ const TOOL_SCALE = 0.85;
 const WORK: [number, number] = [1.1, 1.9];
 /** A job animation takes a little longer than plain work, so it reads. */
 const JOB_STRETCH = 1.6;
+/** A job animation stands bigger than its tool's emblem, so it reads at this zoom. */
+const JOB_SCALE = 1.4;
 const TASK_GAP: [number, number] = [1.6, 3.4];
 const SUB_SPEED = 4;
 /** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
@@ -320,7 +322,7 @@ export class RovoAtlassian {
     const job = new JobAnimation(node.kind);
     job.position.copy(node.position);
     job.rotation.y = FACE_CAMERA;
-    job.scale.setScalar(TOOL_SCALE);
+    job.scale.setScalar(JOB_SCALE);
     stage.add(job);
     const untick = stage.onTick((dt) => job.update(dt));
     node.emblem.visible = false;
