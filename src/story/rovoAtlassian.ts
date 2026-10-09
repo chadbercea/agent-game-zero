@@ -65,7 +65,10 @@ const DEPLOY_CUBES = 4;
 const JOB_STRETCH = 1.6;
 /** A job animation stands bigger than its tool's emblem, so it reads at this zoom. */
 const JOB_SCALE = 1.4;
-const TASK_GAP: [number, number] = [1.6, 3.4];
+const TASK_GAP: [number, number] = [0.9, 2.2];
+/** Rovo's crew: always 1–3 coders working branches; a few more in the mini systems; never more than this in all. */
+export const MAX_CREW = 5;
+const MAX_LOOPERS = 2;
 const SUB_SPEED = 4;
 /** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
 const EMERGE_SECONDS = 0.25;
@@ -105,7 +108,7 @@ export class RovoAtlassian {
   readonly hub: JiraHub;
   /** The line from the gate into Jira: Rovo's way in. */
   readonly accessLine: Branch;
-  /** How many copies Rovo runs at once this run: coding (1–3, one per lane) and in mini systems (1–3). */
+  /** Rovo's crew this run (seeded): 1–3 coders (one per lane, always working branches) and 0–2 in the mini systems, 5 at most. */
   readonly codeCrew: number;
   readonly loopCrew: number;
   /** The coding lanes in use (up to three), by lane index. */
@@ -152,7 +155,7 @@ export class RovoAtlassian {
   ) {
     this.random = seededRandom(seed);
     this.codeCrew = 1 + Math.floor(this.random() * 3);
-    this.loopCrew = 1 + Math.floor(this.random() * 3);
+    this.loopCrew = Math.floor(this.random() * (Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew) + 1));
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
     this.scm = 'bitbucket';
     this.gate.position.copy(ROVO_GATE);
