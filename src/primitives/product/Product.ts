@@ -25,6 +25,7 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   codesearch: 'Code context',
   linear: 'Issue',
   gdocs: 'Doc',
+  gitlab: 'Merge request',
 };
 
 /** About the size of the old work cube: small enough to ride a line, big enough to read. */
@@ -78,7 +79,7 @@ export function productGeometry(kind: SystemKind): BufferGeometry {
     add(new RoundedBoxGeometry(s * 1.1, s * 0.72, s * 0.1, 2, s * 0.06));
     add(new BoxGeometry(s * 0.34, s * 0.12, s * 0.08), -s * 0.24, s * 0.16, s * 0.07);
     add(new BoxGeometry(s * 0.7, s * 0.07, s * 0.06), -s * 0.05, -s * 0.08, s * 0.07);
-  } else if (kind === 'bitbucket') {
+  } else if (kind === 'bitbucket' || kind === 'gitlab') {
     add(new SphereGeometry(s * 0.2, 12, 8), -s * 0.3, s * 0.3);
     add(new SphereGeometry(s * 0.2, 12, 8), s * 0.3, s * 0.3);
     add(new SphereGeometry(s * 0.24, 12, 8), 0, -s * 0.32);

@@ -23,6 +23,7 @@ export const JOB_TITLE: Record<JobKind, string> = {
   figma: 'Reference the design → write a report',
   github: 'Create a branch → git init',
   bitbucket: 'Create a branch → git init',
+  gitlab: 'Create a branch → git init',
   notion: 'Read the PRD',
 };
 
@@ -34,11 +35,23 @@ export const PRODUCT_OFFSET = { x: 0.42, y: 0.55, z: 0.12 } as const;
  * (0–1) builds the job's visual; at 1 the work product (the old work cube)
  * appears, ready to be carried home. Each system has its own visual:
  * - Figma: a mini design window: a rectangle traces itself, fills, and gets selected
- * - GitHub and Bitbucket: a git graph grows and forks, then an init folder appears
+ * - GitHub, Bitbucket, GitLab: a git graph grows and forks, then an init folder appears; or, with
+ *   the `merge` ending, the fork folds back into the trunk as one squashed commit (the branch is deleted)
  * - Notion: pages stack up, one after another
  */
+/** How a branch job ends: `init` (a git-init folder pops in) or `merge` (squash-merged, branch deleted). */
+export type BranchEnding = 'init' | 'merge';
+
+export interface JobOptions {
+  /** Branch jobs only. Default `init`. */
+  ending?: BranchEnding;
+}
+
 export class Job extends Group {
   readonly kind: JobKind;
+  readonly ending: BranchEnding;
+  /** Branch jobs with the merge ending: the fork has folded in and the branch is gone. */
+  merged = false;
   /** The work product: appears when the job completes; carried home on return. */
   readonly product: Mesh;
   private _progress = 0;
@@ -46,9 +59,10 @@ export class Job extends Group {
   private readonly materials: Material[] = [];
   private readonly build: (progress: number, time: number) => void;
 
-  constructor(kind: JobKind) {
+  constructor(kind: JobKind, options: JobOptions = {}) {
     super();
     this.kind = kind;
+    this.ending = options.ending ?? 'init';
     this.name = `job:${kind}`;
     const shell = this.track(new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.4, flatShading: true }));
     const graphite = this.track(new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.45, flatShading: true }));
@@ -57,7 +71,7 @@ export class Job extends Group {
     );
 
     if (kind === 'figma') this.build = this.buildWindow(lit);
-    else if (kind === 'github' || kind === 'bitbucket') this.build = this.buildBranch(shell, graphite);
+    else if (kind === 'github' || kind === 'bitbucket' || kind === 'gitlab') this.build = this.buildBranch(shell, graphite);
     else this.build = this.buildReport(shell, graphite);
 
     // The job's work product: its system's product shape (see Product), facing the camera.
@@ -125,6 +139,7 @@ export class Job extends Group {
 
   /** GitHub: a trunk grows with commits, a branch forks off it, then a folder (git init) appears. */
   private buildBranch(shell: Material, graphite: Material) {
+    if (this.ending === 'merge') return this.buildMerge(shell, graphite);
     const graph = new Group();
     graph.position.y = 0.3;
     this.add(graph);
@@ -165,6 +180,57 @@ export class Job extends Group {
       const init = MathUtils.clamp((progress - 0.75) / 0.17, 0, 1);
       folder.visible = init > 0;
       folder.scale.setScalar(Math.max(0.001, easeOut(init)));
+    };
+  }
+
+  /**
+   * A branch squash-merged: the trunk grows with commits, a branch forks off
+   * and takes its commits, then folds back: the fork draws back into the
+   * trunk, its tip rides in, and lands on top of the trunk as one squashed
+   * commit. The branch is gone (deleted on merge).
+   */
+  private buildMerge(shell: Material, graphite: Material) {
+    const graph = new Group();
+    graph.position.y = 0.3;
+    this.add(graph);
+    const trunk = solid(new CylinderGeometry(0.03, 0.03, 1, 8), graphite);
+    graph.add(trunk);
+    const commitGeometry = new SphereGeometry(0.06, 12, 8);
+    const commits = [0.1, 0.38].map((y) => at(solid(commitGeometry, shell), y));
+    graph.add(...commits);
+    const forkCurve = new QuadraticBezierCurve3(new Vector3(0, 0.3, 0), new Vector3(0.24, 0.36, 0), new Vector3(0.24, 0.62, 0));
+    const forkGeometry = new TubeGeometry(forkCurve, 16, 0.028, 6);
+    const fork = solid(forkGeometry, graphite);
+    graph.add(fork);
+    const tip = solid(commitGeometry, shell);
+    graph.add(tip);
+    const squash = solid(commitGeometry, shell);
+    graph.add(squash);
+    const forkIndices = forkGeometry.index!.count;
+    const forkEnd = new Vector3(0.24, 0.62, 0);
+    const TOP = 0.78;
+    const onTrunk = new Vector3(0, TOP, 0);
+
+    return (progress: number) => {
+      // 0–0.35: trunk grows.
+      const grow = MathUtils.clamp(progress / 0.35, 0, 1);
+      const height = Math.max(0.001, grow * 0.52);
+      // 0.35–0.6: the branch forks off, its tip commit at the end.
+      const branch = MathUtils.clamp((progress - 0.35) / 0.25, 0, 1);
+      // 0.6–0.88: it folds back in: the fork draws back, the tip rides onto the top of the trunk.
+      const fold = MathUtils.clamp((progress - 0.6) / 0.28, 0, 1);
+      const trunkHeight = height + (TOP - 0.52) * fold;
+      trunk.scale.y = trunkHeight;
+      trunk.position.y = trunkHeight / 2;
+      commits.forEach((c) => (c.visible = c.position.y <= height));
+      fork.visible = branch > 0 && fold < 1;
+      forkGeometry.setDrawRange(0, Math.floor((forkIndices * branch * (1 - fold)) / 3) * 3);
+      tip.visible = branch >= 1 && fold < 1;
+      tip.position.lerpVectors(forkEnd, onTrunk, easeOut(fold));
+      // Merged: one squashed commit on top of the trunk; the branch is deleted.
+      this.merged = fold >= 1;
+      squash.visible = this.merged;
+      squash.position.copy(onTrunk);
     };
   }
 
