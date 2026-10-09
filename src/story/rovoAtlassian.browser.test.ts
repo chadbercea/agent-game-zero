@@ -157,26 +157,32 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.working.size).toBe(0);
   });
 
-  it('systems come up on call: the line draws first, then the node; Teamwork Graph apps stay, third-party tools go when done', async () => {
+  it('the system reacts to the agents: anything new comes up under a copy, or at the end of a line that has drawn; TWG apps stay, third-party tools go', async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 5);
-    let nodeBeforeLine = 0;
+    let unprompted = 0;
     const appeared = new Set<SystemKind>();
+    const shown = new Set<Object3D>();
+    const copies = () => root.children.filter((o): o is Drone => o instanceof Drone && o.subAgent && o.visible);
     void scene.start();
     await run(150, () => {
       for (const o of root.children) {
-        if (!(o instanceof SystemNode) || o.kind === 'jira' || o.scale.x < 0.01) continue;
-        appeared.add(o.kind);
-        const line = root.children.some(
-          (e) => (e instanceof GraphEdge ? e.drawn > 0.99 && e.path.getPoint(1).distanceTo(o.position) < 0.8 : e instanceof Branch && e.drawn > 0.99 && e.curve.getPoint(1).distanceTo(o.position) < 0.8),
-        );
-        if (!line) nodeBeforeLine++;
+        const isNew = (o instanceof SystemNode && o.kind !== 'jira') || o instanceof Terminal;
+        if (!isNew || o.scale.x < 0.01 || shown.has(o)) continue;
+        shown.add(o);
+        if (o instanceof SystemNode) appeared.add(o.kind);
+        const underCopy = copies().some((c) => Math.hypot(c.position.x - o.position.x, c.position.z - o.position.z) < 0.3);
+        const atLine = root.children.some((e) => {
+          const curve = e instanceof GraphEdge && e.drawn > 0.99 ? e.path : e instanceof Branch && e.drawn > 0.99 ? e.curve : null;
+          return !!curve && (curve.getPoint(1).distanceTo(o.position.clone().setY(0)) < 0.8 || curve.getPoint(0).distanceTo(o.position.clone().setY(0)) < 0.8);
+        });
+        if (!underCopy && !atLine) unprompted++;
       }
     });
     scene.stop();
     await run(40);
     expect(appeared.size).toBeGreaterThan(1);
-    expect(nodeBeforeLine).toBe(0);
+    expect(unprompted).toBe(0);
     // Systems stand at their places; worktrees stand in the code lanes.
     for (const kind of appeared) if (kind !== 'worktree') expect(PLACES[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.
@@ -197,7 +203,7 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.trunk.count).toBe(code.length);
   });
 
-  it('a code task runs like real life: terminal admin → diff → (check in) → tail → pass, merge, deploy, and the lane is taken down', async () => {
+  it('a code task runs like real life: the copy builds its lane, terminal admin → diff → (check in) → tail → pass, merge, deploy, and it collapses the lane before it goes', async () => {
     const { root, stage, run } = testStage();
     // A run with room for three coding copies at once.
     let seed = 1;
@@ -205,9 +211,17 @@ describe('Rovo and Jira, the quarterback', () => {
     const scene = new RovoAtlassian(stage, seed);
     const states = new Map<object, string[]>();
     let maxLanes = 0;
+    let collapsedAlone = 0;
+    const collapsed = new Set<object>();
     const watch = () => {
       for (const lane of scene.lanes) {
         if (!lane) continue;
+        // The copy collapses its lane back into itself: it's still over the worktree when the lane has folded.
+        if (lane.collapsed && !collapsed.has(lane)) {
+          collapsed.add(lane);
+          const over = root.children.some((o) => o instanceof Drone && o.subAgent && o.visible && Math.hypot(o.position.x - lane.spot.x, o.position.z - lane.spot.z) < 0.3);
+          if (!over) collapsedAlone++;
+        }
         const seen = states.get(lane) ?? [];
         const now = lane.terminal.passed ? 'pass' : lane.terminal.state;
         if (seen[seen.length - 1] !== now) seen.push(now);
@@ -227,6 +241,8 @@ describe('Rovo and Jira, the quarterback', () => {
     for (const s of finished) expect(s.filter((x) => x !== 'off')).toEqual(['admin', 'diff', 'tail', 'pass']);
     expect(scene.trunk.count).toBe(code.length);
     expect(scene.output).toBeDefined();
+    expect(collapsed.size).toBe(code.length);
+    expect(collapsedAlone).toBe(0);
     // Coding copies work in parallel, one per lane, never more than the run allows.
     expect(maxLanes).toBeGreaterThanOrEqual(2);
     expect(maxLanes).toBeLessThanOrEqual(scene.codeCrew);

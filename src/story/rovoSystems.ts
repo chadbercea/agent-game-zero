@@ -32,10 +32,11 @@ export const WRITE_BACKS_SHOWN = 3;
 
 /**
  * The systems on Rovo's grid. Jira is there from the start (the hub). Any
- * other system comes up the first time a task calls it: a Graph Line draws
- * out from Jira to its place, then the node grows in at the line's end.
- * Teamwork Graph apps then stay; a third-party tool goes again (it folds
- * away, then its line draws back) once no open task still needs it.
+ * other system comes up the first time a copy of Rovo calls it, reacting to
+ * the copy: it grows in right under the copy, then reaches out to Jira (a
+ * third-party tool through a connector), its Graph Line drawing in to Jira.
+ * Teamwork Graph apps then stay; a third-party tool goes again (its line
+ * draws back into it, then it folds away) once no open task still needs it.
  */
 export class SystemsOnGrid {
   readonly placed = new Map<SystemKind, PlacedSystem>();
@@ -67,6 +68,8 @@ export class SystemsOnGrid {
     if (up.permanent || up.users > 0) return;
     this.placed.delete(kind);
     const { node, connector } = up;
+    // The reverse of coming up: its line draws back into it from Jira, then it folds away.
+    await this.hub.untie(up.tie);
     await tween(this.stage, 0.4, (t) => {
       node.scale.setScalar(Math.max(0.001, 1 - t));
       node.labelOpacity = 1 - t;
@@ -75,7 +78,6 @@ export class SystemsOnGrid {
     for (const p of up.writeBacks) p.dispose();
     connector?.removeFromParent();
     node.dispose();
-    await this.hub.untie(up.tie);
   }
 
   /** A step wrote to the system: its result stays there, a small product on the node's slab (the oldest go past a few). */
@@ -101,12 +103,7 @@ export class SystemsOnGrid {
     const promise = (async () => {
       const at = this.places[kind];
       if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
-      // The line draws out from Jira first; then the node appears at its end.
-      const tie = `system:${kind}:${++this.ups}`;
-      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1);
-      // A third-party tool plugs in through a connector at the end of its line.
-      const permanent = isTwg(kind);
-      const connector = permanent ? undefined : this.plug(tie);
+      // It comes up for the copy that called it, right under it; then it reaches out to Jira.
       const node = new SystemNode({ kind });
       node.position.copy(at);
       node.scale.setScalar(0.001);
@@ -115,8 +112,13 @@ export class SystemsOnGrid {
       await tween(this.stage, 0.4, (t) => {
         node.scale.setScalar(Math.max(0.001, easeOutBack(t)));
         node.labelOpacity = t;
-        connector?.scale.setScalar(Math.max(0.001, easeOutBack(t)));
       });
+      const tie = `system:${kind}:${++this.ups}`;
+      const permanent = isTwg(kind);
+      // A third-party tool plugs into the Teamwork Graph through a connector first.
+      const connector = permanent ? undefined : this.plug(at);
+      if (connector) await tween(this.stage, 0.25, (t) => connector.scale.setScalar(Math.max(0.001, easeOutBack(t))));
+      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true);
       const up: PlacedSystem = { kind, node, permanent, tie, connector, writeBacks: [], users: 0 };
       this.placed.set(kind, up);
       this.arriving.delete(kind);
@@ -130,15 +132,15 @@ export class SystemsOnGrid {
     return { kind: 'jira', node: this.hub.node, permanent: true, tie: '', writeBacks: [], users: 0 };
   }
 
-  /** The connector: a small white plug with a Teamwork Graph blue band, at the end of the tool's line. */
-  private plug(tie: string): Group | undefined {
-    const edge = this.hub.ties.get(tie);
-    if (!edge) return undefined;
+  /** The connector: a small white plug with a Teamwork Graph blue band, on the node's slab where its line leaves for Jira. */
+  private plug(at: Vector3): Group {
     const plug = new Group();
     plug.add(solid(new RoundedBoxGeometry(0.2, 0.12, 0.2, 2, 0.04), new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.45 }))).position.y = 0.06;
     const band = new MeshStandardMaterial({ color: GRAPH_COLOR, emissive: GRAPH_COLOR, emissiveIntensity: 0.5 });
     plug.add(solid(new RoundedBoxGeometry(0.22, 0.03, 0.22, 2, 0.012), band)).position.y = 0.1;
-    plug.position.copy(edge.path.getPoint(1)).setY(0);
+    // On the slab's corner toward Jira, where the line sets off.
+    const toward = this.hub.node.position.clone().sub(at);
+    plug.position.set(at.x + Math.sign(toward.x) * 0.3, 0.2, at.z + Math.sign(toward.z) * 0.3);
     plug.scale.setScalar(0.001);
     this.stage.add(plug);
     return plug;
