@@ -1,0 +1,64 @@
+import { Object3D } from 'three';
+import { describe, expect, it } from 'vitest';
+import { Drone } from '../primitives/drone/Drone';
+import { ATLASSIAN_KINDS } from '../primitives/node/emblems';
+import type { SceneHost } from '../stage/Stage';
+import { ROVO_GATE, RovoAtlassian } from './rovoAtlassian';
+
+function testStage(fps = 30) {
+  const DT = 1 / fps;
+  const root = new Object3D();
+  const ticks = new Set<(dt: number) => void>();
+  const stage = {
+    add: (...objects: Object3D[]) => root.add(...objects),
+    onTick: (fn: (dt: number) => void) => {
+      ticks.add(fn);
+      return () => void ticks.delete(fn);
+    },
+  } as unknown as SceneHost;
+  const run = async (seconds: number, each: () => void = () => {}) => {
+    for (let t = 0; t < seconds; t += DT) {
+      for (const fn of [...ticks]) fn(DT);
+      each();
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    }
+  };
+  return { root, stage, run };
+}
+
+describe('Rovo on the Atlassian grid', () => {
+  it('starts with Rovo at the center on its gate, and nothing else up', () => {
+    const { stage } = testStage();
+    const scene = new RovoAtlassian(stage);
+    expect(scene.rovo.drone.position.distanceTo(ROVO_GATE)).toBe(0);
+    expect(scene.map.nodes.map((n) => n.kind)).toEqual([...ATLASSIAN_KINDS]);
+    expect(scene.map.nodes.every((n) => !n.visible)).toBe(true);
+  });
+
+  it('gets access, calls its tools up as needed, and 1–3 sub-agents keep work flowing back to Rovo', async () => {
+    const { root, stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const gate = new Set<string>();
+    let maxSubs = 0;
+    void scene.start();
+    await run(90, () => {
+      gate.add(scene.gate.state);
+      maxSubs = Math.max(maxSubs, root.children.filter((o) => o instanceof Drone && o.subAgent && o.visible).length);
+    });
+    scene.stop();
+    // Let everyone out come home: then every tool is dark again.
+    await run(15);
+    expect(scene.out).toBe(0);
+    expect(scene.map.nodes.every((n) => n.light === 'off')).toBe(true);
+    expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
+    expect(scene.gate.state).toBe('open');
+    // Each tool is called up once, the first time Rovo needs it.
+    expect(new Set(scene.called).size).toBe(scene.called.length);
+    expect(scene.called.length).toBeGreaterThanOrEqual(2);
+    for (const kind of scene.called) expect(scene.map.nodes[ATLASSIAN_KINDS.indexOf(kind)].visible).toBe(true);
+    expect(scene.delivered.length).toBeGreaterThan(5);
+    expect(maxSubs).toBeGreaterThanOrEqual(1);
+    expect(maxSubs).toBeLessThanOrEqual(scene.crew);
+    expect(scene.crew).toBeLessThanOrEqual(3);
+  });
+});
