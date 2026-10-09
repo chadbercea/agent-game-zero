@@ -1,23 +1,27 @@
-import { LineCurve3, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
-import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
+import type { Drone } from '../primitives/drone/Drone';
 import { Job as JobAnimation } from '../primitives/job/Job';
-import { hasJob, type SystemKind } from '../primitives/node/emblems';
-import { SystemNode } from '../primitives/node/SystemNode';
+import { RepoTrunk } from '../primitives/job/RepoTrunk';
+import { hasJob, isScm, SCM_KINDS, type ScmKind, type SystemKind } from '../primitives/node/emblems';
+import { NODE_SCALE, SystemNode } from '../primitives/node/SystemNode';
+import { PAD_TOP } from '../primitives/pad/Pad';
 import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
-import { shoot } from './beam';
 import { JiraHub, PLATE } from './jiraHub';
+import { makeTask, type Step, type Task } from './rovoTasks';
+import { SystemsOnGrid } from './rovoSystems';
 import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
@@ -26,31 +30,22 @@ export const ROVO_GATE = new Vector3(0, 0, 0);
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
 export const JIRA_AT = new Vector3(-3, 0, 3);
-/** Toolsets go up in slots on a ring around Jira, clear of the gate and of Rovo hovering over Jira. */
-const SLOT_RADIUS = 5;
-export const SLOTS: readonly Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7]
-  .map((i) => {
-    const a = (i / 8) * Math.PI * 2;
-    return JIRA_AT.clone().add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS)).round();
-  })
-  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5 && !behindOnScreen(p, JIRA_AT));
-
-/** Straight up the screen from `from` (camera looks along -x, -z): where an agent hovering over `from` would cover it. */
-function behindOnScreen(p: Vector3, from: Vector3): boolean {
-  const dx = p.x - from.x;
-  const dz = p.z - from.z;
-  return dx + dz < 0 && Math.abs(dx - dz) < 3;
-}
-
-/** What a task needs, picked per task: a code tool, a docs tool, and sometimes a third. Every toolset is a little different. */
-export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
-export const DOC_TOOLS: readonly SystemKind[] = ['confluence', 'gdocs'];
-export const EXTRA_TOOLS: readonly SystemKind[] = ['figma', 'codesearch'];
-/** How far a toolset's tools stand out from its spot, each straight along the grid from it. */
-const TOOL_OUT = 1.5;
-/** The four ways out of a spot along the grid. */
-const GRID_WAYS = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)];
-const TOOL_SCALE = 0.85;
+/**
+ * Where each system stands when a task first calls it. Mini systems (docs,
+ * reading, design) gather around Jira on the left; the code side is on the
+ * open right past the gate. Every place is on the grid and clear of Rovo
+ * hovering over Jira.
+ */
+export const PLACES: Partial<Record<SystemKind, Vector3>> = {
+  confluence: new Vector3(-7, 0, 3),
+  codesearch: new Vector3(-3, 0, 7),
+  figma: new Vector3(-7, 0, 7),
+  gdocs: new Vector3(-7, 0, -1),
+  notion: new Vector3(0, 0, 7),
+  github: new Vector3(4, 0, -4),
+  bitbucket: new Vector3(4, 0, -4),
+  gitlab: new Vector3(4, 0, -4),
+};
 
 const WORK: [number, number] = [1.1, 1.9];
 /** A job animation takes a little longer than plain work, so it reads. */
@@ -67,27 +62,26 @@ const LOCK_HEIGHT = 0.9;
 /** How high a sub-agent's floor anchor sits for its body to be level with Rovo's body. */
 const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
 
-/** One sub-agent's job: its task, where it set up, and the tools it spun up for it. */
-export interface Job {
+/** One Jira task, run by one copy of Rovo. */
+export interface TaskRun {
   id: string;
-  spot: Vector3;
-  kinds: SystemKind[];
+  task: Task;
+  /** Steps finished so far. */
+  done: number;
 }
 
 /**
- * Rovo and Jira, the quarterback (Story Narrative). Rovo floats in dead
- * center on its gate and authenticates (yellow, then green), then moves into
- * Jira and works from there (the gate locks behind it: a padlock snaps shut
- * over it). Jira is the system of record for everything.
+ * Rovo and Jira, the quarterback (Story Narrative; docs/rovo-mental-model.md).
+ * Rovo floats in, authenticates at its gate (which locks behind it), moves
+ * into Jira and works from there: Jira is the system of record.
  *
- * Tasks keep coming onto Jira's board. One to three sub-agents at a time
- * (seeded) spawn out of Rovo, each takes a task and flies out to an open spot
- * on the grid, where it spins up its own tools for that task: a code tool
- * (Bitbucket or GitHub), a docs tool (Confluence or Google Docs), and
- * sometimes a third (Figma or Code search), so every toolset is a little
- * different. A Graph Line ties the toolset back to Jira; the work on each
- * tool rides it home, the task comes back done, the toolset folds away, and
- * the sub-agent flies home into Rovo.
+ * Tasks keep coming onto Jira's board. Rovo is the only real agent: for each
+ * task it sends a copy of itself (one to three at once, seeded), set up for
+ * that task. A copy takes its card and runs the task's steps one at a time:
+ * it flies to each system the step needs (bringing it up on the grid the first
+ * time; see SystemsOnGrid), works there while hovering over it, and the step
+ * reports to Jira along the system's Graph Line. Then the card goes to Done
+ * and the copy flies home into Rovo.
  */
 export class RovoAtlassian {
   readonly rovo: SpawnedDrone;
@@ -100,18 +94,21 @@ export class RovoAtlassian {
   readonly accessLine: Branch;
   /** How many sub-agents Rovo runs at once this run (1–3). */
   readonly crew: number;
-  /** Every job started, in order. */
-  readonly jobs: Job[] = [];
-  /** Toolsets up right now, by job id. */
-  readonly toolsets = new Map<string, SystemNode[]>();
-  /** Lines from sub-agents' spots out to their tools, up right now. */
-  spokes = 0;
+  /** Every task started, in order. */
+  readonly tasks: TaskRun[] = [];
+  /** The systems on the grid. */
+  readonly systems: SystemsOnGrid;
+  /** This run's source code manager: every code task goes to the same repo. */
+  readonly scm: ScmKind;
+  /** The repo's trunk at the SCM: one commit per merge (its final state). */
+  readonly trunk = new RepoTrunk();
+  /** Copies at work right now, and the node each is working (always over it). */
+  readonly working = new Map<Drone, SystemNode>();
   /** Rovo is in Jira (after authenticating). */
   inJira = false;
   out = 0;
   peakOut = 0;
   private readonly random: () => number;
-  private readonly freeSlots: Vector3[] = SLOTS.map((s) => s.clone());
   private running = false;
   private subs = 0;
 
@@ -121,6 +118,7 @@ export class RovoAtlassian {
   ) {
     this.random = seededRandom(seed);
     this.crew = 1 + Math.floor(this.random() * 3);
+    this.scm = SCM_KINDS[Math.floor(this.random() * SCM_KINDS.length)];
     this.gate.position.copy(ROVO_GATE);
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
@@ -132,7 +130,19 @@ export class RovoAtlassian {
     this.jira = new SystemNode({ kind: 'jira' });
     this.jira.position.copy(JIRA_AT);
     stage.add(this.jira);
-    this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...[...this.toolsets.values()].flat().map((n) => n.position)], this.random);
+    this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...this.systems.positions()], this.random);
+    this.systems = new SystemsOnGrid(stage, this.hub, PLACES);
+    // The repo's trunk stands on the SCM node's slab, at its right-hand corner, and is only there while the SCM is:
+    // a third-party SCM goes when its tasks are done and takes its trunk with it (it keeps its commits for next time).
+    const repo = PLACES[this.scm] as Vector3;
+    this.trunk.position.set(repo.x + 0.3, PAD_TOP * NODE_SCALE, repo.z - 0.3);
+    stage.add(this.trunk);
+    stage.onTick((dt) => {
+      const up = this.systems.placed.get(this.scm);
+      this.trunk.visible = !!up;
+      if (up) this.trunk.scale.setScalar(up.node.scale.x);
+      this.trunk.update(dt);
+    });
     // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira's plate.
     const corner = new Vector3(ROVO_GATE.x, 0, JIRA_AT.z);
     this.accessLine = new Branch(
@@ -171,11 +181,11 @@ export class RovoAtlassian {
     await wait(stage, 0.3);
     await accessCheck(stage, rovo, this.gate, { thinkSeconds: 1.2 });
     await wait(stage, 0.3);
-    // Access granted: Jira comes up.
+    // Access granted: the line draws out from the gate, then Jira comes up at its end.
+    await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
     await hub.appear();
     await wait(stage, 0.3);
     // In through the gate, along its line, and into Jira: that's where Rovo works from.
-    await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
     rovo.status = 'working';
     const flight = fly(stage, DroneFlight.to(rovo, JIRA_AT, { speed: 3 }));
     // Once Rovo is away from the gate, it locks behind it.
@@ -190,7 +200,7 @@ export class RovoAtlassian {
     for (let i = 0; i < 3; i++) await hub.addTask();
     void this.taskFeed();
     while (this.running) {
-      if (this.out < this.crew && hub.board.length > 0 && this.freeSlots.length > 0) void this.runJob();
+      if (this.out < this.crew && hub.board.length > 0) void this.runTask();
       await wait(stage, 0.6);
     }
   }
@@ -219,22 +229,24 @@ export class RovoAtlassian {
   }
 
   /**
-   * One sub-agent, one task: out of Rovo, take the task, fly to an open spot,
-   * spin up its own tools there, tie them to Jira, work each tool (its work
-   * rides the tie home), bring the task back done, fold the tools away, and
-   * fly home into Rovo.
+   * One task, one copy of Rovo: out of Rovo with the card, then each step in
+   * turn (fly to the system, work it while hovering over it, report to Jira),
+   * then the card goes to Done, the copy flies home into Rovo, and the
+   * systems only this task needed go.
    */
-  private async runJob(): Promise<void> {
+  private async runTask(): Promise<void> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
-    const slot = this.freeSlots.splice(Math.floor(this.random() * this.freeSlots.length), 1)[0];
-    const kinds = [this.pick(CODE_TOOLS), this.pick(DOC_TOOLS), ...(this.random() < 0.5 ? [this.pick(EXTRA_TOOLS)] : [])];
-    const job: Job = { id: `job-${this.jobs.length + 1}`, spot: slot.clone(), kinds };
-    this.jobs.push(job);
+    const run: TaskRun = {
+      id: `task-${this.tasks.length + 1}`,
+      task: makeTask(this.random, { scm: this.scm, without: ['slack'] }),
+      done: 0,
+    };
+    this.tasks.push(run);
     this.out++;
     this.peakOut = Math.max(this.peakOut, this.out);
 
-    // Born inside Rovo, full size; it takes a task off Jira's board on its way out.
+    // Born inside Rovo, full size; it takes the card off Jira's board on its way out.
     const sub = spawnDrone(stage, rovo.position.x, rovo.position.z, {
       name: `Rovo.${++this.subs}`,
       lineage: 'cyan',
@@ -245,96 +257,64 @@ export class RovoAtlassian {
     sub.drone.fade = 0;
     rovo.flash = 1;
     await tween(stage, EMERGE_SECONDS, (t) => (sub.drone.fade = t));
-    const task = await hub.takeTask(sub.drone.rig.hover);
-    await fly(stage, DroneFlight.to(sub.drone, slot, { speed: SUB_SPEED, fromHeight: AT_ROVOS_BODY, lift: 0 }));
+    const card = await hub.takeTask(sub.drone.rig.hover);
 
-    // It spins up its own tools for this task, each out along the grid from its spot, and ties them back to
-    // Jira. The tie comes in on the side facing Jira; the tools take the other three.
-    const toJira = JIRA_AT.clone().sub(slot);
-    const tieSide = Math.abs(toJira.x) >= Math.abs(toJira.z) ? new Vector3(Math.sign(toJira.x), 0, 0) : new Vector3(0, 0, Math.sign(toJira.z));
-    const ways = GRID_WAYS.filter((w) => w.dot(tieSide) < 0.5);
-    const spokes: Branch[] = [];
-    const tools = kinds.map((kind, i) => {
-      const node = new SystemNode({ kind });
-      node.position.copy(slot).addScaledVector(ways[i], TOOL_OUT);
-      const spoke = new Branch(
-        new LineCurve3(slot.clone().addScaledVector(ways[i], 0.2), node.position.clone().addScaledVector(ways[i], -(TOOL_SCALE * NODE_FOOTPRINT) / 2 - 0.05)),
-        NEUTRAL.packet,
-      );
-      stage.add(spoke);
-      spokes.push(spoke);
-      this.spokes++;
-      // Its name grows in and folds away with it, so it never floats over empty floor.
-      node.scale.setScalar(0.001);
-      node.labelOpacity = 0;
-      stage.add(node);
-      return node;
-    });
-    this.toolsets.set(job.id, tools);
-    // Each line draws out along the grid, then its tool grows in at the end of it.
-    for (const [i, node] of tools.entries()) {
-      await tween(stage, 0.25, (t) => (spokes[i].drawn = t));
-      await tween(stage, 0.3, (t) => {
-        node.scale.setScalar(Math.max(0.001, TOOL_SCALE * easeOutBack(t)));
-        node.labelOpacity = t;
-      });
-    }
-    await hub.tie(job.id, slot, tieSide);
-
-    // Work each tool in turn; what it makes comes to the spot and rides the tie home into Jira.
-    for (const node of tools) {
-      node.light = 'working';
-      sub.drone.flash = 1;
-      await this.work(node);
-      await shoot(stage, reversed(spokes[tools.indexOf(node)].curve), 4, undefined, node.kind);
-      await hub.report(job.id, node.kind);
-      node.light = 'off';
+    let from = AT_ROVOS_BODY;
+    for (const step of run.task.steps) {
+      const system = await this.systems.call(step.system);
+      await fly(stage, DroneFlight.to(sub.drone, system.node.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      from = 0;
+      await this.work(sub.drone, system.node, step);
+      // The step reports to Jira along the system's Graph Line.
+      if (step.system !== 'jira') void hub.report(system.tie, step.system);
+      run.done++;
     }
 
-    // The task goes home done; the tools fold away; the sub-agent flies home into Rovo.
-    if (task) await hub.finish(task);
-    void hub.untie(job.id);
-    await Promise.all(
-      tools.map((node, i) =>
-        tween(stage, 0.4, (t) => {
-          node.scale.setScalar(Math.max(0.001, TOOL_SCALE * (1 - t)));
-          node.labelOpacity = 1 - t;
-          spokes[i].drawn = Math.max(0.001, 1 - t);
-        }),
-      ),
-    );
-    for (const node of tools) node.dispose();
-    for (const spoke of spokes) spoke.dispose();
-    this.spokes -= spokes.length;
-    this.toolsets.delete(job.id);
-    await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, toHeight: AT_ROVOS_BODY, lift: 0 }));
+    // The task is done: the card goes home to Done, the copy flies home into Rovo.
+    if (card) await hub.finish(card);
+    await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
     await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
     sub.despawn();
     rovo.flash = 1;
-    this.freeSlots.push(slot);
     this.out--;
+    // Third-party tools this task called go, unless another open task still needs them.
+    for (const step of run.task.steps) void this.systems.release(step.system);
   }
 
-  /** A tool at work: where the system has a job animation (GitHub and Bitbucket grow a branch, Figma draws), it plays in place of the emblem. */
-  private async work(node: SystemNode): Promise<void> {
+  /**
+   * A copy at work on one step, hovering over the system's node. Where the
+   * system has a job animation and the step makes something (write, update,
+   * code), it plays in place of the emblem: code is squash-merged and the
+   * repo's trunk keeps the commit. Otherwise the copy's signal dots show the work.
+   */
+  private async work(drone: Drone, node: SystemNode, step: Step): Promise<void> {
     const { stage } = this;
-    if (!hasJob(node.kind)) return wait(stage, this.between(WORK));
-    const job = new JobAnimation(node.kind);
-    job.position.copy(node.position);
-    job.rotation.y = FACE_CAMERA;
-    job.scale.setScalar(JOB_SCALE);
-    stage.add(job);
-    const untick = stage.onTick((dt) => job.update(dt));
-    node.emblem.visible = false;
-    await tween(stage, this.between(WORK) * JOB_STRETCH, (t) => (job.progress = t));
-    await wait(stage, 0.2);
-    untick();
-    job.dispose();
-    node.emblem.visible = true;
-  }
-
-  private pick<T>(from: readonly T[]): T {
-    return from[Math.floor(this.random() * from.length)];
+    this.working.set(drone, node);
+    node.light = 'working';
+    drone.flash = 1;
+    const makes = step.action !== 'read' && step.action !== 'send';
+    if (makes && hasJob(node.kind)) {
+      const scm = isScm(node.kind);
+      const job = new JobAnimation(node.kind, { ending: scm ? 'merge' : 'init' });
+      job.position.copy(node.position);
+      job.rotation.y = FACE_CAMERA;
+      job.scale.setScalar(JOB_SCALE);
+      stage.add(job);
+      const untick = stage.onTick((dt) => job.update(dt));
+      node.emblem.visible = false;
+      await tween(stage, this.between(WORK) * JOB_STRETCH, (t) => (job.progress = t));
+      if (job.merged) this.trunk.commit();
+      await wait(stage, 0.2);
+      untick();
+      job.dispose();
+      node.emblem.visible = true;
+    } else {
+      const signal = attachSignal(stage, drone, node);
+      await wait(stage, this.between(WORK));
+      signal.detach();
+    }
+    node.light = 'off';
+    this.working.delete(drone);
   }
 
   private between([lo, hi]: [number, number]): number {

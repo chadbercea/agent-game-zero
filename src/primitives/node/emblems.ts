@@ -23,8 +23,10 @@ export type TrackerKind = 'linear';
 export type DocsKind = 'gdocs';
 /** Third-party source code managers beyond GitHub. */
 export type CodeHostKind = 'gitlab';
+/** Comms: messages in and out. */
+export type CommsKind = 'slack';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind;
+export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind | CommsKind;
 
 /** Act 1 systems (outside Atlassian). */
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
@@ -34,7 +36,8 @@ export const ATLASSIAN_KINDS: readonly AtlassianKind[] = ['codesearch', 'conflue
 export const TRACKER_KINDS: readonly TrackerKind[] = ['linear'];
 export const DOCS_KINDS: readonly DocsKind[] = ['gdocs'];
 export const CODE_HOST_KINDS: readonly CodeHostKind[] = ['gitlab'];
-export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS, ...CODE_HOST_KINDS];
+export const COMMS_KINDS: readonly CommsKind[] = ['slack'];
+export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS, ...CODE_HOST_KINDS, ...COMMS_KINDS];
 /** Source code managers: code is checked in, merged and shipped from these. They share the branch emblem and job. */
 export const SCM_KINDS = ['github', 'bitbucket', 'gitlab'] as const satisfies readonly SystemKind[];
 export type ScmKind = (typeof SCM_KINDS)[number];
@@ -58,6 +61,7 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   linear: 'Linear',
   gdocs: 'Google Docs',
   gitlab: 'GitLab',
+  slack: 'Slack',
 };
 
 export interface EmblemMaterials {
@@ -146,6 +150,12 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     for (let i = 0; i < 4; i++) {
       place(solid(new BoxGeometry(i === 3 ? 0.12 : 0.2, 0.022, 0.012), m.graphite), i === 3 ? -0.04 : 0, 0.07 - i * 0.07, 0.012);
     }
+  } else if (kind === 'slack') {
+    // Comms: a speech bubble with three lines of chat in it.
+    place(solid(new RoundedBoxGeometry(0.42, 0.3, 0.06, 2, 0.06), m.shell), 0, 0.04);
+    const tail = place(solid(new BoxGeometry(0.08, 0.08, 0.05), m.shell), -0.12, -0.12);
+    tail.rotation.z = Math.PI / 4;
+    for (let i = 0; i < 3; i++) place(solid(new BoxGeometry(i === 2 ? 0.16 : 0.28, 0.03, 0.012), m.graphite), i === 2 ? -0.06 : 0, 0.1 - i * 0.065, 0.034);
   } else if (kind === 'linear') {
     // Tracked work, third-party: a disc crossed by diagonal stripes, in the spirit of Linear's mark.
     const r = 0.21;

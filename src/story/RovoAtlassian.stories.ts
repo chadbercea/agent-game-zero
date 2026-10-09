@@ -9,14 +9,16 @@ const meta: Meta = {
 export default meta;
 
 /**
- * Rovo and Jira, the quarterback. Rovo floats in dead center on its gate and
- * authenticates (yellow, then green), then moves into Jira and works from
- * there: Jira is the system of record. Tasks keep coming onto Jira's board;
- * one to three sub-agents spawn out of Rovo, each takes a task, flies to an
- * open spot and spins up its own tools for it (Bitbucket or GitHub,
- * Confluence or Google Docs, sometimes Figma or Code search), tied back to
- * Jira. The work rides the tie home, the task comes back done, the tools fold
- * away. Seeded: `seed` changes the run. No captions.
+ * Rovo and Jira, the quarterback (docs/rovo-mental-model.md). Rovo flies to
+ * its gate and authenticates (yellow, then green); the line draws to Jira and
+ * Jira comes up; Rovo moves in (the gate locks behind it) and works from
+ * there. Tasks keep coming onto Jira's board; for each, Rovo sends a copy of
+ * itself (one to three at once) that runs the task's steps: it flies to each
+ * system the step needs (a line draws out from Jira, then the system appears),
+ * works it while hovering over it, and reports to Jira. Code is squash-merged
+ * into the run's repo, whose trunk keeps every commit. Teamwork Graph apps
+ * stay; third-party tools go when their task is done. Seeded: `seed` changes
+ * the run. No captions.
  */
 export const Working: StoryObj<{ seed: number }> = {
   argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },

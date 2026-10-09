@@ -26,6 +26,7 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   linear: 'Issue',
   gdocs: 'Doc',
   gitlab: 'Merge request',
+  slack: 'Message',
 };
 
 /** About the size of the old work cube: small enough to ride a line, big enough to read. */
@@ -89,6 +90,9 @@ export function productGeometry(kind: SystemKind): BufferGeometry {
     add(new BoxGeometry(s * 0.6, s, s * 0.08), -s * 0.09, 0);
     add(new BoxGeometry(s * 0.18, s * 0.8, s * 0.08), s * 0.3, -s * 0.1);
     for (let i = 0; i < 3; i++) add(new BoxGeometry(s * 0.5, s * 0.06, s * 0.06), -s * 0.04, s * (0.2 - i * 0.2), s * 0.06);
+  } else if (kind === 'slack') {
+    add(new RoundedBoxGeometry(s * 0.9, s * 0.62, s * 0.12, 2, s * 0.1), 0, s * 0.08);
+    add(new BoxGeometry(s * 0.16, s * 0.16, s * 0.1), -s * 0.24, -s * 0.24, 0, 0.78);
   } else if (kind === 'linear') {
     add(new RoundedBoxGeometry(s * 0.86, s * 0.86, s * 0.1, 2, s * 0.08));
     add(new TorusGeometry(s * 0.13, s * 0.04, 6, 16), -s * 0.18, s * 0.18, s * 0.07);

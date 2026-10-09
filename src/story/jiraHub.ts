@@ -179,8 +179,8 @@ export class JiraHub {
    * stays until `untie`. `arriveFrom` (a grid direction from `to`) is the side
    * its last run comes in on, leaving the other sides free.
    */
-  async tie(id: string, to: Vector3, arriveFrom?: Vector3): Promise<void> {
-    const edge = new GraphEdge(this.route(to, arriveFrom));
+  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3): Promise<void> {
+    const edge = new GraphEdge(this.route(to, arriveFrom, endClear));
     this.ties.set(id, edge);
     this.stage.add(edge);
     await tween(this.stage, 0.8, (t) => (edge.drawn = t));
@@ -223,7 +223,7 @@ export class JiraHub {
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
-  private route(end: Vector3, arriveFrom?: Vector3): Curve<Vector3> {
+  private route(end: Vector3, arriveFrom?: Vector3, endClear = 0.3): Curve<Vector3> {
     const from = this.node.position;
     const options: Vector3[][] = [
       [from.clone(), new Vector3(end.x, 0, from.z), end.clone()],
@@ -244,7 +244,7 @@ export class JiraHub {
     const ROOM = 0.95;
     const ok = clean.filter((l) => clear(l) >= ROOM);
     const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : clean.sort((a, b) => clear(b) - clear(a))[0];
-    return roundedPath(trimPolyline(best, PLATE / 2, 0.3), BEND_RADIUS);
+    return roundedPath(trimPolyline(best, PLATE / 2, endClear), BEND_RADIUS);
   }
 }
 
