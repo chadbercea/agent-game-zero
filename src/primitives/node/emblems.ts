@@ -13,25 +13,34 @@ import {
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { solid } from '../../core/mesh';
 
-/** Systems with a job animation. Bitbucket works like GitHub: a branch grows. */
-export type JobKind = 'figma' | 'github' | 'notion' | 'bitbucket';
+/** Systems with a job animation. Every source code manager works like GitHub: a branch grows. */
+export type JobKind = 'figma' | 'github' | 'notion' | 'bitbucket' | 'gitlab';
 /** Act 2 systems, behind the Atlassian gate: their work flows through the Teamwork Graph instead. */
 export type AtlassianKind = 'codesearch' | 'confluence' | 'jira' | 'bitbucket';
 /** Third-party trackers: where a ticket lives outside Atlassian. No job animation. */
 export type TrackerKind = 'linear';
 /** Third-party docs outside Atlassian and Notion. */
 export type DocsKind = 'gdocs';
+/** Third-party source code managers beyond GitHub. */
+export type CodeHostKind = 'gitlab';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind;
+export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind;
 
 /** Act 1 systems (outside Atlassian). */
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
 /** Every system with a job animation: Act 1's, plus Bitbucket (a branch grows, as in GitHub). */
-export const ANIMATED_KINDS: readonly JobKind[] = [...JOB_KINDS, 'bitbucket'];
+export const ANIMATED_KINDS: readonly JobKind[] = [...JOB_KINDS, 'bitbucket', 'gitlab'];
 export const ATLASSIAN_KINDS: readonly AtlassianKind[] = ['codesearch', 'confluence', 'jira', 'bitbucket'];
 export const TRACKER_KINDS: readonly TrackerKind[] = ['linear'];
 export const DOCS_KINDS: readonly DocsKind[] = ['gdocs'];
-export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS];
+export const CODE_HOST_KINDS: readonly CodeHostKind[] = ['gitlab'];
+export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS, ...CODE_HOST_KINDS];
+/** Source code managers: code is checked in, merged and shipped from these. They share the branch emblem and job. */
+export const SCM_KINDS = ['github', 'bitbucket', 'gitlab'] as const satisfies readonly SystemKind[];
+export type ScmKind = (typeof SCM_KINDS)[number];
+export function isScm(kind: SystemKind): kind is ScmKind {
+  return (SCM_KINDS as readonly SystemKind[]).includes(kind);
+}
 
 /** Does this system have a job animation? */
 export function hasJob(kind: SystemKind): kind is JobKind {
@@ -48,6 +57,7 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   bitbucket: 'Bitbucket',
   linear: 'Linear',
   gdocs: 'Google Docs',
+  gitlab: 'GitLab',
 };
 
 export interface EmblemMaterials {
@@ -77,8 +87,8 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     place(solid(block, m.graphite), -0.085, -0.17);
     place(solid(block, m.shell), 0.085, 0.17);
     place(solid(new SphereGeometry(0.08, 12, 8), m.graphite), 0.085, 0);
-  } else if (kind === 'github' || kind === 'bitbucket') {
-    // Code (GitHub and Bitbucket alike): a branch glyph. A trunk with two commits, and a fork curving off it.
+  } else if (isScm(kind)) {
+    // Code (GitHub, Bitbucket, GitLab alike): a branch glyph. A trunk with two commits, and a fork curving off it.
     const commit = new SphereGeometry(0.06, 12, 8);
     place(solid(new CylinderGeometry(0.024, 0.024, 0.42, 8), m.graphite), -0.07, 0);
     place(solid(commit, m.shell), -0.07, 0.2);

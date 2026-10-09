@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
-import { JOB_KINDS, type JobKind } from '../node/emblems';
-import { SystemNode } from '../node/SystemNode';
+import { JOB_KINDS, type JobKind, SCM_KINDS, type ScmKind } from '../node/emblems';
+import { NODE_SCALE, SystemNode } from '../node/SystemNode';
+import { PAD_TOP } from '../pad/Pad';
 import { FACE_CAMERA } from '../../stage/spawnDrone';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { Job } from './Job';
+import { RepoTrunk } from './RepoTrunk';
 
 interface JobArgs {
   /** Seconds per job loop. */
@@ -82,6 +84,44 @@ export const Progress: StoryObj<{ kind: JobKind; progress: number }> = {
     job.progress = args.progress;
     stage.add(node, job);
     stage.onTick((dt) => job.update(dt));
+    return root;
+  },
+};
+
+/**
+ * A code change squash-merged, looping, on each source code manager: the
+ * branch forks off, then folds back into the trunk as one commit (the branch
+ * is deleted). Beside each, the repo's trunk keeps every merge (its final state).
+ */
+export const Merge: StoryObj<JobArgs> = {
+  args: { seconds: 4 },
+  render: (args) => {
+    const { root, stage } = specimenStage({ viewSize: 4.5, focusY: 0.5 });
+    const lanes = SCM_KINDS.map((kind: ScmKind, i) => {
+      const { x, z } = rowPosition(i, SCM_KINDS.length, 2.4);
+      const node = new SystemNode({ kind });
+      node.position.set(x, 0, z);
+      node.emblem.visible = false;
+      node.light = 'working';
+      const job = new Job(kind, { ending: 'merge' });
+      job.position.copy(node.position);
+      job.rotation.y = FACE_CAMERA;
+      const trunk = new RepoTrunk();
+      // On the node's slab, at its right-hand corner (screen right), clear of the job.
+      trunk.position.set(x + 0.3, PAD_TOP * NODE_SCALE, z - 0.3);
+      stage.add(node, job, trunk);
+      return { job, trunk, t: i * 0.3 };
+    });
+    stage.onTick((dt) => {
+      for (const lane of lanes) {
+        const was = lane.job.merged;
+        lane.t = (lane.t + dt / args.seconds) % 1.25;
+        lane.job.progress = Math.min(1, lane.t);
+        lane.job.update(dt);
+        if (lane.job.merged && !was) lane.trunk.commit();
+        lane.trunk.update(dt);
+      }
+    });
     return root;
   },
 };
