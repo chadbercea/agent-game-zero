@@ -1,6 +1,6 @@
 import { type Curve, Group, MeshStandardMaterial, type Object3D, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BEND_RADIUS } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA } from '../core/grid';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
 import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
@@ -10,16 +10,21 @@ import type { SystemNode } from '../primitives/node/SystemNode';
 import { Ticket } from '../primitives/ticket/Ticket';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
-import { tween } from './timeline';
+import { COLUMN_MAX, type KanbanCard, KanbanBoard } from './jiraBoard';
+import { tween, wait } from './timeline';
 
 /** Jira stands a size up from everything around it: it's the quarterback. */
 export const HUB_SCALE = 1.35;
 /** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
 export const PLATE = 2.3;
 /** The task board holds this many open tasks at most. */
-export const BOARD_MAX = 6;
+export const BOARD_MAX = COLUMN_MAX;
+/** Height of the kanban board's center over the plate, and how big it stands: the plate's width. */
+const BOARD_AT = 1.05;
+const BOARD_SCALE = 1.5;
 const CARD_SCALE = 0.4;
-const CARD_GAP = 0.3;
+/** Seconds a finished card stays in Done before it slides off the board. */
+const DONE_STAYS: [number, number] = [1.4, 3];
 /** A task card riding with a sub-agent is this small (world size). */
 const CARRIED_SCALE = 0.3;
 const RIDE_SPEED = 5;
@@ -30,8 +35,10 @@ const RIDE_SPEED = 5;
  *
  * - It stands a size up on a low plate of its own with a Teamwork Graph blue
  *   edge (no screen, no lights: not a gate).
- * - Behind it, a task board of white cards: open tasks (`addTask`). A
- *   sub-agent takes one (`takeTask`) and carries it off.
+ * - Its emblem is a kanban board big enough to read, white cards in To do,
+ *   In progress and Done. A new task slides into To do (`addTask`); a
+ *   sub-agent takes one (`takeTask`): the card moves to In progress and a
+ *   copy of it rides off with the sub-agent.
  * - Whatever a sub-agent spins up for its task is tied back to Jira with a
  *   Graph Line (`tie`); the work rides it home (`report`), the task comes
  *   back done (`finish`: it glows green and clears), and the tie lets go
@@ -39,20 +46,28 @@ const RIDE_SPEED = 5;
  */
 export class JiraHub {
   readonly plate: Group;
-  /** Open tasks on the board, oldest first. */
-  readonly board: Ticket[] = [];
+  /** The kanban board, standing where Jira's emblem was. */
+  readonly kanban = new KanbanBoard();
   readonly ties = new Map<string, GraphEdge>();
   /** Tasks finished so far. */
   done = 0;
   private readonly untick: () => void;
+  /** Which board card each carried task card stands for. */
+  private readonly carried = new Map<Ticket, KanbanCard>();
 
   constructor(
     private readonly stage: SceneHost,
     readonly node: SystemNode,
     /** Things ties route around (the gate, other toolsets). */
     private readonly keepClear: () => Vector3[] = () => [],
+    private readonly random: () => number = Math.random,
   ) {
     node.scale.setScalar(HUB_SCALE);
+    node.emblem.visible = false;
+    this.kanban.position.copy(node.position).setY(BOARD_AT);
+    this.kanban.rotation.y = FACE_CAMERA;
+    this.kanban.scale.setScalar(BOARD_SCALE);
+    stage.add(this.kanban);
     this.plate = new Group();
     const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
     const edge = new MeshStandardMaterial({ color: GRAPH_COLOR, emissive: GRAPH_COLOR, emissiveIntensity: 0.5, roughness: 0.4 });
@@ -61,40 +76,45 @@ export class JiraHub {
     this.plate.position.copy(node.position);
     stage.add(this.plate);
     this.untick = stage.onTick((dt) => {
-      for (const t of this.board) t.update(dt);
+      this.kanban.update(dt);
+      for (const t of this.carried.keys()) t.update(dt);
       for (const e of this.ties.values()) e.update(dt);
     });
   }
 
-  /** A new task comes into Jira: a white card pops onto the board. No room: it waits (returns false). */
+  /** Open tasks: the cards in To do, oldest first. */
+  get board(): readonly KanbanCard[] {
+    return this.kanban.columns[0];
+  }
+
+  /** A new task comes into Jira: a white card slides into To do. No room: it waits (returns false). */
   async addTask(): Promise<boolean> {
     if (this.board.length >= BOARD_MAX) return false;
-    const card = new Ticket({ key: 'DEMO', title: 'Task' }, { label: false });
-    card.scale.setScalar(0.001);
-    this.board.push(card);
-    this.stage.add(card);
-    this.placeBoard();
-    await tween(this.stage, 0.3, (t) => card.scale.setScalar(Math.max(0.001, CARD_SCALE * t)));
+    this.kanban.addCard();
+    await wait(this.stage, 0.3);
     return true;
   }
 
-  /** A sub-agent takes the oldest open task: the card lifts off the board and rides with it (on `carrier`). */
+  /**
+   * A sub-agent takes the oldest open task: its card moves to In progress,
+   * and a copy lifts off the board and rides with the sub-agent (on `carrier`).
+   */
   async takeTask(carrier: Object3D): Promise<Ticket | null> {
-    const card = this.board.shift();
+    const card = this.board[0];
     if (!card) return null;
-    this.placeBoard();
-    const from = card.getWorldPosition(new Vector3());
-    card.removeFromParent();
-    carrier.add(card);
+    const from = card.mesh.getWorldPosition(new Vector3());
+    this.kanban.moveCard(card, 1);
+    const ticket = new Ticket({ key: 'DEMO', title: 'Task' }, { label: false });
+    this.carried.set(ticket, card);
+    carrier.add(ticket);
     carrier.worldToLocal(from);
     const to = new Vector3(0, 0.15, 0);
-    const start = card.scale.x;
-    const end = CARRIED_SCALE / Math.max(carrier.getWorldScale(new Vector3()).x, 0.001);
+    const scale = CARRIED_SCALE / Math.max(carrier.getWorldScale(new Vector3()).x, 0.001);
     await tween(this.stage, 0.45, (t) => {
-      card.position.lerpVectors(from, to, t * t * (3 - 2 * t));
-      card.scale.setScalar(start + (end - start) * t);
+      ticket.position.lerpVectors(from, to, t * t * (3 - 2 * t));
+      ticket.scale.setScalar(Math.max(0.001, scale * t));
     });
-    return card;
+    return ticket;
   }
 
   /** The task comes home done: the card glows green over Jira and clears. */
@@ -116,7 +136,10 @@ export class JiraHub {
       card.opacity = 1 - t;
     });
     card.dispose();
+    const onBoard = this.carried.get(card);
+    this.carried.delete(card);
     this.done++;
+    if (onBoard) void this.completeOnBoard(onBoard);
   }
 
   /** Tie a toolset into Jira: a Graph Line draws from Jira out to `to` and stays until `untie`. */
@@ -144,18 +167,19 @@ export class JiraHub {
 
   dispose(): void {
     this.untick();
-    for (const t of this.board.splice(0)) t.dispose();
+    this.kanban.dispose();
+    for (const t of this.carried.keys()) t.dispose();
     for (const e of this.ties.values()) e.dispose();
     this.plate.removeFromParent();
   }
 
-  /** The board: open tasks in a row along the back edge of the plate, facing the camera. */
-  private placeBoard(): void {
-    const at = this.node.position;
-    this.board.forEach((card, i) => {
-      const k = i - (BOARD_MAX - 1) / 2;
-      card.position.set(at.x - 0.95 + k * CARD_GAP, 0, at.z - 0.95 - k * CARD_GAP);
-    });
+  /** On the board, the task's card moves to Done, glowing green, stays a beat, then slides off. */
+  private async completeOnBoard(card: KanbanCard): Promise<void> {
+    this.kanban.moveCard(card, 2);
+    const done = this.kanban.columns[2];
+    if (done.length > COLUMN_MAX - 1) this.kanban.removeCard(done[0]);
+    await wait(this.stage, DONE_STAYS[0] + this.random() * (DONE_STAYS[1] - DONE_STAYS[0]));
+    this.kanban.removeCard(card);
   }
 
   /**

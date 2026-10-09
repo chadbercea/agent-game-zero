@@ -2,7 +2,7 @@ import { Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import type { SceneHost } from '../stage/Stage';
-import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, RovoAtlassian, SLOTS } from './rovoAtlassian';
+import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, ROVO_GATE, ROVO_POST, RovoAtlassian, SLOTS } from './rovoAtlassian';
 
 function testStage(fps = 30) {
   const DT = 1 / fps;
@@ -33,6 +33,8 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.jira.visible).toBe(true);
     expect(scene.jira.scale.x).toBeGreaterThan(1);
     expect(scene.hub.board).toHaveLength(0);
+    expect(scene.lock.shown).toBe(0);
+    expect(scene.jira.emblem.visible).toBe(false);
   });
 
   it('authenticates at the gate, then moves into Jira and works from there', async () => {
@@ -43,8 +45,12 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(12, () => gate.add(scene.gate.state));
     expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
     expect(scene.inJira).toBe(true);
-    expect(scene.rovo.drone.position.distanceTo(JIRA_AT)).toBeLessThan(1e-3);
+    expect(scene.rovo.drone.position.distanceTo(ROVO_POST)).toBeLessThan(1e-3);
     expect(scene.accessLine.drawn).toBe(1);
+    // Rovo through, the gate locks behind it.
+    expect(scene.lock.shown).toBe(1);
+    expect(scene.lock.shut).toBe(1);
+    expect(scene.gate.state).toBe('off');
     scene.stop();
   });
 
@@ -83,6 +89,19 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.toolsets.size).toBe(0);
     expect(scene.hub.ties.size).toBe(0);
     expect(scene.out).toBe(0);
+  });
+
+  it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const seen = [false, false, false];
+    void scene.start();
+    await run(60, () => scene.hub.kanban.columns.forEach((c, i) => c.length && (seen[i] = true)));
+    scene.stop();
+    expect(seen).toEqual([true, true, true]);
+    for (const c of scene.hub.kanban.columns) expect(c.length).toBeLessThanOrEqual(4);
+    // Done doesn't pile up: finished cards slide off.
+    expect(scene.hub.kanban.columns[2].length).toBeLessThan(scene.hub.done);
   });
 
   it("a tool's name grows in and folds away with it: never more name than tool", async () => {
