@@ -6,6 +6,7 @@ import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
+import { Padlock } from '../primitives/gate/Padlock';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { attachSignal } from '../stage/attachSignal';
@@ -20,14 +21,16 @@ import { fly, tween, wait } from './timeline';
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** Jira, the quarterback, a short hop up the screen from the gate. */
 export const JIRA_AT = new Vector3(-3, 0, -3);
-/** Toolsets go up in slots on a ring around Jira, clear of the gate. */
+/** Where Rovo works from in Jira: beside the hub's kanban board (screen right), never in front of it. */
+export const ROVO_POST = JIRA_AT.clone().add(new Vector3(1.5, 0, -1.5));
+/** Toolsets go up in slots on a ring around Jira, clear of the gate and of Rovo. */
 const SLOT_RADIUS = 5;
 export const SLOTS: readonly Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7]
   .map((i) => {
     const a = (i / 8) * Math.PI * 2;
     return JIRA_AT.clone().add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS)).round();
   })
-  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5);
+  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5 && p.distanceTo(ROVO_POST) > 4);
 
 /** What a task needs, picked per task: a code tool, a docs tool, and sometimes a third. Every toolset is a little different. */
 export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
@@ -42,6 +45,9 @@ const TASK_GAP: [number, number] = [1.6, 3.4];
 const SUB_SPEED = 4;
 /** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
 const EMERGE_SECONDS = 0.25;
+/** How high the padlock floats over the gate once Rovo is through. */
+const LOCK_HEIGHT = 0.9;
+
 /** How high a sub-agent's floor anchor sits for its body to be level with Rovo's body. */
 const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
 
@@ -55,7 +61,8 @@ export interface Job {
 /**
  * Rovo and Jira, the quarterback (Story Narrative). Rovo floats in dead
  * center on its gate and authenticates (yellow, then green), then moves into
- * Jira and works from there: Jira is the system of record for everything.
+ * Jira and works from there (the gate locks behind it: a padlock snaps shut
+ * over it). Jira is the system of record for everything.
  *
  * Tasks keep coming onto Jira's board. One to three sub-agents at a time
  * (seeded) spawn out of Rovo, each takes a task and flies out to an open spot
@@ -69,6 +76,8 @@ export interface Job {
 export class RovoAtlassian {
   readonly rovo: SpawnedDrone;
   readonly gate = new Gate();
+  /** Locks the gate behind Rovo once it's through, for security. */
+  readonly lock = new Padlock();
   readonly jira: SystemNode;
   readonly hub: JiraHub;
   /** The line from the gate into Jira: Rovo's way in. */
@@ -98,10 +107,14 @@ export class RovoAtlassian {
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
     stage.add(this.gate);
+    this.lock.position.copy(ROVO_GATE).setY(LOCK_HEIGHT);
+    this.lock.shown = 0;
+    this.lock.shut = 0;
+    stage.add(this.lock);
     this.jira = new SystemNode({ kind: 'jira' });
     this.jira.position.copy(JIRA_AT);
     stage.add(this.jira);
-    this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...[...this.toolsets.values()].flat().map((n) => n.position)]);
+    this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...[...this.toolsets.values()].flat().map((n) => n.position)], this.random);
     const toward = JIRA_AT.clone().sub(ROVO_GATE).normalize();
     this.accessLine = new Branch(
       new LineCurve3(ROVO_GATE.clone().addScaledVector(toward, 1.05), JIRA_AT.clone().addScaledVector(toward, -PLATE / 2 - 0.05)),
@@ -125,7 +138,11 @@ export class RovoAtlassian {
     // In through the gate, along its line, and into Jira: that's where Rovo works from.
     await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
     rovo.status = 'working';
-    await fly(stage, DroneFlight.to(rovo, JIRA_AT, { speed: 3 }));
+    const flight = fly(stage, DroneFlight.to(rovo, ROVO_POST, { speed: 3 }));
+    // Once Rovo is away from the gate, it locks behind it.
+    await wait(stage, 0.7);
+    await this.lockGate();
+    await flight;
     this.inJira = true;
     this.jira.light = 'working';
     for (let i = 0; i < 3; i++) await hub.addTask();
@@ -134,6 +151,18 @@ export class RovoAtlassian {
       if (this.out < this.crew && hub.board.length > 0 && this.freeSlots.length > 0) void this.runJob();
       await wait(stage, 0.6);
     }
+  }
+
+  /** A padlock fades in open over the gate, then snaps shut; the gate goes quiet under it. */
+  private async lockGate(): Promise<void> {
+    const { stage, lock } = this;
+    await tween(stage, 0.35, (t) => {
+      lock.shown = t;
+      lock.position.y = LOCK_HEIGHT + 0.25 * (1 - t);
+    });
+    await wait(stage, 0.15);
+    await tween(stage, 0.18, (t) => (lock.shut = t * t));
+    this.gate.state = 'off';
   }
 
   stop(): void {
