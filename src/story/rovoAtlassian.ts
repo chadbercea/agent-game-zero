@@ -1,11 +1,11 @@
-import { type Object3D, Vector3 } from 'three';
+import { LineCurve3, type Object3D, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
-import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
@@ -21,6 +21,7 @@ import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
+import { shoot } from './beam';
 import { JiraHub, PLATE } from './jiraHub';
 import { makeTask, type Step, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
@@ -35,6 +36,8 @@ export const ROVO_GATE = new Vector3(0, 0, 0);
 export const STORY_CENTER = new Vector3(0.9, 0.6, -1.4);
 /** The user's terminal: where a copy updates the user, just below Jira, clear of Slack's line and the gate. */
 export const USER_TERMINAL_AT = new Vector3(-1, 0, 6);
+/** Where a copy reading Figma through MCP builds its terminal (the MCP client): beside Figma along the grid. */
+export const MCP_AT = new Vector3(3.5, 0, 8);
 /** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
@@ -48,9 +51,9 @@ export const JIRA_AT = new Vector3(-3, 0, 3);
 export const PLACES: Partial<Record<SystemKind, Vector3>> = {
   confluence: new Vector3(-7, 0, 3),
   codesearch: new Vector3(-3, 0, 7),
-  figma: new Vector3(-7, 0, 7),
+  figma: new Vector3(1, 0, 8),
   gdocs: new Vector3(-7, 0, -1),
-  notion: new Vector3(1, 0, 8),
+  notion: new Vector3(-7, 0, 7),
   github: SCM_AT,
   bitbucket: SCM_AT,
   gitlab: SCM_AT,
@@ -131,6 +134,10 @@ export class RovoAtlassian {
   terminal?: Terminal;
   /** Times a copy has updated the user's terminal. */
   userReports = 0;
+  /** Reads through Figma's MCP server so far, and the MCP client terminal while one is up. */
+  mcpReads = 0;
+  mcpTerminal?: Terminal;
+  private mcpSession: Promise<number> = Promise.resolve(0);
   private terminalUp?: Promise<Terminal>;
   /** Every copy Rovo can run at once. */
   get crew(): number {
@@ -364,6 +371,11 @@ export class RovoAtlassian {
       from = 0;
     }
     for (const step of lane ? [] : run.task.steps) {
+      if (step.mcp) {
+        from = await this.mcpRead(sub.drone, from);
+        run.done++;
+        continue;
+      }
       if (step.system === 'slack') {
         // Slack stands on its own behind its gateway: the copy goes there, Slack comes up for it the first time,
         // and its message goes out through the gateway into Jira's record.
@@ -526,6 +538,58 @@ export class RovoAtlassian {
     }
     node.light = 'off';
     this.working.delete(drone);
+  }
+
+  /**
+   * A read through Figma's MCP server: the copy goes to the spot beside Figma
+   * and builds its MCP client out from itself: a terminal grows in under it, a
+   * line draws to Figma (which comes up at its end if it isn't there). The
+   * terminal tails the MCP calls while the design rides back along the line,
+   * passes, and the read reports to Jira. Then the copy collapses it: the line
+   * draws back, the terminal folds. One MCP session at a time.
+   */
+  private mcpRead(drone: Drone, from: number): Promise<number> {
+    const session = this.mcpSession.then(async () => {
+      const { stage, hub } = this;
+      await fly(stage, DroneFlight.to(drone, MCP_AT, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      const terminal = new Terminal({ state: 'admin', seed: this.tasks.length + 11 });
+      terminal.position.copy(MCP_AT);
+      terminal.scale.setScalar(0.001);
+      const figmaAt = PLACES.figma as Vector3;
+      const line = new Branch(
+        new LineCurve3(MCP_AT.clone().setX(MCP_AT.x - TERMINAL_SIZE / 2 - 0.06), figmaAt.clone().setX(figmaAt.x + NODE_FOOTPRINT / 2 + 0.08)),
+        NEUTRAL.packet,
+      );
+      line.drawn = 0;
+      stage.add(terminal, line);
+      const untick = stage.onTick((dt) => terminal.update(dt));
+      this.working.set(drone, terminal);
+      this.mcpTerminal = terminal;
+      await tween(stage, 0.4, (t) => terminal.scale.setScalar(Math.max(0.001, easeOutBack(t))));
+      await tween(stage, 0.5, (t) => (line.drawn = t));
+      const figma = await this.systems.call('figma');
+      terminal.state = 'tail';
+      figma.node.light = 'working';
+      await shoot(stage, reversed(line.curve), 5, undefined, 'figma');
+      await wait(stage, this.between(WORK));
+      terminal.pass();
+      figma.node.light = 'off';
+      void hub.report(figma.tie, 'figma');
+      await wait(stage, 0.4);
+      // Collapsed back into the copy: the line draws back, the terminal folds.
+      await tween(stage, 0.4, (t) => (line.drawn = Math.max(0.001, 1 - t)));
+      await tween(stage, 0.35, (t) => terminal.scale.setScalar(Math.max(0.001, 1 - t)));
+      this.working.delete(drone);
+      this.mcpTerminal = undefined;
+      this.mcpReads++;
+      untick();
+      terminal.dispose();
+      line.dispose();
+      void this.systems.release('figma');
+      return 0;
+    });
+    this.mcpSession = session.catch(() => 0);
+    return session;
   }
 
   /** The user's terminal, brought up the first time a copy reports back: it comes up under the copy, then its line reaches in to Jira. It stays. */

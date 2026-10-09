@@ -14,6 +14,8 @@ export type StepAction = 'read' | 'write' | 'update' | 'send' | 'code';
 export interface Step {
   system: SystemKind;
   action: StepAction;
+  /** Read through an MCP server (Figma): the copy also works a terminal beside the system, the MCP client. */
+  mcp?: boolean;
 }
 
 export interface Task {
@@ -27,8 +29,14 @@ export interface Task {
 export const TWG_SYSTEMS: readonly SystemKind[] = ['jira', 'confluence', 'codesearch', 'bitbucket'];
 /** Docs a copy can write to or read from: Confluence (TWG) or third-party docs (on call). */
 export const DOC_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion'];
+/** How often each is written to: Confluence carries most of it; Notion is rare. */
+export const DOC_WEIGHTS: Partial<Record<SystemKind, number>> = { confluence: 0.68, gdocs: 0.24, notion: 0.08 };
 /** Places a copy can read from. */
-export const READ_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion', 'codesearch', 'bitbucket'];
+export const READ_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'bitbucket', 'codesearch', 'gdocs', 'notion'];
+/** How often each is read: Confluence most, then Figma (designs, often through MCP), the repo; Notion is rare. */
+export const READ_WEIGHTS: Partial<Record<SystemKind, number>> = { confluence: 0.34, figma: 0.24, bitbucket: 0.14, codesearch: 0.1, gdocs: 0.12, notion: 0.06 };
+/** How often a Figma read goes through MCP (a terminal beside Figma). */
+export const MCP_SHARE = 0.5;
 
 /** Is this a Teamwork Graph app (permanent), or a third-party tool (spawned on call, gone when its issue is done)? */
 export function isTwg(kind: SystemKind): boolean {
@@ -39,7 +47,7 @@ export function isTwg(kind: SystemKind): boolean {
  * How often each task type comes up: biased toward the simple ones (one or
  * two steps), with code the most common and the long spec loop rare.
  */
-export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.34, doc: 0.17, read: 0.18, jira: 0.13, spec: 0.08, slack: 0.1 };
+export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.32, doc: 0.16, read: 0.2, jira: 0.1, spec: 0.12, slack: 0.1 };
 
 export interface TaskOptions {
   /** The run's source code manager: every code task in a run goes to the same repo. */
@@ -51,17 +59,29 @@ export interface TaskOptions {
 /** A seeded Jira task: a type by TASK_WEIGHTS, then its steps (short, varied). */
 export function makeTask(random: () => number, options: TaskOptions): Task {
   const type = pickWeighted(random, options.without ?? []);
-  const pick = <T>(from: readonly T[]) => from[Math.floor(random() * from.length)];
+  const weighted = (weights: Partial<Record<SystemKind, number>>): SystemKind => {
+    const kinds = Object.keys(weights) as SystemKind[];
+    let r = random() * kinds.reduce((sum, k) => sum + (weights[k] ?? 0), 0);
+    for (const k of kinds) {
+      r -= weights[k] ?? 0;
+      if (r <= 0) return k;
+    }
+    return kinds[kinds.length - 1];
+  };
+  const read = (): Step => {
+    const system = weighted(READ_WEIGHTS);
+    return system === 'figma' && random() < MCP_SHARE ? { system, action: 'read', mcp: true } : { system, action: 'read' };
+  };
   switch (type) {
     case 'code':
       return { type, steps: [{ system: options.scm, action: 'code' }] };
     case 'doc': {
       // Mostly just write it; sometimes read something first.
-      const write: Step = { system: pick(DOC_SYSTEMS), action: 'write' };
-      return random() < 0.6 ? { type, steps: [write] } : { type, steps: [{ system: pick(READ_SYSTEMS), action: 'read' }, write] };
+      const write: Step = { system: weighted(DOC_WEIGHTS), action: 'write' };
+      return random() < 0.6 ? { type, steps: [write] } : { type, steps: [read(), write] };
     }
     case 'read':
-      return { type, steps: [{ system: pick(READ_SYSTEMS), action: 'read' }] };
+      return { type, steps: [read()] };
     case 'jira':
       return { type, steps: [{ system: 'jira', action: 'update' }] };
     case 'slack':
@@ -73,7 +93,7 @@ export function makeTask(random: () => number, options: TaskOptions): Task {
         reportToUser: true,
         steps: [
           { system: 'confluence', action: 'read' },
-          { system: 'figma', action: 'read' },
+          { system: 'figma', action: 'read', mcp: true },
           { system: 'confluence', action: 'update' },
         ],
       };

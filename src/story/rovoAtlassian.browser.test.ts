@@ -310,6 +310,9 @@ describe('Rovo and Jira, the quarterback', () => {
     const specs = scene.tasks.filter((t) => t.task.reportToUser).length;
     expect(specs).toBeGreaterThan(0);
     expect(scene.userReports).toBe(specs);
+    // Figma through MCP: the copy built a terminal beside Figma, and it's collapsed again afterwards.
+    expect(scene.mcpReads).toBeGreaterThan(0);
+    expect(scene.mcpTerminal).toBeUndefined();
     expect(scene.terminal).toBeDefined();
   });
 

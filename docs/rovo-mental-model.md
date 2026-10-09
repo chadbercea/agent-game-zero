@@ -10,7 +10,7 @@ The reference for the **Rovo on the Atlassian Grid** story (`src/story/rovoAtlas
 ## Tasks
 
 - **One copy, one task, one loop.** A copy runs its task's steps one at a time. Example (spec): read Confluence → read Figma (MCP) → update Confluence → update the terminal back to the user.
-- **Types:** code, write a doc, read a doc, update Jira, send a Slack message, write a spec from Figma. Seeded RNG, **biased toward less complex but varied** (`src/story/rovoTasks.ts`).
+- **Types:** code, write a doc, read a doc, update Jira, send a Slack message, write a spec from Figma. Confluence carries most docs and reads; Figma comes up often, and about half its reads go **through MCP**: the copy builds a terminal (the MCP client) beside Figma, the design rides back along its line, then the copy collapses it. Notion is rare. Seeded RNG, **biased toward less complex but varied** (`src/story/rovoTasks.ts`).
 - **Parallel.** For example, 3 copies in mini systems (the 3–4-node areas a copy works through) plus 3 copies coding in separate worktrees, all from the same Jira.
 
 ## Systems
