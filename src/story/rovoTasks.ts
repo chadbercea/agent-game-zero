@@ -37,10 +37,9 @@ export function isTwg(kind: SystemKind): boolean {
 
 /**
  * How often each task type comes up: biased toward the simple ones (one or
- * two steps), with code common and the long spec loop rare. Slack is weighted
- * in once its hub exists.
+ * two steps), with code common and the long spec loop rare.
  */
-export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.3, doc: 0.2, read: 0.2, jira: 0.17, spec: 0.08, slack: 0.05 };
+export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.28, doc: 0.19, read: 0.19, jira: 0.15, spec: 0.08, slack: 0.11 };
 
 export interface TaskOptions {
   /** The run's source code manager: every code task in a run goes to the same repo. */

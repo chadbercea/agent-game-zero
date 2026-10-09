@@ -183,8 +183,8 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(40);
     expect(appeared.size).toBeGreaterThan(1);
     expect(unprompted).toBe(0);
-    // Systems stand at their places; worktrees stand in the code lanes.
-    for (const kind of appeared) if (kind !== 'worktree') expect(PLACES[kind]).toBeDefined();
+    // Systems stand at their places; worktrees stand in the code lanes, Slack on its own behind its gateway.
+    for (const kind of appeared) if (kind !== 'worktree' && kind !== 'slack') expect(PLACES[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.
     const standing = [...scene.systems.placed.keys()];
     for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
@@ -280,6 +280,31 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(specs).toBeGreaterThan(0);
     expect(scene.userReports).toBe(specs);
     expect(scene.terminal).toBeDefined();
+  });
+
+  it('Slack: comes up for the first copy that sends a message, behind its glass gateway, and stays busy both ways with or without tasks', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    let chattering = -1;
+    void scene.start();
+    await run(200, () => {
+      if (chattering < 0 && scene.slack.up) chattering = scene.slack.messages;
+    });
+    const slackTasks = scene.tasks.filter((t) => t.task.type === 'slack');
+    expect(slackTasks.length).toBeGreaterThan(0);
+    expect(scene.slack.up).toBe(true);
+    expect(scene.slack.gateway.built).toBe(1);
+    expect(scene.slack.gateway.conduit.streams).toBe(1);
+    expect(scene.slack.toJira.drawn).toBe(1);
+    expect(scene.slack.node.kind).toBe('slack');
+    // Busy: many more messages than tasks ever sent, and it keeps going after the work stops.
+    expect(scene.slack.messages - chattering).toBeGreaterThan(slackTasks.length * 5);
+    scene.stop();
+    await run(40);
+    const after = scene.slack.messages;
+    await run(10);
+    expect(scene.slack.messages).toBeGreaterThan(after + 5);
+    for (const t of slackTasks) expect(t.done).toBe(1);
   });
 
   it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {

@@ -25,14 +25,15 @@ import { makeTask, type Step, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
+import { SLACK_AT, SlackHub } from './rovoSlack';
 import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** The middle of everything on the grid, from the mini systems left of Jira to the portal on the right. */
 export const STORY_CENTER = new Vector3(0.9, 0.6, -1.4);
-/** The user's terminal: where a copy updates the user, a short hop up from Jira, clear of the gate and Rovo. */
-export const USER_TERMINAL_AT = new Vector3(-3, 0, -1);
+/** The user's terminal: where a copy updates the user, just below Jira, clear of Slack's line and the gate. */
+export const USER_TERMINAL_AT = new Vector3(-1, 0, 6);
 /** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
@@ -48,7 +49,7 @@ export const PLACES: Partial<Record<SystemKind, Vector3>> = {
   codesearch: new Vector3(-3, 0, 7),
   figma: new Vector3(-7, 0, 7),
   gdocs: new Vector3(-7, 0, -1),
-  notion: new Vector3(0, 0, 7),
+  notion: new Vector3(1, 0, 8),
   github: SCM_AT,
   bitbucket: SCM_AT,
   gitlab: SCM_AT,
@@ -118,6 +119,8 @@ export class RovoAtlassian {
   readonly trunk = new RepoTrunk();
   /** Copies at work right now, and the node each is working (always over it). */
   readonly working = new Map<Drone, Object3D>();
+  /** Slack, the comms hub behind its gateway (up once a copy first sends a message). */
+  readonly slack: SlackHub;
   /** The user's terminal, where a copy reports back (once a task first needs it). */
   terminal?: Terminal;
   /** Times a copy has updated the user's terminal. */
@@ -164,9 +167,19 @@ export class RovoAtlassian {
     this.hub = new JiraHub(
       stage,
       this.jira,
-      () => [ROVO_GATE, ...this.systems.positions(), ...this.lanes.flatMap((l) => l?.positions() ?? []), ASSEMBLER_AT, PORTAL_AT],
+      () => [
+        ROVO_GATE,
+        ...this.systems.positions(),
+        ...this.lanes.flatMap((l) => l?.positions() ?? []),
+        ASSEMBLER_AT,
+        PORTAL_AT,
+        SLACK_AT,
+        this.slack.gateway.center,
+        USER_TERMINAL_AT,
+      ],
       this.random,
     );
+    this.slack = new SlackHub(stage, new Vector3(JIRA_AT.x, 0, JIRA_AT.z - PLATE / 2 - 0.05), this.random);
     this.systems = new SystemsOnGrid(stage, this.hub, PLACES, { github: SCM_TIE_SIDE, bitbucket: SCM_TIE_SIDE, gitlab: SCM_TIE_SIDE });
     // The repo's trunk stands on the SCM node's slab, at its right-hand corner, and is only there while the SCM is:
     // a third-party SCM goes when its tasks are done and takes its trunk with it (it keeps its commits for next time).
@@ -242,7 +255,7 @@ export class RovoAtlassian {
     void this.taskFeed();
     while (this.running) {
       if (hub.board.length > 0) {
-        const task = (this.next ??= makeTask(this.random, { scm: this.scm, without: ['slack'] }));
+        const task = (this.next ??= makeTask(this.random, { scm: this.scm }));
         const code = task.type === 'code';
         const lane = this.lanes.indexOf(null);
         if (code ? this.codeOut < this.codeCrew && lane >= 0 : this.out - this.codeOut < this.loopCrew) {
@@ -316,6 +329,21 @@ export class RovoAtlassian {
       from = 0;
     }
     for (const step of lane ? [] : run.task.steps) {
+      if (step.system === 'slack') {
+        // Slack stands on its own behind its gateway: the copy goes there, Slack comes up for it the first time,
+        // and its message goes out through the gateway into Jira's record.
+        await fly(stage, DroneFlight.to(sub.drone, SLACK_AT, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+        from = 0;
+        await this.slack.bringUp();
+        this.working.set(sub.drone, this.slack.node);
+        const signal = attachSignal(stage, sub.drone, this.slack.node);
+        await wait(stage, this.between(WORK));
+        await this.slack.send();
+        signal.detach();
+        this.working.delete(sub.drone);
+        run.done++;
+        continue;
+      }
       // The copy goes first; the system comes up for it when it gets there (if it isn't up already).
       const at = step.system === 'jira' ? JIRA_AT : (this.systems.placed.get(step.system)?.node.position ?? (PLACES[step.system] as Vector3));
       await fly(stage, DroneFlight.to(sub.drone, at, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
