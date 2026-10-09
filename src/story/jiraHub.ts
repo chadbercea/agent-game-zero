@@ -17,6 +17,20 @@ import { tween, wait } from './timeline';
 export const HUB_SCALE = 1.35;
 /** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
 export const PLATE = 3;
+/**
+ * A Teamwork Graph plate: the low white platform a Teamwork Graph app stands
+ * on (Jira, Confluence, Bitbucket), a little wider than its node, with a
+ * Teamwork Graph blue edge. `size` is its width.
+ */
+export function graphPlate(size: number): Group {
+  const plate = new Group();
+  const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
+  const edge = new MeshStandardMaterial({ color: GRAPH_COLOR, emissive: GRAPH_COLOR, emissiveIntensity: 0.5, roughness: 0.4 });
+  plate.add(solid(new RoundedBoxGeometry(size, 0.06, size, 2, 0.03), shell)).position.y = 0.03;
+  plate.add(solid(new RoundedBoxGeometry(size + 0.08, 0.025, size + 0.08, 2, 0.012), edge)).position.y = 0.012;
+  return plate;
+}
+
 /** The task board holds this many open tasks at most. */
 export const BOARD_MAX = COLUMN_MAX;
 /**
@@ -79,11 +93,7 @@ export class JiraHub {
     this.kanban.rotation.y = FACE_CAMERA;
     this.kanban.scale.setScalar(BOARD_SCALE);
     stage.add(this.kanban);
-    this.plate = new Group();
-    const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
-    const edge = new MeshStandardMaterial({ color: GRAPH_COLOR, emissive: GRAPH_COLOR, emissiveIntensity: 0.5, roughness: 0.4 });
-    this.plate.add(solid(new RoundedBoxGeometry(PLATE, 0.06, PLATE, 2, 0.03), shell)).position.y = 0.03;
-    this.plate.add(solid(new RoundedBoxGeometry(PLATE + 0.08, 0.025, PLATE + 0.08, 2, 0.012), edge)).position.y = 0.012;
+    this.plate = graphPlate(PLATE);
     this.plate.position.copy(node.position);
     stage.add(this.plate);
     this.untick = stage.onTick((dt) => {

@@ -8,7 +8,7 @@ import { Product } from '../primitives/product/Product';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
-import type { JiraHub } from './jiraHub';
+import { graphPlate, type JiraHub } from './jiraHub';
 import { isTwg } from './rovoTasks';
 import { tween } from './timeline';
 
@@ -24,11 +24,16 @@ export interface PlacedSystem {
   readonly connector?: Group;
   /** What's been written back to it, newest last (a few stay on view). */
   readonly writeBacks: Product[];
+  /** The Teamwork Graph's core apps stand on a plate of their own, a size up (see `establish`). */
+  readonly plate?: Group;
   users: number;
 }
 
 /** Write-backs shown at a system at most; past that the oldest go. */
 export const WRITE_BACKS_SHOWN = 3;
+/** The Teamwork Graph's core apps (beside Jira): their plate's width, and how much bigger they stand than other systems. */
+export const TWG_PLATE = 2.2;
+export const TWG_SCALE = 1.2;
 
 /**
  * The systems on Rovo's grid. Jira is there from the start (the hub). Any
@@ -78,6 +83,35 @@ export class SystemsOnGrid {
     for (const p of up.writeBacks) p.dispose();
     connector?.removeFromParent();
     node.dispose();
+  }
+
+  /**
+   * A core Teamwork Graph app comes up with Jira, prominent and for good: its
+   * Graph Line draws out from Jira, then it stands up at the line's end on a
+   * plate of its own, a size up. Calls to it from then on find it there.
+   */
+  async establish(kind: SystemKind): Promise<PlacedSystem> {
+    const at = this.places[kind];
+    if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
+    const tie = `system:${kind}:${++this.ups}`;
+    await this.hub.tie(tie, at, this.arrive[kind], TWG_PLATE / 2 + 0.05);
+    const plate = graphPlate(TWG_PLATE);
+    plate.position.copy(at);
+    plate.scale.setScalar(0.001);
+    const node = new SystemNode({ kind });
+    node.position.copy(at);
+    node.scale.setScalar(0.001);
+    node.labelOpacity = 0;
+    this.stage.add(plate, node);
+    await tween(this.stage, 0.5, (t) => {
+      const k = Math.max(0.001, easeOutBack(t));
+      plate.scale.setScalar(k);
+      node.scale.setScalar(TWG_SCALE * k);
+      node.labelOpacity = t;
+    });
+    const up: PlacedSystem = { kind, node, permanent: true, tie, plate, writeBacks: [], users: 0 };
+    this.placed.set(kind, up);
+    return up;
   }
 
   /** A step wrote to the system: its result stays there, a small product on the node's slab (the oldest go past a few). */
