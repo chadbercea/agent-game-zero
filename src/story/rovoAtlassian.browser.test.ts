@@ -1,4 +1,4 @@
-import { Object3D } from 'three';
+import { Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import { ATLASSIAN_KINDS } from '../primitives/node/emblems';
@@ -27,6 +27,30 @@ function testStage(fps = 30) {
 }
 
 describe('Rovo on the Atlassian grid', () => {
+  it('spawns each sub-agent out of Rovo’s body, not out of the floor', async () => {
+    const { root, stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const seen = new Set<Object3D>();
+    const births: { sub: number; rovo: number; apart: number }[] = [];
+    void scene.start();
+    await run(20, () => {
+      for (const o of root.children) {
+        if (!(o instanceof Drone) || !o.subAgent || seen.has(o)) continue;
+        seen.add(o);
+        const sub = o.rig.hover.getWorldPosition(new Vector3());
+        const rovo = scene.rovo.drone.rig.hover.getWorldPosition(new Vector3());
+        births.push({ sub: sub.y, rovo: rovo.y, apart: Math.hypot(sub.x - rovo.x, sub.z - rovo.z) });
+      }
+    });
+    scene.stop();
+    expect(births.length).toBeGreaterThan(0);
+    for (const b of births) {
+      // Born level with Rovo's body (within its bob), right under it: inside Rovo, not on the gate.
+      expect(Math.abs(b.sub - b.rovo)).toBeLessThan(0.25);
+      expect(b.apart).toBeLessThan(0.05);
+    }
+  });
+
   it('starts with Rovo at the center on its gate, and nothing else up', () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
