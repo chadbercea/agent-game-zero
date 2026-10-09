@@ -107,15 +107,15 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     }
     place(solid(new CylinderGeometry(0.016, 0.016, 0.32, 6), m.graphite), 0, 0);
   } else if (kind === 'jira') {
-    // Tracked work: a tiny board, three columns of cards.
-    const board = place(solid(new BoxGeometry(0.4, 0.3, 0.02), m.shell), 0, 0, -0.02);
+    // Tracked work: a tiny kanban board, white cards in three columns on a dark board.
+    const board = place(solid(new BoxGeometry(0.4, 0.3, 0.02), m.graphite), 0, 0, -0.02);
     board.rotation.x = 0;
     const card = new BoxGeometry(0.09, 0.05, 0.016);
     const columns = [3, 2, 1];
     columns.forEach((n, c) => {
-      for (let r = 0; r < n; r++) place(solid(card, c === 2 ? m.graphite : m.shell), -0.12 + c * 0.12, 0.09 - r * 0.075, 0.005);
+      for (let r = 0; r < n; r++) place(solid(card, m.shell), -0.12 + c * 0.12, 0.09 - r * 0.075, 0.005);
     });
-    for (let c = 0; c < 3; c++) place(solid(new BoxGeometry(0.1, 0.012, 0.012), m.graphite), -0.12 + c * 0.12, 0.135, 0.005);
+    for (let c = 0; c < 3; c++) place(solid(new BoxGeometry(0.1, 0.012, 0.012), m.shell), -0.12 + c * 0.12, 0.135, 0.005);
   } else if (kind === 'linear') {
     // Tracked work, third-party: a disc crossed by diagonal stripes, in the spirit of Linear's mark.
     const r = 0.21;

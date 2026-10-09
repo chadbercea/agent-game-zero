@@ -14,11 +14,14 @@ import { reversed } from '../primitives/branch/gridPath';
 import { revealNode } from './revealMap';
 import { SystemMap } from './SystemMap';
 import { Tertiaries } from './tertiary';
+import { JiraHub } from './jiraHub';
 import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
 /** Tools that are always on the grid, from the first frame. */
 export const PERSISTENT: readonly AtlassianKind[] = ['jira'];
+/** Tools tied into Jira, the hub: their work reports back into it. */
+export const TIED_TO_JIRA: readonly AtlassianKind[] = ['bitbucket', 'confluence'];
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** How long a sub-agent works a tool before its product heads back, picked from this range. */
 const WORK: [number, number] = [2.5, 5];
@@ -48,6 +51,8 @@ export class RovoAtlassian {
   readonly gate = new Gate();
   readonly map: SystemMap;
   readonly tertiaries: Tertiaries;
+  /** Jira, the hub: it collects the tickets, and Bitbucket and Confluence tie back into it. */
+  readonly hub: JiraHub;
   /** How many sub-agents Rovo runs at once this run (1–3). */
   readonly crew: number;
   /** Tools called up so far, in order. */
@@ -81,6 +86,7 @@ export class RovoAtlassian {
       this.map.setRise(i, 1);
       this.map.branches[i].drawn = 1;
     }
+    this.hub = new JiraHub(stage, this.map.nodes[ATLASSIAN_KINDS.indexOf('jira')], () => [this.gate.position, ...this.map.nodes.filter((n) => n.visible).map((n) => n.position)]);
     this.tertiaries = new Tertiaries(stage, () => [this.gate.position, ...this.map.nodes.map((n) => n.position)]);
     this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
     this.rovo.drone.fade = 0;
@@ -118,6 +124,8 @@ export class RovoAtlassian {
       await revealNode(stage, map, i);
       this.called.push(kind);
     }
+    // A tool that works with Jira gets tied into the hub the first time it's up.
+    if (TIED_TO_JIRA.includes(kind)) await this.hub.tie(node);
     map.setActive(i, true);
     // The sub-agent builds its own tertiary off the tool as it goes to use it (ILI-974).
     const place = this.tertiaries.claim(node);
@@ -137,10 +145,16 @@ export class RovoAtlassian {
     this.working.set(kind, (this.working.get(kind) ?? 0) + 1);
     node.light = 'working';
     await wait(stage, this.between(WORK));
-    // The tool's product rides its line home to Rovo.
-    await shoot(stage, reversed(map.routes[i]), RIDE_SPEED, undefined, kind);
+    if (TIED_TO_JIRA.includes(kind)) {
+      // Tied tools report into Jira: the work rides the tie and lands in the hub's rack.
+      await this.hub.report(kind);
+    } else {
+      // Otherwise the tool's product rides its line home to Rovo; work in Jira itself adds a ticket to the rack.
+      await shoot(stage, reversed(map.routes[i]), RIDE_SPEED, undefined, kind);
+      if (kind === 'jira') void this.hub.collect();
+      rovo.flash = 1;
+    }
     this.delivered.push(kind);
-    rovo.flash = 1;
     await this.home(sub);
     place.release();
     map.setActive(i, false);

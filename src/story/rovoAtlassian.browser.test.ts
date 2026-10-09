@@ -63,6 +63,23 @@ describe('Rovo on the Atlassian grid', () => {
     expect(scene.map.nodes.filter((n) => n.visible).map((n) => n.kind)).toEqual(['jira']);
   });
 
+  it('makes Jira a hub: it collects tickets, and Bitbucket and Confluence tie into it and report back', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    void scene.start();
+    await run(120);
+    scene.stop();
+    await run(15);
+    // Every tied tool that came up is tied into Jira with a drawn line; nothing else is.
+    const tied = scene.called.filter((k) => k === 'bitbucket' || k === 'confluence');
+    expect([...scene.hub.ties.keys()].sort()).toEqual([...new Set(tied)].sort());
+    for (const edge of scene.hub.ties.values()) expect(edge.drawn).toBe(1);
+    // Tickets have come into the rack, and it never holds more than it should.
+    expect(scene.hub.rack.length).toBeGreaterThan(0);
+    expect(scene.hub.rack.length).toBeLessThanOrEqual(8);
+    expect(scene.hub.node.scale.x).toBeGreaterThan(1);
+  });
+
   it('keeps Jira on the grid the whole time: never called up, never put away', async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 5);
