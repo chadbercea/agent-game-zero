@@ -54,6 +54,8 @@ export class JiraHub {
   /** The kanban board, standing where Jira's emblem was. */
   readonly kanban = new KanbanBoard();
   readonly ties = new Map<string, GraphEdge>();
+  /** Ties drawn from the system in to Jira (a system that came up for an agent reaches out to Jira), not out from Jira. */
+  readonly inward = new Set<string>();
   /** Tasks finished so far. */
   done = 0;
   private readonly untick: () => void;
@@ -179,9 +181,10 @@ export class JiraHub {
    * stays until `untie`. `arriveFrom` (a grid direction from `to`) is the side
    * its last run comes in on, leaving the other sides free.
    */
-  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3): Promise<void> {
-    const edge = new GraphEdge(this.route(to, arriveFrom, endClear));
+  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false): Promise<void> {
+    const edge = new GraphEdge(this.route(to, arriveFrom, endClear, inward));
     this.ties.set(id, edge);
+    if (inward) this.inward.add(id);
     this.stage.add(edge);
     await tween(this.stage, 0.8, (t) => (edge.drawn = t));
   }
@@ -189,7 +192,7 @@ export class JiraHub {
   /** Something rides the tie home into Jira: that tool's product (`kind`), or plain status (a gray packet) if none. */
   async report(id: string, kind?: SystemKind): Promise<void> {
     const edge = this.ties.get(id);
-    if (edge) await shoot(this.stage, reversed(edge.path), RIDE_SPEED, undefined, kind);
+    if (edge) await shoot(this.stage, this.inward.has(id) ? edge.path : reversed(edge.path), RIDE_SPEED, undefined, kind);
   }
 
   /** The toolset is done: its tie draws back and goes. */
@@ -197,6 +200,7 @@ export class JiraHub {
     const edge = this.ties.get(id);
     if (!edge) return;
     this.ties.delete(id);
+    this.inward.delete(id);
     await tween(this.stage, 0.6, (t) => (edge.drawn = Math.max(0.001, 1 - t)));
     edge.dispose();
   }
@@ -223,7 +227,7 @@ export class JiraHub {
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
-  private route(end: Vector3, arriveFrom?: Vector3, endClear = 0.3): Curve<Vector3> {
+  private route(end: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false): Curve<Vector3> {
     const from = this.node.position;
     const options: Vector3[][] = [
       [from.clone(), new Vector3(end.x, 0, from.z), end.clone()],
@@ -244,7 +248,8 @@ export class JiraHub {
     const ROOM = 0.95;
     const ok = clean.filter((l) => clear(l) >= ROOM);
     const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : clean.sort((a, b) => clear(b) - clear(a))[0];
-    return roundedPath(trimPolyline(best, PLATE / 2, endClear), BEND_RADIUS);
+    const trimmed = trimPolyline(best, PLATE / 2, endClear);
+    return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
   }
 }
 

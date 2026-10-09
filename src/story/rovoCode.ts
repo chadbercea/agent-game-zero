@@ -2,7 +2,7 @@ import { type Curve, LineCurve3, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
-import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import type { ScmKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
@@ -37,19 +37,23 @@ const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
 const CHECK_IN_SPEED = 6;
 
 /**
- * One coding lane: a worktree and its terminal, joined to the repo. It's
- * built when a code task needs it (the line draws out from the repo, then
- * the terminal appears; the next line draws, then the worktree appears) and
- * taken down again when the task is done (the worktree is deleted with its
- * branch): nodes fold, then their lines draw back.
+ * One coding lane, built by the coding copy itself. The copy arrives at the
+ * lane's spot, and the lane builds out from it (the system reacting to the
+ * agent): the worktree grows in right under it; a line draws out to the
+ * terminal, which appears; a line draws on into the repo (which comes up at
+ * its end if it isn't there). Before the copy goes home it collapses the lane
+ * back into itself: the repo line draws back, the terminal folds, the line
+ * draws back, and the worktree folds under it (deleted with its branch).
  */
 export class CodeLane {
   readonly terminal: Terminal;
   readonly worktree: SystemNode;
-  /** Repo → terminal (drawn from the repo's end). */
+  /** Worktree → terminal. */
   readonly toTerminal: Branch;
-  /** Terminal → worktree. */
-  readonly toWorktree: Branch;
+  /** Terminal → repo (joining the other lanes' run into the repo). */
+  readonly toRepo: Branch;
+  /** Where the copy works: the worktree's place. */
+  readonly spot: Vector3;
   private readonly untick: () => void;
 
   constructor(
@@ -59,55 +63,63 @@ export class CodeLane {
   ) {
     const z = LANE_Z[index];
     const terminalAt = new Vector3(TERMINAL_X, 0, z);
-    const worktreeAt = new Vector3(WORKTREE_X, 0, z);
-    const toRepo =
+    this.spot = new Vector3(WORKTREE_X, 0, z);
+    const intoRepo =
       z === SCM_AT.z
-        ? [SCM_AT.clone(), terminalAt.clone()]
-        : [SCM_AT.clone(), new Vector3(MERGE_X, 0, SCM_AT.z), new Vector3(MERGE_X, 0, z), terminalAt.clone()];
-    this.toTerminal = new Branch(roundedPath(trimPolyline(toRepo, HALF_NODE, HALF_TERMINAL), BEND_RADIUS), NEUTRAL.packet);
-    this.toWorktree = new Branch(
-      new LineCurve3(terminalAt.clone().setX(TERMINAL_X - HALF_TERMINAL), worktreeAt.clone().setX(WORKTREE_X + HALF_NODE)),
+        ? [terminalAt.clone(), SCM_AT.clone()]
+        : [terminalAt.clone(), new Vector3(MERGE_X, 0, z), new Vector3(MERGE_X, 0, SCM_AT.z), SCM_AT.clone()];
+    this.toTerminal = new Branch(
+      new LineCurve3(this.spot.clone().setX(WORKTREE_X + HALF_NODE), terminalAt.clone().setX(TERMINAL_X - HALF_TERMINAL)),
       NEUTRAL.packet,
     );
+    this.toRepo = new Branch(roundedPath(trimPolyline(intoRepo, HALF_TERMINAL, HALF_NODE), BEND_RADIUS), NEUTRAL.packet);
     this.terminal = new Terminal({ seed });
     this.terminal.position.copy(terminalAt);
     this.worktree = new SystemNode({ kind: 'worktree' });
-    this.worktree.position.copy(worktreeAt);
-    for (const line of [this.toTerminal, this.toWorktree]) line.drawn = 0;
+    this.worktree.position.copy(this.spot);
+    for (const line of [this.toTerminal, this.toRepo]) line.drawn = 0;
     for (const node of [this.terminal, this.worktree]) node.scale.setScalar(0.001);
     this.worktree.labelOpacity = 0;
-    stage.add(this.toTerminal, this.toWorktree, this.terminal, this.worktree);
+    stage.add(this.toTerminal, this.toRepo, this.terminal, this.worktree);
     this.untick = stage.onTick((dt) => this.terminal.update(dt));
   }
 
-  /** Line, then terminal; line, then worktree. */
-  async build(): Promise<void> {
+  /** Built out from the copy over the spot: worktree; line, terminal; line, then the repo (`repo()` brings it up if needed). */
+  async build(repo: () => Promise<unknown>): Promise<void> {
     const { stage } = this;
-    await tween(stage, 0.6, (t) => (this.toTerminal.drawn = t));
-    await grow(stage, this.terminal);
-    await tween(stage, 0.45, (t) => (this.toWorktree.drawn = t));
     await grow(stage, this.worktree, (t) => (this.worktree.labelOpacity = t));
+    await tween(stage, 0.45, (t) => (this.toTerminal.drawn = t));
+    await grow(stage, this.terminal);
+    await tween(stage, 0.6, (t) => (this.toRepo.drawn = t));
+    await repo();
   }
 
-  /** The code is checked in: it rides from the worktree through the terminal into the repo. */
+  /** The code is checked in: it rides out from the worktree, through the terminal, into the repo. */
   async checkIn(scm: ScmKind): Promise<void> {
-    await shoot(this.stage, reversed(this.toWorktree.curve), CHECK_IN_SPEED, undefined, 'worktree');
-    await shoot(this.stage, reversed(this.toTerminal.curve), CHECK_IN_SPEED, undefined, scm);
+    await shoot(this.stage, this.toTerminal.curve, CHECK_IN_SPEED, undefined, 'worktree');
+    await shoot(this.stage, this.toRepo.curve, CHECK_IN_SPEED, undefined, scm);
   }
 
-  /** The worktree is deleted with its branch: worktree folds, its line draws back, the terminal folds, its line draws back. */
-  async teardown(): Promise<void> {
+  /** Collapsed back into the copy: the repo line draws back, the terminal folds, the line draws back, the worktree folds. */
+  async collapse(): Promise<void> {
     const { stage } = this;
-    await grow(stage, this.worktree, (t) => (this.worktree.labelOpacity = t), true);
-    await tween(stage, 0.4, (t) => (this.toWorktree.drawn = Math.max(0.001, 1 - t)));
+    await tween(stage, 0.5, (t) => (this.toRepo.drawn = Math.max(0.001, 1 - t)));
     this.terminal.state = 'off';
     await grow(stage, this.terminal, undefined, true);
-    await tween(stage, 0.5, (t) => (this.toTerminal.drawn = Math.max(0.001, 1 - t)));
+    await tween(stage, 0.4, (t) => (this.toTerminal.drawn = Math.max(0.001, 1 - t)));
+    await grow(stage, this.worktree, (t) => (this.worktree.labelOpacity = t), true);
+    this.collapsed = true;
+  }
+
+  /** The lane has folded back into its copy. */
+  collapsed = false;
+
+  dispose(): void {
     this.untick();
     this.worktree.dispose();
     this.terminal.dispose();
     this.toTerminal.dispose();
-    this.toWorktree.dispose();
+    this.toRepo.dispose();
   }
 
   positions(): Vector3[] {

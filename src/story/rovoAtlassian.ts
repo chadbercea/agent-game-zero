@@ -22,7 +22,7 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { JiraHub, PLATE } from './jiraHub';
 import { makeTask, type Step, type Task } from './rovoTasks';
-import { SystemsOnGrid } from './rovoSystems';
+import { type PlacedSystem, SystemsOnGrid } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
 import { fly, tween, wait } from './timeline';
@@ -316,9 +316,11 @@ export class RovoAtlassian {
       from = 0;
     }
     for (const step of lane ? [] : run.task.steps) {
-      const system = await this.systems.call(step.system);
-      await fly(stage, DroneFlight.to(sub.drone, system.node.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      // The copy goes first; the system comes up for it when it gets there (if it isn't up already).
+      const at = step.system === 'jira' ? JIRA_AT : (this.systems.placed.get(step.system)?.node.position ?? (PLACES[step.system] as Vector3));
+      await fly(stage, DroneFlight.to(sub.drone, at, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
       from = 0;
+      const system = await this.systems.call(step.system);
       await this.work(sub.drone, system.node, step);
       if (step.system !== 'jira') {
         // A write stays where it was written (write-back); a read brings what it found home to Jira;
@@ -333,9 +335,9 @@ export class RovoAtlassian {
     }
     if (run.task.reportToUser) {
       // Last, the copy updates the terminal back to the user.
-      const terminal = await this.userTerminal();
-      await fly(stage, DroneFlight.to(sub.drone, terminal.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      await fly(stage, DroneFlight.to(sub.drone, USER_TERMINAL_AT, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
       from = 0;
+      const terminal = await this.userTerminal();
       this.working.set(sub.drone, terminal);
       terminal.state = 'tail';
       await wait(stage, this.between(WORK));
@@ -347,14 +349,15 @@ export class RovoAtlassian {
     }
 
     // The task is done: the card goes home to Done, the copy flies home into Rovo.
+    // A coding copy collapses its lane back into itself before it goes.
+    if (lane) await lane.collapse();
     if (card) await hub.finish(card);
     await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
     await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
     sub.despawn();
     rovo.flash = 1;
     if (lane) {
-      // The branch was deleted on merge; the worktree goes with it.
-      await lane.teardown();
+      lane.dispose();
       this.lanes[lane.index] = null;
       this.codeOut--;
     }
@@ -364,9 +367,9 @@ export class RovoAtlassian {
   }
 
   /**
-   * A code task, linear like real life: the repo comes up (if it isn't), the
-   * copy's lane is built (repo → terminal → worktree), and the copy works the
-   * worktree: its terminal sets up (admin) and the code is written (diff); it's
+   * A code task, linear like real life, kicked off by the copy: it flies to
+   * its lane's spot and builds the lane out from itself (worktree → terminal →
+   * repo, the repo coming up if it isn't), and works the worktree: its terminal sets up (admin) and the code is written (diff); it's
    * checked in (it rides worktree → terminal → repo); CI/CD runs (the terminal
    * tails its logs) and passes; it's squash-merged at the repo (the branch
    * folds in, the trunk keeps the commit) and deployed (small cubes shoot down
@@ -374,11 +377,12 @@ export class RovoAtlassian {
    */
   private async code(drone: Drone, lane: CodeLane, from: number): Promise<void> {
     const { stage, hub } = this;
-    const repo = await this.systems.call(this.scm);
-    this.building ??= buildOutput(stage).then((output) => (this.output = output));
-    await lane.build();
-    await fly(stage, DroneFlight.to(drone, lane.worktree.position, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+    // The copy goes out to its lane's spot and builds the lane out from itself, into the repo.
+    await fly(stage, DroneFlight.to(drone, lane.spot, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
     this.working.set(drone, lane.worktree);
+    let repo!: PlacedSystem;
+    await lane.build(async () => (repo = await this.systems.call(this.scm)));
+    this.building ??= buildOutput(stage).then((output) => (this.output = output));
     lane.worktree.light = 'working';
     const signal = attachSignal(stage, drone, lane.worktree);
     const { terminal } = lane;
@@ -464,17 +468,17 @@ export class RovoAtlassian {
     this.working.delete(drone);
   }
 
-  /** The user's terminal, brought up the first time a copy reports back: its line draws from Jira, then it appears. It stays. */
+  /** The user's terminal, brought up the first time a copy reports back: it comes up under the copy, then its line reaches in to Jira. It stays. */
   private userTerminal(): Promise<Terminal> {
     this.terminalUp ??= (async () => {
       const { stage } = this;
-      await this.hub.tie('user-terminal', USER_TERMINAL_AT, undefined, TERMINAL_SIZE / 2 + 0.1);
       const terminal = new Terminal({ state: 'admin', seed: 7 });
       terminal.position.copy(USER_TERMINAL_AT);
       terminal.scale.setScalar(0.001);
       stage.add(terminal);
       stage.onTick((dt) => terminal.update(dt));
       await tween(stage, 0.4, (t) => terminal.scale.setScalar(Math.max(0.001, easeOutBack(t))));
+      await this.hub.tie('user-terminal', USER_TERMINAL_AT, undefined, TERMINAL_SIZE / 2 + 0.1, true);
       this.terminal = terminal;
       return terminal;
     })();
