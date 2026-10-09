@@ -24,13 +24,10 @@ const WORK: [number, number] = [2.5, 5];
 const SEND_GAP: [number, number] = [0.8, 2.2];
 const SUB_SPEED = 4;
 const RIDE_SPEED = 5;
-/** A sub-agent is born this small, inside Rovo's body, and grows as it leaves. */
-const BUD = 0.3;
-/** Seconds it takes to pop out of Rovo before it flies. */
-const EMERGE_SECONDS = 0.35;
-
-/** How high a sub-agent's floor anchor sits for its body (at `scale`) to be level with Rovo's body. */
-const atRovosBody = (scale: number) => HOVER_HEIGHT * (1 - SUB_AGENT_SCALE * scale);
+/** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
+const EMERGE_SECONDS = 0.25;
+/** How high a sub-agent's floor anchor sits for its body to be level with Rovo's body. */
+const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
 
 /**
  * Rovo working its Atlassian grid (Story Narrative). Rovo floats in at the
@@ -121,20 +118,13 @@ export class RovoAtlassian {
       subAgent: true,
       status: 'working',
     });
-    // Born inside Rovo: it pops out of Rovo's body, small, then drops to its own height as it flies out, growing.
-    const half = (1 + BUD) / 2;
-    sub.drone.position.y = atRovosBody(BUD);
-    sub.drone.scale.setScalar(SUB_AGENT_SCALE * BUD);
+    // Born inside Rovo, full size: it fades into being in Rovo's body, then flies out of it, settling to
+    // its own height on the way. It never grows, and it never comes up from the floor.
+    sub.drone.position.y = AT_ROVOS_BODY;
+    sub.drone.fade = 0;
     rovo.flash = 1;
-    await tween(stage, EMERGE_SECONDS, (t) => {
-      const scale = BUD + (half - BUD) * t;
-      sub.drone.scale.setScalar(SUB_AGENT_SCALE * scale);
-      sub.drone.position.y = atRovosBody(scale);
-    });
-    await Promise.all([
-      fly(stage, DroneFlight.to(sub.drone, place.spot, { speed: SUB_SPEED, fromHeight: atRovosBody(half), lift: 0 })),
-      tween(stage, 0.6, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (half + (1 - half) * t))),
-    ]);
+    await tween(stage, EMERGE_SECONDS, (t) => (sub.drone.fade = t));
+    await fly(stage, DroneFlight.to(sub.drone, place.spot, { speed: SUB_SPEED, fromHeight: AT_ROVOS_BODY, lift: 0 }));
     this.working.set(kind, (this.working.get(kind) ?? 0) + 1);
     node.light = 'working';
     await wait(stage, this.between(WORK));
@@ -152,14 +142,11 @@ export class RovoAtlassian {
     this.out--;
   }
 
-  /** A sub-agent flies straight back to Rovo, rising into its body, and dissolves into it. */
+  /** A sub-agent flies straight back to Rovo, rising into its body, and fades away inside it (no shrinking). */
   private async home(sub: SpawnedDrone): Promise<void> {
     const { stage } = this;
-    await fly(stage, DroneFlight.to(sub.drone, this.rovo.drone.position, { speed: SUB_SPEED, toHeight: atRovosBody(1), lift: 0 }));
-    await tween(stage, 0.35, (t) => {
-      sub.drone.scale.setScalar(SUB_AGENT_SCALE * (1 - 0.7 * t));
-      sub.drone.fade = 1 - t;
-    });
+    await fly(stage, DroneFlight.to(sub.drone, this.rovo.drone.position, { speed: SUB_SPEED, toHeight: AT_ROVOS_BODY, lift: 0 }));
+    await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
     sub.despawn();
   }
 
