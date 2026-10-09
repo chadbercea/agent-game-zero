@@ -8,6 +8,16 @@ import type { ScmKind, SystemKind } from '../primitives/node/emblems';
 export type TaskType = 'code' | 'doc' | 'read' | 'jira' | 'slack' | 'spec';
 export const TASK_TYPES: readonly TaskType[] = ['code', 'doc', 'read', 'jira', 'slack', 'spec'];
 
+/** A Jira issue's title for each kind of task. */
+export const TASK_TITLE: Record<TaskType, string> = {
+  code: 'Ship a code change',
+  doc: 'Write the doc',
+  read: 'Research the context',
+  jira: 'Update the issue',
+  slack: 'Post the update',
+  spec: 'Write the spec from Figma',
+};
+
 /** What a copy does at a system: reads from it, writes to it, updates it, sends through it, or changes code in it. */
 export type StepAction = 'read' | 'write' | 'update' | 'send' | 'code';
 

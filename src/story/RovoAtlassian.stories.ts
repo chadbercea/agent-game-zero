@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
+import { Inspector } from '../stage/Inspector';
 import { RovoAtlassian, STORY_CENTER } from './rovoAtlassian';
+import { rovoInspectables } from './rovoInspect';
 
 const meta: Meta = {
   title: 'Story Narrative/Rovo on the Atlassian Grid',
@@ -22,7 +24,7 @@ export default meta;
  * checked in, CI passes, merged, deployed down the belt into the portal), and
  * the repo's trunk keeps every commit. Teamwork Graph apps
  * stay; third-party tools go when their task is done. Seeded: `seed` changes
- * the run. No captions.
+ * the run. No captions. Hover anything to highlight it; click it for its details.
  */
 export const Working: StoryObj<{ seed: number }> = {
   argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },
@@ -33,7 +35,9 @@ export const Working: StoryObj<{ seed: number }> = {
     stage.centerOn(STORY_CENTER);
     const scene = new RovoAtlassian(stage, args.seed);
     void scene.start();
-    Object.assign(window, { __story: scene });
+    // Hover anything to highlight it; click it for its details on the right (Escape or click away to close).
+    const inspector = new Inspector(stage, rovoInspectables(scene), root);
+    Object.assign(window, { __story: scene, __inspector: inspector });
     return root;
   },
 };
