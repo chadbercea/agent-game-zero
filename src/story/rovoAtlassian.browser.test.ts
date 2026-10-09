@@ -153,6 +153,8 @@ describe('Rovo and Jira, the quarterback', () => {
     // Every task ran all its steps and came back done to Jira.
     for (const t of scene.tasks) expect(t.done).toBe(t.task.steps.length);
     expect(scene.hub.done).toBe(scene.tasks.length);
+    // Finished cards are shot to the parent drone, Rovo, not down to the base.
+    expect(scene.hub.landed?.distanceTo(scene.rovo.drone.rig.hover.getWorldPosition(new Vector3()))).toBeLessThan(0.05);
     expect(scene.out).toBe(0);
     expect(scene.working.size).toBe(0);
   });

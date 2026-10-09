@@ -27,12 +27,13 @@ export const BOARD_MAX = COLUMN_MAX;
 const BOARD_OUT = new Vector3(-0.95, 0, 0.95);
 const BOARD_AT = 0.85;
 const BOARD_SCALE = 0.8;
-const CARD_SCALE = 0.4;
 /** Seconds a finished card stays in Done before it slides off the board. */
 const DONE_STAYS: [number, number] = [1.4, 3];
 /** A task card riding with a sub-agent is this small (world size). */
 const CARRIED_SCALE = 0.3;
 const RIDE_SPEED = 5;
+/** Seconds a finished card takes to shoot from the copy to its parent. */
+const SHOT_SECONDS = 0.6;
 
 /**
  * Jira as the quarterback (Story Narrative): the system of record for
@@ -45,9 +46,10 @@ const RIDE_SPEED = 5;
  *   sub-agent takes one (`takeTask`): the card moves to In progress and a
  *   copy of it rides off with the sub-agent.
  * - Whatever a sub-agent spins up for its task is tied back to Jira with a
- *   Graph Line (`tie`); the work rides it home (`report`), the task comes
- *   back done (`finish`: it glows green and clears), and the tie lets go
- *   (`untie`).
+ *   Graph Line (`tie`); the work rides it home (`report`), and the tie lets
+ *   go (`untie`). When the task is done the sub-agent shoots its card,
+ *   glowing green, to its parent drone (`finish`), which already talks
+ *   two-way with Jira; the board's card then moves to Done.
  */
 export class JiraHub {
   readonly plate: Group;
@@ -58,6 +60,8 @@ export class JiraHub {
   readonly inward = new Set<string>();
   /** Tasks finished so far. */
   done = 0;
+  /** Where the last finished card landed (its parent drone). */
+  landed?: Vector3;
   private readonly untick: () => void;
   /** Which board card each carried task card stands for. */
   private readonly carried = new Map<Ticket, KanbanCard>();
@@ -151,24 +155,32 @@ export class JiraHub {
     return ticket;
   }
 
-  /** The task comes home done: the card glows green over Jira and clears. */
-  async finish(card: Ticket): Promise<void> {
-    const at = card.getWorldPosition(new Vector3());
+  /** The task is done: the copy shoots its card, glowing green, to `to` (its parent, Rovo); then Done on the board. */
+  async finish(card: Ticket, to: Object3D): Promise<void> {
+    // The copy shoots its finished ticket to its parent (Rovo, already talking two-way with Jira), not to the base.
+    const from = card.getWorldPosition(new Vector3());
+    const size = card.getWorldScale(new Vector3()).x;
     card.removeFromParent();
     this.stage.add(card);
-    card.scale.setScalar(CARD_SCALE);
-    const over = this.node.position.clone();
-    const from = at.setY(0);
+    card.position.copy(from);
+    card.scale.setScalar(size);
     card.glow = 1;
-    await tween(this.stage, 0.5, (t) => {
-      card.position.lerpVectors(from, over, t * t * (3 - 2 * t));
+    const target = new Vector3();
+    await tween(this.stage, SHOT_SECONDS, (t) => {
+      to.getWorldPosition(target);
+      card.position.lerpVectors(from, target, t * t * (3 - 2 * t));
+      card.position.y += Math.sin(t * Math.PI) * 0.6;
       card.glow = 1;
     });
-    this.node.light = 'working';
-    await tween(this.stage, 0.5, (t) => {
+    this.landed = card.position.clone();
+    // Into Rovo: it glows green and goes; Rovo relays it to Jira over their link, and the board catches up.
+    await tween(this.stage, 0.35, (t) => {
+      card.position.copy(to.getWorldPosition(target));
+      card.scale.setScalar(Math.max(0.001, size * (1 - t)));
       card.glow = 1;
       card.opacity = 1 - t;
     });
+    this.node.light = 'working';
     card.dispose();
     const onBoard = this.carried.get(card);
     this.carried.delete(card);
