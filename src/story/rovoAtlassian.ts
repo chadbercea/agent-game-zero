@@ -17,6 +17,8 @@ import { Tertiaries } from './tertiary';
 import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
+/** Tools that are always on the grid, from the first frame. */
+export const PERSISTENT: readonly AtlassianKind[] = ['jira'];
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** How long a sub-agent works a tool before its product heads back, picked from this range. */
 const WORK: [number, number] = [2.5, 5];
@@ -72,6 +74,13 @@ export class RovoAtlassian {
     stage.add(this.gate);
     this.map = mapFor(stage, this.gate, seed);
     this.map.hide();
+    // Jira is always on the grid: it's where the work is tracked, so it's there from the first frame
+    // and is never called up or put away. The other tools still come up when Rovo first needs them.
+    for (const kind of PERSISTENT) {
+      const i = ATLASSIAN_KINDS.indexOf(kind);
+      this.map.setRise(i, 1);
+      this.map.branches[i].drawn = 1;
+    }
     this.tertiaries = new Tertiaries(stage, () => [this.gate.position, ...this.map.nodes.map((n) => n.position)]);
     this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
     this.rovo.drone.fade = 0;
