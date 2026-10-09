@@ -40,6 +40,19 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.jira.emblem.visible).toBe(false);
   });
 
+  it('the access line runs along the grid, never diagonal: straight runs and a rounded corner', () => {
+    const { stage } = testStage();
+    const scene = new RovoAtlassian(stage);
+    let onGrid = 0;
+    const N = 200;
+    for (let i = 0; i <= N; i++) {
+      const t = scene.accessLine.curve.getTangentAt(i / N);
+      if (Math.abs(t.x) < 1e-3 || Math.abs(t.z) < 1e-3) onGrid++;
+    }
+    // All of it but the short rounded bend.
+    expect(onGrid / (N + 1)).toBeGreaterThan(0.8);
+  });
+
   it('comes in progressively: Rovo, then the gate as it flies over and authenticates, then Jira, then work, then the board', async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
