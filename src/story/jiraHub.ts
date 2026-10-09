@@ -204,8 +204,9 @@ export class JiraHub {
    * stays until `untie`. `arriveFrom` (a grid direction from `to`) is the side
    * its last run comes in on, leaving the other sides free.
    */
-  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false): Promise<void> {
-    const edge = new GraphEdge(this.route(to, arriveFrom, endClear, inward));
+  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false, along?: readonly Vector3[]): Promise<void> {
+    // Along a laid-out route (Jira → system, shortest and its own) when there is one; otherwise the hub finds one.
+    const edge = new GraphEdge(along ? this.alongRoute(along, endClear, inward) : this.route(to, arriveFrom, endClear, inward));
     this.ties.set(id, edge);
     if (inward) this.inward.add(id);
     this.stage.add(edge);
@@ -250,6 +251,11 @@ export class JiraHub {
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
+  private alongRoute(along: readonly Vector3[], endClear: number, inward: boolean): Curve<Vector3> {
+    const trimmed = trimPolyline(along.map((p) => p.clone().setY(0)), PLATE / 2, endClear);
+    return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
+  }
+
   private route(end: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false): Curve<Vector3> {
     const from = this.node.position;
     const options: Vector3[][] = [

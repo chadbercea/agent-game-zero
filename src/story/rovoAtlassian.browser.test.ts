@@ -5,7 +5,7 @@ import { Terminal } from '../primitives/terminal/Terminal';
 import { Drone } from '../primitives/drone/Drone';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
-import { JIRA_AT, MAX_CREW, PLACES, ROVO_GATE, ROVO_START, RovoAtlassian } from './rovoAtlassian';
+import { JIRA_AT, MAX_CREW, MINI_SYSTEMS, ROVO_GATE, ROVO_START, RovoAtlassian, USER_TERMINAL_AT } from './rovoAtlassian';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { TASK_TYPES } from './rovoTasks';
@@ -39,6 +39,32 @@ function seedWhere(ok: (scene: RovoAtlassian) => boolean): number {
 }
 
 describe('Rovo and Jira, the quarterback', () => {
+  it('the mini systems are laid out from the seed by the house rules: same seed same map, spaced, near Jira, clear of everything fixed', () => {
+    const at = (seed: number) => {
+      const scene = new RovoAtlassian(testStage().stage, seed);
+      return MINI_SYSTEMS.map((k) => scene.places[k] as Vector3);
+    };
+    const key = (spots: Vector3[]) => spots.map((p) => `${p.x},${p.z}`).join(' ');
+    expect(key(at(4))).toBe(key(at(4)));
+    const maps = new Set(Array.from({ length: 12 }, (_, i) => key(at(i + 1))));
+    expect(maps.size).toBeGreaterThan(6);
+    for (let seed = 1; seed <= 25; seed++) {
+      const scene = new RovoAtlassian(testStage().stage, seed);
+      const spots = MINI_SYSTEMS.map((k) => scene.places[k] as Vector3);
+      for (const [i, p] of spots.entries()) {
+        // On the grid, clear of Jira's plate, and a cluster around Jira, not a sprawl.
+        expect(p.x * 2).toBe(Math.round(p.x * 2));
+        expect(p.distanceTo(JIRA_AT)).toBeGreaterThanOrEqual(3);
+        expect(p.distanceTo(JIRA_AT)).toBeLessThan(12);
+        for (const q of spots.slice(i + 1)) expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2 - 1e-6);
+        for (const fixed of [ROVO_GATE, USER_TERMINAL_AT]) expect(p.distanceTo(fixed)).toBeGreaterThanOrEqual(2 - 1e-6);
+      }
+      // The MCP terminal stands straight out from Figma along the grid.
+      const figma = scene.places.figma as Vector3;
+      expect(Math.min(Math.abs(scene.mcpAt.x - figma.x), Math.abs(scene.mcpAt.z - figma.z))).toBeLessThan(1e-6);
+    }
+  });
+
   it('crew: always 1–3 coders working branches, up to 2 more in the mini systems, 5 at most', () => {
     const coders = new Set<number>();
     for (let seed = 1; seed <= 40; seed++) {
@@ -208,7 +234,7 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(appeared.size).toBeGreaterThan(1);
     expect(unprompted).toBe(0);
     // Systems stand at their places; worktrees stand in the code lanes, Slack on its own behind its gateway.
-    for (const kind of appeared) if (kind !== 'worktree' && kind !== 'slack') expect(PLACES[kind]).toBeDefined();
+    for (const kind of appeared) if (kind !== 'worktree' && kind !== 'slack') expect(scene.places[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.
     const standing = [...scene.systems.placed.keys()];
     for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
