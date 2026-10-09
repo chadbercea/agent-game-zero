@@ -1,20 +1,20 @@
-import { LineCurve3, Vector3 } from "three";
-import { DroneFlight } from "../animation/DroneFlight";
-import { GateAnimator } from "../animation/GateAnimator";
-import { NEUTRAL } from "../core/palette";
-import { seededRandom } from "../core/scatter";
-import { Branch } from "../primitives/branch/Branch";
-import { HOVER_HEIGHT, SUB_AGENT_SCALE } from "../primitives/drone/Drone";
-import { Gate } from "../primitives/gate/Gate";
-import type { SystemKind } from "../primitives/node/emblems";
-import { SystemNode } from "../primitives/node/SystemNode";
-import { attachSignal } from "../stage/attachSignal";
-import { type SpawnedDrone, spawnDrone } from "../stage/spawnDrone";
-import type { SceneHost } from "../stage/Stage";
-import { accessCheck } from "./accessCheck";
-import { shoot } from "./beam";
-import { JiraHub, PLATE } from "./jiraHub";
-import { fly, tween, wait } from "./timeline";
+import { LineCurve3, Vector3 } from 'three';
+import { DroneFlight } from '../animation/DroneFlight';
+import { GateAnimator } from '../animation/GateAnimator';
+import { NEUTRAL } from '../core/palette';
+import { seededRandom } from '../core/scatter';
+import { Branch } from '../primitives/branch/Branch';
+import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { Gate } from '../primitives/gate/Gate';
+import type { SystemKind } from '../primitives/node/emblems';
+import { SystemNode } from '../primitives/node/SystemNode';
+import { attachSignal } from '../stage/attachSignal';
+import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
+import type { SceneHost } from '../stage/Stage';
+import { accessCheck } from './accessCheck';
+import { shoot } from './beam';
+import { JiraHub, PLATE } from './jiraHub';
+import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
 export const ROVO_GATE = new Vector3(0, 0, 0);
@@ -25,22 +25,16 @@ const SLOT_RADIUS = 5;
 export const SLOTS: readonly Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7]
   .map((i) => {
     const a = (i / 8) * Math.PI * 2;
-    return JIRA_AT.clone()
-      .add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS))
-      .round();
+    return JIRA_AT.clone().add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS)).round();
   })
   .filter((p) => p.distanceTo(ROVO_GATE) > 3.5);
 
 /** What a task needs, picked per task: a code tool, a docs tool, and sometimes a third. Every toolset is a little different. */
-export const CODE_TOOLS: readonly SystemKind[] = ["bitbucket", "github"];
-export const DOC_TOOLS: readonly SystemKind[] = ["confluence", "gdocs"];
-export const EXTRA_TOOLS: readonly SystemKind[] = ["figma", "codesearch"];
+export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
+export const DOC_TOOLS: readonly SystemKind[] = ['confluence', 'gdocs'];
+export const EXTRA_TOOLS: readonly SystemKind[] = ['figma', 'codesearch'];
 /** Where a toolset's tools stand around its spot: a little triangle. */
-const TOOL_AT = [
-  new Vector3(-1, 0, 0.6),
-  new Vector3(0.9, 0, 0.7),
-  new Vector3(0.1, 0, -1.1),
-];
+const TOOL_AT = [new Vector3(-1, 0, 0.6), new Vector3(0.9, 0, 0.7), new Vector3(0.1, 0, -1.1)];
 const TOOL_SCALE = 0.85;
 
 const WORK: [number, number] = [1.1, 1.9];
@@ -104,28 +98,17 @@ export class RovoAtlassian {
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
     stage.add(this.gate);
-    this.jira = new SystemNode({ kind: "jira" });
+    this.jira = new SystemNode({ kind: 'jira' });
     this.jira.position.copy(JIRA_AT);
     stage.add(this.jira);
-    this.hub = new JiraHub(stage, this.jira, () => [
-      ROVO_GATE,
-      ...[...this.toolsets.values()].flat().map((n) => n.position),
-    ]);
+    this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...[...this.toolsets.values()].flat().map((n) => n.position)]);
     const toward = JIRA_AT.clone().sub(ROVO_GATE).normalize();
     this.accessLine = new Branch(
-      new LineCurve3(
-        ROVO_GATE.clone().addScaledVector(toward, 1.05),
-        JIRA_AT.clone().addScaledVector(toward, -PLATE / 2 - 0.05),
-      ),
+      new LineCurve3(ROVO_GATE.clone().addScaledVector(toward, 1.05), JIRA_AT.clone().addScaledVector(toward, -PLATE / 2 - 0.05)),
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);
-    this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, {
-      name: "Rovo",
-      lineage: "cyan",
-      showLabel: true,
-      status: "waiting",
-    });
+    this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
     this.rovo.drone.fade = 0;
     attachSignal(stage, this.rovo.drone, this.gate);
   }
@@ -141,19 +124,14 @@ export class RovoAtlassian {
     await wait(stage, 0.3);
     // In through the gate, along its line, and into Jira: that's where Rovo works from.
     await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
-    rovo.status = "working";
+    rovo.status = 'working';
     await fly(stage, DroneFlight.to(rovo, JIRA_AT, { speed: 3 }));
     this.inJira = true;
-    this.jira.light = "working";
+    this.jira.light = 'working';
     for (let i = 0; i < 3; i++) await hub.addTask();
     void this.taskFeed();
     while (this.running) {
-      if (
-        this.out < this.crew &&
-        hub.board.length > 0 &&
-        this.freeSlots.length > 0
-      )
-        void this.runJob();
+      if (this.out < this.crew && hub.board.length > 0 && this.freeSlots.length > 0) void this.runJob();
       await wait(stage, 0.6);
     }
   }
@@ -179,20 +157,9 @@ export class RovoAtlassian {
   private async runJob(): Promise<void> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
-    const slot = this.freeSlots.splice(
-      Math.floor(this.random() * this.freeSlots.length),
-      1,
-    )[0];
-    const kinds = [
-      this.pick(CODE_TOOLS),
-      this.pick(DOC_TOOLS),
-      ...(this.random() < 0.5 ? [this.pick(EXTRA_TOOLS)] : []),
-    ];
-    const job: Job = {
-      id: `job-${this.jobs.length + 1}`,
-      spot: slot.clone(),
-      kinds,
-    };
+    const slot = this.freeSlots.splice(Math.floor(this.random() * this.freeSlots.length), 1)[0];
+    const kinds = [this.pick(CODE_TOOLS), this.pick(DOC_TOOLS), ...(this.random() < 0.5 ? [this.pick(EXTRA_TOOLS)] : [])];
+    const job: Job = { id: `job-${this.jobs.length + 1}`, spot: slot.clone(), kinds };
     this.jobs.push(job);
     this.out++;
     this.peakOut = Math.max(this.peakOut, this.out);
@@ -200,23 +167,16 @@ export class RovoAtlassian {
     // Born inside Rovo, full size; it takes a task off Jira's board on its way out.
     const sub = spawnDrone(stage, rovo.position.x, rovo.position.z, {
       name: `Rovo.${++this.subs}`,
-      lineage: "cyan",
+      lineage: 'cyan',
       subAgent: true,
-      status: "working",
+      status: 'working',
     });
     sub.drone.position.y = AT_ROVOS_BODY;
     sub.drone.fade = 0;
     rovo.flash = 1;
     await tween(stage, EMERGE_SECONDS, (t) => (sub.drone.fade = t));
     const task = await hub.takeTask(sub.drone.rig.hover);
-    await fly(
-      stage,
-      DroneFlight.to(sub.drone, slot, {
-        speed: SUB_SPEED,
-        fromHeight: AT_ROVOS_BODY,
-        lift: 0,
-      }),
-    );
+    await fly(stage, DroneFlight.to(sub.drone, slot, { speed: SUB_SPEED, fromHeight: AT_ROVOS_BODY, lift: 0 }));
 
     // It spins up its own tools for this task, and ties them back to Jira.
     const tools = kinds.map((kind, i) => {
@@ -239,18 +199,12 @@ export class RovoAtlassian {
 
     // Work each tool in turn; what it makes comes to the spot and rides the tie home into Jira.
     for (const node of tools) {
-      node.light = "working";
+      node.light = 'working';
       sub.drone.flash = 1;
       await wait(stage, this.between(WORK));
-      await shoot(
-        stage,
-        new LineCurve3(node.position.clone(), slot.clone()),
-        4,
-        undefined,
-        node.kind,
-      );
+      await shoot(stage, new LineCurve3(node.position.clone(), slot.clone()), 4, undefined, node.kind);
       await hub.report(job.id, node.kind);
-      node.light = "off";
+      node.light = 'off';
     }
 
     // The task goes home done; the tools fold away; the sub-agent flies home into Rovo.
@@ -266,14 +220,7 @@ export class RovoAtlassian {
     );
     for (const node of tools) node.dispose();
     this.toolsets.delete(job.id);
-    await fly(
-      stage,
-      DroneFlight.to(sub.drone, rovo.position, {
-        speed: SUB_SPEED,
-        toHeight: AT_ROVOS_BODY,
-        lift: 0,
-      }),
-    );
+    await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, toHeight: AT_ROVOS_BODY, lift: 0 }));
     await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
     sub.despawn();
     rovo.flash = 1;
