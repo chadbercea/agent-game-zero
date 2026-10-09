@@ -28,7 +28,7 @@ export const TWG_SYSTEMS: readonly SystemKind[] = ['jira', 'confluence', 'codese
 /** Docs a copy can write to or read from: Confluence (TWG) or third-party docs (on call). */
 export const DOC_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion'];
 /** Places a copy can read from. */
-export const READ_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion', 'codesearch'];
+export const READ_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion', 'codesearch', 'bitbucket'];
 
 /** Is this a Teamwork Graph app (permanent), or a third-party tool (spawned on call, gone when its issue is done)? */
 export function isTwg(kind: SystemKind): boolean {
@@ -37,9 +37,9 @@ export function isTwg(kind: SystemKind): boolean {
 
 /**
  * How often each task type comes up: biased toward the simple ones (one or
- * two steps), with code common and the long spec loop rare.
+ * two steps), with code the most common and the long spec loop rare.
  */
-export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.28, doc: 0.19, read: 0.19, jira: 0.15, spec: 0.08, slack: 0.11 };
+export const TASK_WEIGHTS: Record<TaskType, number> = { code: 0.34, doc: 0.17, read: 0.18, jira: 0.13, spec: 0.08, slack: 0.1 };
 
 export interface TaskOptions {
   /** The run's source code manager: every code task in a run goes to the same repo. */

@@ -176,7 +176,9 @@ describe('Rovo and Jira, the quarterback', () => {
         const underCopy = copies().some((c) => Math.hypot(c.position.x - o.position.x, c.position.z - o.position.z) < 0.3);
         const atLine = root.children.some((e) => {
           const curve = e instanceof GraphEdge && e.drawn > 0.99 ? e.path : e instanceof Branch && e.drawn > 0.99 ? e.curve : null;
-          return !!curve && (curve.getPoint(1).distanceTo(o.position.clone().setY(0)) < 0.8 || curve.getPoint(0).distanceTo(o.position.clone().setY(0)) < 0.8);
+          // A line meets a node at its edge, or at its plate's edge (the Teamwork Graph's core apps stand on plates).
+          const near = (p: Vector3) => p.distanceTo(o.position.clone().setY(0)) < 1.25;
+          return !!curve && (near(curve.getPoint(1)) || near(curve.getPoint(0)));
         });
         if (!underCopy && !atLine) unprompted++;
       }
@@ -190,6 +192,13 @@ describe('Rovo and Jira, the quarterback', () => {
     // Once everything's done, only the Teamwork Graph apps are still standing.
     const standing = [...scene.systems.placed.keys()];
     for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
+    // The Teamwork Graph's core stands with Jira, prominent: Confluence and Bitbucket, on plates, a size up.
+    for (const kind of ['confluence', 'bitbucket'] as const) {
+      const up = scene.systems.placed.get(kind);
+      expect(up?.plate).toBeDefined();
+      expect(up?.node.scale.x).toBeGreaterThan(1.1);
+    }
+    expect(scene.scm).toBe('bitbucket');
   });
 
   it('code tasks squash-merge into the run\'s one repo, and its trunk keeps a commit per merge', async () => {

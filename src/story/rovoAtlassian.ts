@@ -12,7 +12,7 @@ import { Padlock } from '../primitives/gate/Padlock';
 import type { Drone } from '../primitives/drone/Drone';
 import { Job as JobAnimation } from '../primitives/job/Job';
 import { RepoTrunk } from '../primitives/job/RepoTrunk';
-import { hasJob, SCM_KINDS, type ScmKind, type SystemKind } from '../primitives/node/emblems';
+import { hasJob, type ScmKind, type SystemKind } from '../primitives/node/emblems';
 import { NODE_SCALE, SystemNode } from '../primitives/node/SystemNode';
 import { PAD_TOP } from '../primitives/pad/Pad';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
@@ -22,7 +22,7 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { JiraHub, PLATE } from './jiraHub';
 import { makeTask, type Step, type Task } from './rovoTasks';
-import { type PlacedSystem, SystemsOnGrid } from './rovoSystems';
+import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
 import { SLACK_AT, SlackHub } from './rovoSlack';
@@ -113,7 +113,7 @@ export class RovoAtlassian {
   readonly tasks: TaskRun[] = [];
   /** The systems on the grid. */
   readonly systems: SystemsOnGrid;
-  /** This run's source code manager: every code task goes to the same repo. */
+  /** The repo every code task goes to: Bitbucket (on the Teamwork Graph, standing from the start of work). */
   readonly scm: ScmKind;
   /** The repo's trunk at the SCM: one commit per merge (its final state). */
   readonly trunk = new RepoTrunk();
@@ -152,7 +152,8 @@ export class RovoAtlassian {
     this.random = seededRandom(seed);
     this.codeCrew = 1 + Math.floor(this.random() * 3);
     this.loopCrew = 1 + Math.floor(this.random() * 3);
-    this.scm = SCM_KINDS[Math.floor(this.random() * SCM_KINDS.length)];
+    // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
+    this.scm = 'bitbucket';
     this.gate.position.copy(ROVO_GATE);
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
@@ -184,7 +185,7 @@ export class RovoAtlassian {
     // The repo's trunk stands on the SCM node's slab, at its right-hand corner, and is only there while the SCM is:
     // a third-party SCM goes when its tasks are done and takes its trunk with it (it keeps its commits for next time).
     const repo = PLACES[this.scm] as Vector3;
-    this.trunk.position.set(repo.x + 0.3, PAD_TOP * NODE_SCALE, repo.z - 0.3);
+    this.trunk.position.set(repo.x + 0.3 * TWG_SCALE, PAD_TOP * NODE_SCALE * TWG_SCALE, repo.z - 0.3 * TWG_SCALE);
     stage.add(this.trunk);
     stage.onTick((dt) => {
       const up = this.systems.placed.get(this.scm);
@@ -248,6 +249,9 @@ export class RovoAtlassian {
     await flight;
     this.inJira = true;
     this.jira.light = 'working';
+    // Rovo in Jira: the Teamwork Graph's core comes up around it, for good. Confluence, then Bitbucket.
+    await this.systems.establish('confluence');
+    await this.systems.establish('bitbucket');
     await wait(stage, 0.6);
     // Work starts: the kanban board shows up.
     await hub.showBoard();

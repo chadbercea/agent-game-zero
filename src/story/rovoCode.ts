@@ -8,6 +8,7 @@ import { SystemNode } from '../primitives/node/SystemNode';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
+import { TWG_PLATE } from './rovoSystems';
 import { type OutputLine, shipOutput } from './shipOutput';
 import { tween } from './timeline';
 
@@ -22,10 +23,10 @@ import { tween } from './timeline';
 export const SCM_AT = new Vector3(7, 0, -5);
 /** Lanes, side by side along z; the middle one runs straight into the repo. */
 export const LANE_Z = [-5, -3, -7] as const;
-const TERMINAL_X = 4.5;
-const WORKTREE_X = 2;
-/** Where the outer lanes turn to join the middle one, just before the repo. */
-const MERGE_X = 5.75;
+const TERMINAL_X = 4;
+const WORKTREE_X = 1.5;
+/** Where the outer lanes turn to join the middle one, just before the repo's plate. */
+const MERGE_X = 5.3;
 export const ASSEMBLER_AT = new Vector3(9.5, 0, -5);
 const BELT_FROM = new Vector3(10.4, 0, -5);
 const BELT_LENGTH = 2.2;
@@ -33,6 +34,8 @@ export const PORTAL_AT = new Vector3(13.2, 0, -5);
 /** The tie from Jira comes into the repo from this side, leaving the others to the lanes and the output. */
 export const SCM_TIE_SIDE = new Vector3(0, 0, 1);
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
+/** The repo stands on a Teamwork Graph plate: lines meet it at the plate's edge. */
+const REPO_EDGE = TWG_PLATE / 2 + 0.05;
 const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
 const CHECK_IN_SPEED = 6;
 
@@ -72,7 +75,7 @@ export class CodeLane {
       new LineCurve3(this.spot.clone().setX(WORKTREE_X + HALF_NODE), terminalAt.clone().setX(TERMINAL_X - HALF_TERMINAL)),
       NEUTRAL.packet,
     );
-    this.toRepo = new Branch(roundedPath(trimPolyline(intoRepo, HALF_TERMINAL, HALF_NODE), BEND_RADIUS), NEUTRAL.packet);
+    this.toRepo = new Branch(roundedPath(trimPolyline(intoRepo, HALF_TERMINAL, REPO_EDGE), BEND_RADIUS), NEUTRAL.packet);
     this.terminal = new Terminal({ seed });
     this.terminal.position.copy(terminalAt);
     this.worktree = new SystemNode({ kind: 'worktree' });
@@ -129,7 +132,7 @@ export class CodeLane {
 
 /** The output, built the first time code merges: the line draws out of the repo, then the assembler, belt and portal appear. */
 export function buildOutput(stage: SceneHost): Promise<OutputLine> {
-  const route: Curve<Vector3> = new LineCurve3(SCM_AT.clone().setX(SCM_AT.x + HALF_NODE), ASSEMBLER_AT.clone().setX(ASSEMBLER_AT.x - 0.45));
+  const route: Curve<Vector3> = new LineCurve3(SCM_AT.clone().setX(SCM_AT.x + REPO_EDGE), ASSEMBLER_AT.clone().setX(ASSEMBLER_AT.x - 0.45));
   return shipOutput(stage, { route, assembler: ASSEMBLER_AT, beltFrom: BELT_FROM, beltLength: BELT_LENGTH, beltSpeed: 2.2, portal: PORTAL_AT });
 }
 
