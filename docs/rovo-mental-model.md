@@ -15,7 +15,7 @@ The reference for the **Rovo on the Atlassian Grid** story (`src/story/rovoAtlas
 
 ## Systems
 
-- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. Its core, **Jira, Confluence and Bitbucket**, is prominent and persistent: it comes up as Rovo gets into Jira, each on a plate, a size up. Other TWG apps (Code search) are **permanent** once called.
+- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. Its core, **Jira, Confluence and Bitbucket**, is prominent and persistent: it comes up as Rovo gets into Jira, each on a plate, a size up. Code search hangs off Bitbucket (it indexes the repositories): it comes up beside Bitbucket, its line into Bitbucket, and stays once called.
 - **Bitbucket is the repo** in this story: all the code activity is around it.
 - **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through connectors and **despawn when the Jira issue is done**.
 - **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway.

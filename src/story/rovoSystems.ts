@@ -1,10 +1,11 @@
-import { Group, MeshStandardMaterial, Vector3 } from 'three';
+import { Group, LineCurve3, MeshStandardMaterial, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { NODE_FOOTPRINT } from '../core/grid';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
-import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
+import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
 import { Product } from '../primitives/product/Product';
+import { shoot } from './beam';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
@@ -26,6 +27,8 @@ export interface PlacedSystem {
   readonly writeBacks: Product[];
   /** The Teamwork Graph's core apps stand on a plate of their own, a size up (see `establish`). */
   readonly plate?: Group;
+  /** A system that hangs off another (Code search off Bitbucket): its Graph Line into that one, instead of a tie to Jira. */
+  readonly link?: { to: SystemKind; edge: GraphEdge };
   users: number;
 }
 
@@ -57,7 +60,30 @@ export class SystemsOnGrid {
     private readonly arrive: Partial<Record<SystemKind, Vector3>> = {},
     /** Laid-out routes from Jira to systems (shortest, each its own): ties run along these where given. */
     private readonly routes: Partial<Record<SystemKind, readonly Vector3[]>> = {},
-  ) {}
+    /** Systems that hang off another rather than Jira (Code search indexes Bitbucket's repositories). */
+    private readonly via: Partial<Record<SystemKind, SystemKind>> = {},
+  ) {
+    stage.onTick((dt) => {
+      for (const up of this.placed.values()) up.link?.edge.update(dt);
+    });
+  }
+
+  /**
+   * A step at `kind` reports: what rides home (`product`, or plain status if
+   * none) goes along its Graph Line to Jira; from a system that hangs off
+   * another, it rides into that one first and on along its line.
+   */
+  async report(kind: SystemKind, product?: SystemKind): Promise<void> {
+    const up = this.placed.get(kind);
+    if (!up) return;
+    if (up.link) {
+      await shoot(this.stage, up.link.edge.path, 5, undefined, product);
+      const parent = this.placed.get(up.link.to);
+      if (parent) await this.hub.report(parent.tie, product);
+      return;
+    }
+    await this.hub.report(up.tie, product);
+  }
 
   /** A task needs `kind`: bring it up if it isn't (and tie it to Jira), and count the task as a user. */
   async call(kind: SystemKind): Promise<PlacedSystem> {
@@ -154,8 +180,23 @@ export class SystemsOnGrid {
       // A third-party tool plugs into the Teamwork Graph through a connector first.
       const connector = permanent ? undefined : this.plug(at);
       if (connector) await tween(this.stage, 0.25, (t) => connector.scale.setScalar(Math.max(0.001, easeOutBack(t))));
-      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true, this.routes[kind]);
-      const up: PlacedSystem = { kind, node, permanent, tie, connector, writeBacks: [], users: 0 };
+      const parent = this.via[kind] ? this.placed.get(this.via[kind]!) : undefined;
+      let link: PlacedSystem['link'];
+      if (parent) {
+        // It hangs off its parent: its line reaches straight into the parent's plate (or node).
+        const edgeOf = (parent.plate ? TWG_PLATE / 2 : NODE_FOOTPRINT / 2) + 0.05;
+        const toward = parent.node.position.clone().sub(at).normalize();
+        const edge = new GraphEdge(
+          new LineCurve3(at.clone().addScaledVector(toward, NODE_FOOTPRINT / 2 + 0.1), parent.node.position.clone().addScaledVector(toward, -edgeOf)),
+        );
+        edge.drawn = 0;
+        this.stage.add(edge);
+        await tween(this.stage, 0.6, (t) => (edge.drawn = t));
+        link = { to: parent.kind, edge };
+      } else {
+        await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true, this.routes[kind]);
+      }
+      const up: PlacedSystem = { kind, node, permanent, tie, connector, link, writeBacks: [], users: 0 };
       this.placed.set(kind, up);
       this.arriving.delete(kind);
       return up;
