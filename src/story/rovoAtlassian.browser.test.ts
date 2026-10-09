@@ -4,7 +4,10 @@ import { Branch } from '../primitives/branch/Branch';
 import { Drone } from '../primitives/drone/Drone';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
-import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, ROVO_START, RovoAtlassian, SLOTS } from './rovoAtlassian';
+import { JIRA_AT, PLACES, ROVO_GATE, ROVO_START, RovoAtlassian } from './rovoAtlassian';
+import type { SystemKind } from '../primitives/node/emblems';
+import { SystemNode } from '../primitives/node/SystemNode';
+import { TASK_TYPES } from './rovoTasks';
 
 function testStage(fps = 30) {
   const DT = 1 / fps;
@@ -55,7 +58,7 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(onGrid / (N + 1)).toBeGreaterThan(0.8);
   });
 
-  it('every line on the grid runs along it: tool lines and ties too, and the tool lines go when the work is done', async () => {
+  it('every line runs along the grid, never diagonal', async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const offGrid = (curve: Curve<Vector3>) => {
@@ -68,10 +71,8 @@ describe('Rovo and Jira, the quarterback', () => {
     };
     let lines = 0;
     let bad = 0;
-    let maxSpokes = 0;
     void scene.start();
     await run(60, () => {
-      maxSpokes = Math.max(maxSpokes, scene.spokes);
       for (const o of root.children) {
         const curve = o instanceof Branch ? o.curve : o instanceof GraphEdge ? o.path : null;
         if (!curve) continue;
@@ -80,14 +81,11 @@ describe('Rovo and Jira, the quarterback', () => {
       }
     });
     scene.stop();
-    await run(25);
     expect(lines).toBeGreaterThan(0);
-    expect(maxSpokes).toBeGreaterThanOrEqual(2);
     expect(bad).toBe(0);
-    expect(scene.spokes).toBe(0);
   });
 
-  it('comes in progressively: Rovo, then the gate as it flies over and authenticates, then Jira, then work, then the board', async () => {
+  it('comes in progressively: Rovo, the gate, auth, the line, then Jira, then work, then the board', async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const order: string[] = [];
@@ -97,13 +95,14 @@ describe('Rovo and Jira, the quarterback', () => {
       mark('gate', scene.gate.visible);
       mark('at gate', scene.rovo.drone.position.distanceTo(ROVO_GATE) < 1e-3);
       mark('open', scene.gate.state === 'open');
+      mark('line', scene.accessLine.drawn > 0.99);
       mark('jira', scene.jira.visible);
       mark('working', scene.inJira);
       mark('board', scene.hub.kanban.visible);
       mark('task', scene.hub.board.length > 0);
     });
     scene.stop();
-    expect(order).toEqual(['gate', 'at gate', 'open', 'jira', 'working', 'board', 'task']);
+    expect(order).toEqual(['gate', 'at gate', 'open', 'line', 'jira', 'working', 'board', 'task']);
     expect(scene.gate.scale.x).toBeCloseTo(1);
     expect(scene.jira.scale.x).toBeCloseTo(1.35);
   });
@@ -125,41 +124,74 @@ describe('Rovo and Jira, the quarterback', () => {
     scene.stop();
   });
 
-  it('sub-agents spawn out of Rovo, take tasks, spin up their own (varied) tools, and every task comes back done in Jira', async () => {
+  it('copies of Rovo come out of Rovo, run their tasks step by step, working only over real nodes, and every task comes back done', async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const seen = new Set<Object3D>();
     const births: number[] = [];
     let maxSubs = 0;
+    let offNode = 0;
     void scene.start();
-    await run(120, () => {
+    await run(150, () => {
       for (const o of root.children) {
         if (!(o instanceof Drone) || !o.subAgent || seen.has(o)) continue;
         seen.add(o);
-        // Born inside Rovo (in Jira), not on the floor.
         births.push(o.rig.hover.getWorldPosition(new Vector3()).distanceTo(scene.rovo.drone.rig.hover.getWorldPosition(new Vector3())));
         expect(o.scale.x).toBeCloseTo(0.58);
       }
       maxSubs = Math.max(maxSubs, root.children.filter((o) => o instanceof Drone && o.subAgent && o.visible).length);
+      // A copy at work is always over the node it works: never over empty floor.
+      for (const [drone, node] of scene.working) if (Math.hypot(drone.position.x - node.position.x, drone.position.z - node.position.z) > 0.05) offNode++;
     });
     scene.stop();
-    await run(25);
+    await run(40);
     expect(births.length).toBeGreaterThan(2);
     for (const d of births) expect(d).toBeLessThan(0.3);
     expect(maxSubs).toBeLessThanOrEqual(scene.crew);
-    // Each job spun up a code tool, a docs tool, and sometimes a third, on a free spot; the sets vary.
-    for (const job of scene.jobs) {
-      expect(CODE_TOOLS).toContain(job.kinds[0]);
-      expect(DOC_TOOLS).toContain(job.kinds[1]);
-      if (job.kinds[2]) expect(EXTRA_TOOLS).toContain(job.kinds[2]);
-      expect(SLOTS.some((s) => s.distanceTo(job.spot) < 1e-6)).toBe(true);
-    }
-    expect(new Set(scene.jobs.map((j) => j.kinds.join())).size).toBeGreaterThan(1);
-    // Every task came home done to Jira; toolsets and ties are gone once the work is over.
-    expect(scene.hub.done).toBe(scene.jobs.length);
-    expect(scene.toolsets.size).toBe(0);
-    expect(scene.hub.ties.size).toBe(0);
+    expect(offNode).toBe(0);
+    for (const t of scene.tasks) expect(TASK_TYPES).toContain(t.task.type);
+    // Every task ran all its steps and came back done to Jira.
+    for (const t of scene.tasks) expect(t.done).toBe(t.task.steps.length);
+    expect(scene.hub.done).toBe(scene.tasks.length);
     expect(scene.out).toBe(0);
+    expect(scene.working.size).toBe(0);
+  });
+
+  it('systems come up on call: the line draws first, then the node; Teamwork Graph apps stay, third-party tools go when done', async () => {
+    const { root, stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 5);
+    let nodeBeforeLine = 0;
+    const appeared = new Set<SystemKind>();
+    void scene.start();
+    await run(150, () => {
+      for (const o of root.children) {
+        if (!(o instanceof SystemNode) || o.kind === 'jira' || o.scale.x < 0.01) continue;
+        appeared.add(o.kind);
+        const line = root.children.some((e) => e instanceof GraphEdge && e.drawn > 0.99 && e.path.getPoint(1).distanceTo(o.position) < 0.8);
+        if (!line) nodeBeforeLine++;
+      }
+    });
+    scene.stop();
+    await run(40);
+    expect(appeared.size).toBeGreaterThan(1);
+    expect(nodeBeforeLine).toBe(0);
+    for (const kind of appeared) expect(PLACES[kind]).toBeDefined();
+    // Once everything's done, only the Teamwork Graph apps are still standing.
+    const standing = [...scene.systems.placed.keys()];
+    for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
+  });
+
+  it('code tasks squash-merge into the run\'s one repo, and its trunk keeps a commit per merge', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    void scene.start();
+    await run(150);
+    scene.stop();
+    await run(40);
+    const code = scene.tasks.filter((t) => t.task.type === 'code');
+    expect(code.length).toBeGreaterThan(0);
+    for (const t of code) expect(t.task.steps[0].system).toBe(scene.scm);
+    expect(scene.trunk.count).toBe(code.length);
   });
 
   it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {
@@ -171,38 +203,6 @@ describe('Rovo and Jira, the quarterback', () => {
     scene.stop();
     expect(seen).toEqual([true, true, true]);
     for (const c of scene.hub.kanban.columns) expect(c.length).toBeLessThanOrEqual(4);
-    // Done doesn't pile up: finished cards slide off.
     expect(scene.hub.kanban.columns[2].length).toBeLessThan(scene.hub.done);
-  });
-
-  it("a tool's name grows in and folds away with it: never more name than tool", async () => {
-    const { stage, run } = testStage();
-    const scene = new RovoAtlassian(stage, 3);
-    let seen = 0;
-    let ahead = false;
-    void scene.start();
-    await run(40, () => {
-      for (const tools of scene.toolsets.values())
-        for (const n of tools) {
-          seen++;
-          if (n.labelOpacity > n.scale.x / 0.85 + 0.05) ahead = true;
-        }
-    });
-    scene.stop();
-    expect(seen).toBeGreaterThan(0);
-    expect(ahead).toBe(false);
-  });
-
-  it('never puts two toolsets on the same spot at once', async () => {
-    const { stage, run } = testStage();
-    const scene = new RovoAtlassian(stage, 7);
-    let clash = false;
-    void scene.start();
-    await run(90, () => {
-      const spots = [...scene.toolsets.keys()].map((id) => scene.jobs.find((j) => j.id === id)!.spot);
-      for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) if (spots[i].distanceTo(spots[j]) < 1e-6) clash = true;
-    });
-    scene.stop();
-    expect(clash).toBe(false);
   });
 });
