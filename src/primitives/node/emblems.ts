@@ -19,13 +19,16 @@ export type JobKind = 'figma' | 'github' | 'notion';
 export type AtlassianKind = 'codesearch' | 'confluence' | 'jira' | 'bitbucket';
 /** Third-party trackers: where a ticket lives outside Atlassian. No job animation. */
 export type TrackerKind = 'linear';
+/** Third-party docs outside Atlassian and Notion. */
+export type DocsKind = 'gdocs';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind | TrackerKind;
+export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind;
 
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
 export const ATLASSIAN_KINDS: readonly AtlassianKind[] = ['codesearch', 'confluence', 'jira', 'bitbucket'];
 export const TRACKER_KINDS: readonly TrackerKind[] = ['linear'];
-export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS];
+export const DOCS_KINDS: readonly DocsKind[] = ['gdocs'];
+export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS];
 
 /** Does this system have a job animation? */
 export function hasJob(kind: SystemKind): kind is JobKind {
@@ -41,6 +44,7 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   jira: 'Jira',
   bitbucket: 'Bitbucket',
   linear: 'Linear',
+  gdocs: 'Google Docs',
 };
 
 export interface EmblemMaterials {
@@ -116,6 +120,19 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
       for (let r = 0; r < n; r++) place(solid(card, m.shell), -0.12 + c * 0.12, 0.09 - r * 0.075, 0.005);
     });
     for (let c = 0; c < 3; c++) place(solid(new BoxGeometry(0.1, 0.012, 0.012), m.shell), -0.12 + c * 0.12, 0.135, 0.005);
+  } else if (kind === 'gdocs') {
+    // A shared doc: one upright page with its top-right corner folded over, ruled with lines.
+    const w = 0.3;
+    const h = 0.38;
+    const fold = 0.09;
+    place(solid(new BoxGeometry(w - fold, h, 0.014), m.shell), -fold / 2, 0);
+    place(solid(new BoxGeometry(fold, h - fold, 0.014), m.shell), w / 2 - fold / 2, -fold / 2);
+    const corner = place(solid(new BoxGeometry(fold * 1.1, fold * 1.1, 0.016), m.graphite), w / 2 - fold / 2, h / 2 - fold / 2, 0.004);
+    corner.rotation.z = Math.PI / 4;
+    corner.scale.set(0.7, 0.7, 1);
+    for (let i = 0; i < 4; i++) {
+      place(solid(new BoxGeometry(i === 3 ? 0.12 : 0.2, 0.022, 0.012), m.graphite), i === 3 ? -0.04 : 0, 0.07 - i * 0.07, 0.012);
+    }
   } else if (kind === 'linear') {
     // Tracked work, third-party: a disc crossed by diagonal stripes, in the spirit of Linear's mark.
     const r = 0.21;

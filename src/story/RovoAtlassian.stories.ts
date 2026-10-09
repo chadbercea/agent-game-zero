@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
-import { ROVO_GATE, RovoAtlassian } from './rovoAtlassian';
+import { JIRA_AT, ROVO_GATE, RovoAtlassian } from './rovoAtlassian';
 
 const meta: Meta = {
   title: 'Story Narrative/Rovo on the Atlassian Grid',
@@ -9,20 +9,22 @@ const meta: Meta = {
 export default meta;
 
 /**
- * Rovo working its Atlassian grid. Rovo floats in dead center, on its gate,
- * and gets access (yellow, then green). Then it keeps its system busy: tools
- * come up as it calls them (Jira, Confluence, Bitbucket, Code search, laid
- * out by the grid guide, their lines and grid drawing in and fading); one to
- * three sub-agents at a time fly straight out, each works a tertiary of its
- * own off its tool, and the tool's product rides its line back to Rovo.
- * Seeded: `seed` changes the run. No captions.
+ * Rovo and Jira, the quarterback. Rovo floats in dead center on its gate and
+ * authenticates (yellow, then green), then moves into Jira and works from
+ * there: Jira is the system of record. Tasks keep coming onto Jira's board;
+ * one to three sub-agents spawn out of Rovo, each takes a task, flies to an
+ * open spot and spins up its own tools for it (Bitbucket or GitHub,
+ * Confluence or Google Docs, sometimes Figma or Code search), tied back to
+ * Jira. The work rides the tie home, the task comes back done, the tools fold
+ * away. Seeded: `seed` changes the run. No captions.
  */
 export const Working: StoryObj<{ seed: number }> = {
   argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },
   args: { seed: 3 },
   render: (args) => {
-    const { root, stage } = specimenStage({ viewSize: 13, focusY: 0.6 });
-    stage.centerOn(ROVO_GATE.clone().setY(0.6));
+    const { root, stage } = specimenStage({ viewSize: 18, focusY: 0.6 });
+    // Framed halfway between the gate, where Rovo starts, and Jira, where it works: both sit near the middle.
+    stage.centerOn(ROVO_GATE.clone().lerp(JIRA_AT, 0.5).setY(0.6));
     const scene = new RovoAtlassian(stage, args.seed);
     void scene.start();
     Object.assign(window, { __story: scene });
