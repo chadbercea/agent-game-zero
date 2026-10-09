@@ -30,6 +30,17 @@ describe('Rovo tasks', () => {
     for (let i = 0; i < 200; i++) expect(makeTask(random, { scm: 'github', without: ['slack'] }).type).not.toBe('slack');
   });
 
+  it('Confluence carries the most work, Figma comes up often (often through MCP), Notion rarely', () => {
+    const steps = many(9, 1000).flatMap((t) => t.steps).filter((st) => st.action !== 'code');
+    const count = (kind: string) => steps.filter((st) => st.system === kind).length;
+    const others = ['figma', 'gdocs', 'notion', 'codesearch', 'bitbucket', 'jira', 'slack'];
+    for (const kind of others) expect(count('confluence')).toBeGreaterThan(count(kind));
+    expect(count('figma')).toBeGreaterThan(count('notion') * 3);
+    expect(count('notion') / steps.length).toBeLessThan(0.05);
+    expect(steps.some((st) => st.system === 'figma' && st.mcp)).toBe(true);
+    expect(steps.some((st) => st.system === 'figma' && !st.mcp)).toBe(true);
+  });
+
   it('Teamwork Graph apps are permanent; third-party tools are not', () => {
     for (const kind of ['jira', 'confluence', 'bitbucket', 'codesearch'] as const) expect(isTwg(kind)).toBe(true);
     for (const kind of ['github', 'gitlab', 'gdocs', 'notion', 'figma', 'slack'] as const) expect(isTwg(kind)).toBe(false);
