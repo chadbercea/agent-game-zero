@@ -65,12 +65,13 @@ describe('Rovo and Jira, the quarterback', () => {
     }
   });
 
-  it('crew: always 1–3 coders working branches, up to 2 more in the mini systems, 5 at most', () => {
+  it('crew: always 1–3 coders working branches, 1–2 more in the mini systems, 5 at most', () => {
     const coders = new Set<number>();
     for (let seed = 1; seed <= 40; seed++) {
       const scene = new RovoAtlassian(testStage().stage, seed);
       expect(scene.codeCrew).toBeGreaterThanOrEqual(1);
       expect(scene.codeCrew).toBeLessThanOrEqual(3);
+      expect(scene.loopCrew).toBeGreaterThanOrEqual(1);
       expect(scene.loopCrew).toBeLessThanOrEqual(2);
       expect(scene.crew).toBeLessThanOrEqual(MAX_CREW);
       coders.add(scene.codeCrew);

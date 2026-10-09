@@ -142,7 +142,7 @@ export class RovoAtlassian {
   readonly hub: JiraHub;
   /** The line from the gate into Jira: Rovo's way in. */
   readonly accessLine: Branch;
-  /** Rovo's crew this run (seeded): 1–3 coders (one per lane, always working branches) and 0–2 in the mini systems, 5 at most. */
+  /** Rovo's crew this run (seeded): 1–3 coders (one per lane, always working branches) and 1–2 in the mini systems, 5 at most. */
   readonly codeCrew: number;
   readonly loopCrew: number;
   /** The coding lanes in use (up to three), by lane index. */
@@ -197,7 +197,7 @@ export class RovoAtlassian {
   ) {
     this.random = seededRandom(seed);
     this.codeCrew = 1 + Math.floor(this.random() * 3);
-    this.loopCrew = Math.floor(this.random() * (Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew) + 1));
+    this.loopCrew = 1 + Math.floor(this.random() * Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew));
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
     this.scm = 'bitbucket';
     this.gate.position.copy(ROVO_GATE);
