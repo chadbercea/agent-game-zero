@@ -43,6 +43,8 @@ export interface GateSystemPlan {
   gate: Vector3;
   kinds: readonly SystemKind[];
   avoid?: readonly Vector3[];
+  /** Closest a node may sit to the center (default: clears a gate's pad). Bigger for a hub on a plate. */
+  near?: number;
 }
 
 export interface SystemsLayout {
@@ -158,7 +160,7 @@ function layoutOnce(
   gateway?: SharedRun,
 ): SystemsLayout {
   const random = seededRandom(seed);
-  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid }));
+  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid, near: plan.near }));
   const gates = placers.map((p) => p.center);
   const home = new Map<SystemKind, number>();
   plans.forEach((plan, g) => plan.kinds.forEach((kind) => home.set(kind, g)));

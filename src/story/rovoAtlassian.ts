@@ -5,7 +5,7 @@ import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../cor
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
@@ -25,9 +25,10 @@ import { shoot } from './beam';
 import { JiraHub, PLATE } from './jiraHub';
 import { makeTask, type Step, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
-import { ASSEMBLER_AT, buildOutput, CodeLane, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
+import { ASSEMBLER_AT, buildOutput, CodeLane, LANE_Z, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
 import { SLACK_AT, SlackHub } from './rovoSlack';
+import { layoutSystems, type SystemsLayout, TEAMWORK_LINKS } from './systemLayout';
 import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
@@ -36,30 +37,60 @@ export const ROVO_GATE = new Vector3(0, 0, 0);
 export const STORY_CENTER = new Vector3(0.9, 0.6, -1.4);
 /** The user's terminal: where a copy updates the user, just below Jira, clear of Slack's line and the gate. */
 export const USER_TERMINAL_AT = new Vector3(-1, 0, 6);
-/** Where a copy reading Figma through MCP builds its terminal (the MCP client): beside Figma along the grid. */
-export const MCP_AT = new Vector3(3.5, 0, 8);
 /** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
 export const JIRA_AT = new Vector3(-3, 0, 3);
-/**
- * Where each system stands when a task first calls it. Mini systems (docs,
- * reading, design) gather around Jira on the left; the code side is on the
- * open right past the gate. Every place is on the grid and clear of Rovo
- * hovering over Jira.
- */
-export const PLACES: Partial<Record<SystemKind, Vector3>> = {
-  confluence: new Vector3(-7, 0, 3),
-  codesearch: new Vector3(-3, 0, 7),
-  figma: new Vector3(1, 0, 8),
-  gdocs: new Vector3(-7, 0, -1),
-  notion: new Vector3(-7, 0, 7),
-  github: SCM_AT,
-  bitbucket: SCM_AT,
-  gitlab: SCM_AT,
-};
+/** The code side's systems stand at the repo's place (see rovoCode). */
+const CODE_PLACES: Partial<Record<SystemKind, Vector3>> = { github: SCM_AT, bitbucket: SCM_AT, gitlab: SCM_AT };
+/** The mini systems: laid out around Jira from the seed by the house layout rules (systemLayout). */
+export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'codesearch', 'gdocs', 'notion'];
+/** How close a mini system may stand to Jira: clear of Jira's plate and of a plate of its own. */
+const MINI_NEAR = 3.5;
+/** How far an MCP terminal stands from Figma, along the grid. */
+const MCP_OUT = 2.5;
+
+/** Everything fixed on the grid that the mini systems and their lines keep clear of. */
+function keepClear(): Vector3[] {
+  return [
+    // The gate and the corner of Rovo's way in (its access line).
+    ROVO_GATE,
+    new Vector3(0, 0, JIRA_AT.z),
+    USER_TERMINAL_AT,
+    // Slack's line up from Jira, through its gateway.
+    new Vector3(JIRA_AT.x, 0, -1),
+    new Vector3(JIRA_AT.x, 0, -4),
+    SLACK_AT,
+    // The code side.
+    ...LANE_Z.map((z) => new Vector3(1.5, 0, z)),
+    SCM_AT,
+  ];
+}
+
+/** The mini systems' layout for a seed; a seed that boxes a system in hands over to a further seed (still the same map every time). */
+function layMiniSystems(avoid: Vector3[], seed: number): SystemsLayout {
+  for (let k = 0; ; k++) {
+    try {
+      // The seed also picks how far out the ring starts, so maps vary more than the aim alone allows.
+      const near = MINI_NEAR + seededRandom(seed * 7 + k)() * 1;
+      return layoutSystems([{ gate: JIRA_AT, kinds: MINI_SYSTEMS, avoid, near }], TEAMWORK_LINKS, seed + k * 101);
+    } catch (e) {
+      if (k >= 20) throw e;
+    }
+  }
+}
+
+/** Where an MCP terminal goes for Figma at `figma`: straight out along the grid, the way with the most room. */
+function mcpSpot(figma: Vector3, others: readonly Vector3[], route: readonly Vector3[]): Vector3 {
+  const ways = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)];
+  const room = (spot: Vector3) =>
+    Math.min(...others.map((o) => o.distanceTo(spot)), distanceToPolyline(spot.x, spot.z, route as Vector3[]) * 2);
+  return ways.map((w) => figma.clone().addScaledVector(w, MCP_OUT)).sort((a, b) => room(b) - room(a))[0];
+}
 
 const WORK: [number, number] = [1.1, 1.9];
+/** Emblems sway slowly at idle, like a system map's (SystemMap). */
+const SWAY = 0.35;
 /** A coder only takes code tasks. */
 const NOT_CODE = TASK_TYPES.filter((t) => t !== 'code');
 /** Little cubes a deploy sends down the output line: two merges fill the assembler's 2 × 2 × 2. */
@@ -111,7 +142,7 @@ export class RovoAtlassian {
   readonly hub: JiraHub;
   /** The line from the gate into Jira: Rovo's way in. */
   readonly accessLine: Branch;
-  /** Rovo's crew this run (seeded): 1–3 coders (one per lane, always working branches) and 0–2 in the mini systems, 5 at most. */
+  /** Rovo's crew this run (seeded): 1–3 coders (one per lane, always working branches) and 1–2 in the mini systems, 5 at most. */
   readonly codeCrew: number;
   readonly loopCrew: number;
   /** The coding lanes in use (up to three), by lane index. */
@@ -132,6 +163,10 @@ export class RovoAtlassian {
   readonly slack: SlackHub;
   /** The user's terminal, where a copy reports back (once a task first needs it). */
   terminal?: Terminal;
+  /** Where each system stands this run: the mini systems laid out from the seed, the code side fixed. */
+  readonly places: Partial<Record<SystemKind, Vector3>>;
+  /** Where a copy reading Figma through MCP builds its terminal (the MCP client), beside Figma. */
+  readonly mcpAt: Vector3;
   /** Times a copy has updated the user's terminal. */
   userReports = 0;
   /** Reads through Figma's MCP server so far, and the MCP client terminal while one is up. */
@@ -162,7 +197,7 @@ export class RovoAtlassian {
   ) {
     this.random = seededRandom(seed);
     this.codeCrew = 1 + Math.floor(this.random() * 3);
-    this.loopCrew = Math.floor(this.random() * (Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew) + 1));
+    this.loopCrew = 1 + Math.floor(this.random() * Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew));
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
     this.scm = 'bitbucket';
     this.gate.position.copy(ROVO_GATE);
@@ -192,10 +227,28 @@ export class RovoAtlassian {
       this.random,
     );
     this.slack = new SlackHub(stage, new Vector3(JIRA_AT.x, 0, JIRA_AT.z - PLATE / 2 - 0.05), this.random);
-    this.systems = new SystemsOnGrid(stage, this.hub, PLACES, { github: SCM_TIE_SIDE, bitbucket: SCM_TIE_SIDE, gitlab: SCM_TIE_SIDE });
+    // The mini systems around Jira, laid out from the seed by the house rules: aimed at their partners, the seed
+    // swinging each within its cone, each in the closest spot that fits, with its own shortest line to Jira.
+    const fixed = keepClear();
+    const layout = layMiniSystems(fixed, seed);
+    const [map] = layout.maps;
+    const routes: Partial<Record<SystemKind, readonly Vector3[]>> = {};
+    this.places = { ...CODE_PLACES };
+    MINI_SYSTEMS.forEach((kind, i) => {
+      this.places[kind] = map.spots[i];
+      routes[kind] = map.routes[i];
+    });
+    this.mcpAt = mcpSpot(map.spots[MINI_SYSTEMS.indexOf('figma')], [...fixed, JIRA_AT, ...map.spots], routes.figma ?? []);
+    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: SCM_TIE_SIDE, bitbucket: SCM_TIE_SIDE, gitlab: SCM_TIE_SIDE }, routes);
+    let clock = 0;
+    stage.onTick((dt) => {
+      clock += dt;
+      [...this.systems.placed.values()].forEach((up, i) => (up.node.emblem.rotation.y = FACE_CAMERA + Math.sin(clock * 0.5 + i) * SWAY));
+      this.slack.node.emblem.rotation.y = FACE_CAMERA + Math.sin(clock * 0.5 + 7) * SWAY;
+    });
     // The repo's trunk stands on the SCM node's slab, at its right-hand corner, and is only there while the SCM is:
     // a third-party SCM goes when its tasks are done and takes its trunk with it (it keeps its commits for next time).
-    const repo = PLACES[this.scm] as Vector3;
+    const repo = SCM_AT;
     this.trunk.position.set(repo.x + 0.3 * TWG_SCALE, PAD_TOP * NODE_SCALE * TWG_SCALE, repo.z - 0.3 * TWG_SCALE);
     stage.add(this.trunk);
     stage.onTick((dt) => {
@@ -392,7 +445,7 @@ export class RovoAtlassian {
         continue;
       }
       // The copy goes first; the system comes up for it when it gets there (if it isn't up already).
-      const at = step.system === 'jira' ? JIRA_AT : (this.systems.placed.get(step.system)?.node.position ?? (PLACES[step.system] as Vector3));
+      const at = step.system === 'jira' ? JIRA_AT : (this.systems.placed.get(step.system)?.node.position ?? (this.places[step.system] as Vector3));
       await fly(stage, DroneFlight.to(sub.drone, at, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
       from = 0;
       const system = await this.systems.call(step.system);
@@ -551,13 +604,15 @@ export class RovoAtlassian {
   private mcpRead(drone: Drone, from: number): Promise<number> {
     const session = this.mcpSession.then(async () => {
       const { stage, hub } = this;
-      await fly(stage, DroneFlight.to(drone, MCP_AT, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      const at = this.mcpAt;
+      await fly(stage, DroneFlight.to(drone, at, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
       const terminal = new Terminal({ state: 'admin', seed: this.tasks.length + 11 });
-      terminal.position.copy(MCP_AT);
+      terminal.position.copy(at);
       terminal.scale.setScalar(0.001);
-      const figmaAt = PLACES.figma as Vector3;
+      const figmaAt = this.places.figma as Vector3;
+      const toward = figmaAt.clone().sub(at).normalize();
       const line = new Branch(
-        new LineCurve3(MCP_AT.clone().setX(MCP_AT.x - TERMINAL_SIZE / 2 - 0.06), figmaAt.clone().setX(figmaAt.x + NODE_FOOTPRINT / 2 + 0.08)),
+        new LineCurve3(at.clone().addScaledVector(toward, TERMINAL_SIZE / 2 + 0.06), figmaAt.clone().addScaledVector(toward, -(NODE_FOOTPRINT / 2 + 0.08))),
         NEUTRAL.packet,
       );
       line.drawn = 0;

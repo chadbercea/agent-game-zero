@@ -55,6 +55,8 @@ export class SystemsOnGrid {
     readonly places: Partial<Record<SystemKind, Vector3>>,
     /** The side each system's Graph Line comes in on, where it matters (a grid direction from the node). */
     private readonly arrive: Partial<Record<SystemKind, Vector3>> = {},
+    /** Laid-out routes from Jira to systems (shortest, each its own): ties run along these where given. */
+    private readonly routes: Partial<Record<SystemKind, readonly Vector3[]>> = {},
   ) {}
 
   /** A task needs `kind`: bring it up if it isn't (and tie it to Jira), and count the task as a user. */
@@ -94,7 +96,7 @@ export class SystemsOnGrid {
     const at = this.places[kind];
     if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
     const tie = `system:${kind}:${++this.ups}`;
-    await this.hub.tie(tie, at, this.arrive[kind], TWG_PLATE / 2 + 0.05);
+    await this.hub.tie(tie, at, this.arrive[kind], TWG_PLATE / 2 + 0.05, false, this.routes[kind]);
     const plate = graphPlate(TWG_PLATE);
     plate.position.copy(at);
     plate.scale.setScalar(0.001);
@@ -152,7 +154,7 @@ export class SystemsOnGrid {
       // A third-party tool plugs into the Teamwork Graph through a connector first.
       const connector = permanent ? undefined : this.plug(at);
       if (connector) await tween(this.stage, 0.25, (t) => connector.scale.setScalar(Math.max(0.001, easeOutBack(t))));
-      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true);
+      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true, this.routes[kind]);
       const up: PlacedSystem = { kind, node, permanent, tie, connector, writeBacks: [], users: 0 };
       this.placed.set(kind, up);
       this.arriving.delete(kind);
