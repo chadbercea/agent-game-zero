@@ -41,10 +41,12 @@ export const USER_TERMINAL_AT = new Vector3(-1, 0, 6);
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
 export const JIRA_AT = new Vector3(-3, 0, 3);
+/** Code search hangs off Bitbucket (it indexes the repositories): close beside it, its line into Bitbucket's plate. */
+export const CODESEARCH_AT = new Vector3(SCM_AT.x, 0, SCM_AT.z - 3);
 /** The code side's systems stand at the repo's place (see rovoCode). */
-const CODE_PLACES: Partial<Record<SystemKind, Vector3>> = { github: SCM_AT, bitbucket: SCM_AT, gitlab: SCM_AT };
+const CODE_PLACES: Partial<Record<SystemKind, Vector3>> = { github: SCM_AT, bitbucket: SCM_AT, gitlab: SCM_AT, codesearch: CODESEARCH_AT };
 /** The mini systems: laid out around Jira from the seed by the house layout rules (systemLayout). */
-export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'codesearch', 'gdocs', 'notion'];
+export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'gdocs', 'notion'];
 /** How close a mini system may stand to Jira: clear of Jira's plate and of a plate of its own. */
 const MINI_NEAR = 3.5;
 /** How far an MCP terminal stands from Figma, along the grid. */
@@ -64,6 +66,7 @@ function keepClear(): Vector3[] {
     // The code side.
     ...LANE_Z.map((z) => new Vector3(1.5, 0, z)),
     SCM_AT,
+    CODESEARCH_AT,
   ];
 }
 
@@ -239,7 +242,14 @@ export class RovoAtlassian {
       routes[kind] = map.routes[i];
     });
     this.mcpAt = mcpSpot(map.spots[MINI_SYSTEMS.indexOf('figma')], [...fixed, JIRA_AT, ...map.spots], routes.figma ?? []);
-    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: SCM_TIE_SIDE, bitbucket: SCM_TIE_SIDE, gitlab: SCM_TIE_SIDE }, routes);
+    this.systems = new SystemsOnGrid(
+      stage,
+      this.hub,
+      this.places,
+      { github: SCM_TIE_SIDE, bitbucket: SCM_TIE_SIDE, gitlab: SCM_TIE_SIDE },
+      routes,
+      { codesearch: 'bitbucket' },
+    );
     let clock = 0;
     stage.onTick((dt) => {
       clock += dt;
@@ -453,10 +463,10 @@ export class RovoAtlassian {
       if (step.system !== 'jira') {
         // A write stays where it was written (write-back); a read brings what it found home to Jira;
         // either way the step's status rides the system's Graph Line to Jira.
-        if (step.action === 'read') void hub.report(system.tie, step.system);
+        if (step.action === 'read') void this.systems.report(step.system, step.system);
         else {
           this.systems.writeBack(step.system);
-          void hub.report(system.tie);
+          void this.systems.report(step.system);
         }
       }
       run.done++;
