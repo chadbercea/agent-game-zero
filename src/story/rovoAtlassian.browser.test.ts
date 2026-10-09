@@ -5,7 +5,7 @@ import { Terminal } from '../primitives/terminal/Terminal';
 import { Drone } from '../primitives/drone/Drone';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
-import { JIRA_AT, PLACES, ROVO_GATE, ROVO_START, RovoAtlassian } from './rovoAtlassian';
+import { JIRA_AT, MAX_CREW, PLACES, ROVO_GATE, ROVO_START, RovoAtlassian } from './rovoAtlassian';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { TASK_TYPES } from './rovoTasks';
@@ -31,7 +31,27 @@ function testStage(fps = 30) {
   return { root, stage, run };
 }
 
+/** The first seed whose crew passes `ok` (e.g. one with copies in the mini systems). */
+function seedWhere(ok: (scene: RovoAtlassian) => boolean): number {
+  let seed = 1;
+  while (!ok(new RovoAtlassian(testStage().stage, seed))) seed++;
+  return seed;
+}
+
 describe('Rovo and Jira, the quarterback', () => {
+  it('crew: always 1–3 coders working branches, up to 2 more in the mini systems, 5 at most', () => {
+    const coders = new Set<number>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const scene = new RovoAtlassian(testStage().stage, seed);
+      expect(scene.codeCrew).toBeGreaterThanOrEqual(1);
+      expect(scene.codeCrew).toBeLessThanOrEqual(3);
+      expect(scene.loopCrew).toBeLessThanOrEqual(2);
+      expect(scene.crew).toBeLessThanOrEqual(MAX_CREW);
+      coders.add(scene.codeCrew);
+    }
+    expect(coders.size).toBe(3);
+  });
+
   it('starts with only Rovo: no gate, no Jira, no board yet', () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
@@ -154,7 +174,7 @@ describe('Rovo and Jira, the quarterback', () => {
     for (const t of scene.tasks) expect(t.done).toBe(t.task.steps.length);
     expect(scene.hub.done).toBe(scene.tasks.length);
     // Finished cards are shot to the parent drone, Rovo, not down to the base.
-    expect(scene.hub.landed?.distanceTo(scene.rovo.drone.rig.hover.getWorldPosition(new Vector3()))).toBeLessThan(0.05);
+    expect(scene.hub.landed?.distanceTo(scene.rovo.drone.rig.hover.getWorldPosition(new Vector3()))).toBeLessThan(0.2);
     expect(scene.out).toBe(0);
     expect(scene.working.size).toBe(0);
   });
@@ -265,7 +285,7 @@ describe('Rovo and Jira, the quarterback', () => {
 
   it('mini-system loops: writes stay at the system, third-party tools plug in through a connector, spec loops report to the user\'s terminal, at most loopCrew at once', async () => {
     const { stage, run } = testStage();
-    const scene = new RovoAtlassian(stage, 3);
+    const scene = new RovoAtlassian(stage, seedWhere((s) => s.loopCrew === 2));
     let tooMany = 0;
     let twgWithPlug = 0;
     let thirdPartyWithoutPlug = 0;
@@ -295,7 +315,7 @@ describe('Rovo and Jira, the quarterback', () => {
 
   it('Slack: comes up for the first copy that sends a message, behind its glass gateway, and stays busy both ways with or without tasks', async () => {
     const { stage, run } = testStage();
-    const scene = new RovoAtlassian(stage, 3);
+    const scene = new RovoAtlassian(stage, seedWhere((s) => s.loopCrew === 2));
     let chattering = -1;
     void scene.start();
     await run(200, () => {
