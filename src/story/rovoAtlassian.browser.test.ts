@@ -2,7 +2,7 @@ import { Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import type { SceneHost } from '../stage/Stage';
-import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, ROVO_GATE, ROVO_POST, RovoAtlassian, SLOTS } from './rovoAtlassian';
+import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, RovoAtlassian, SLOTS } from './rovoAtlassian';
 
 function testStage(fps = 30) {
   const DT = 1 / fps;
@@ -45,7 +45,7 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(12, () => gate.add(scene.gate.state));
     expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
     expect(scene.inJira).toBe(true);
-    expect(scene.rovo.drone.position.distanceTo(ROVO_POST)).toBeLessThan(1e-3);
+    expect(scene.rovo.drone.position.distanceTo(JIRA_AT)).toBeLessThan(1e-3);
     expect(scene.accessLine.drawn).toBe(1);
     // Rovo through, the gate locks behind it.
     expect(scene.lock.shown).toBe(1);

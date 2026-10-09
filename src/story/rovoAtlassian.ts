@@ -21,16 +21,14 @@ import { fly, tween, wait } from './timeline';
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** Jira, the quarterback, a short hop up the screen from the gate. */
 export const JIRA_AT = new Vector3(-3, 0, -3);
-/** Where Rovo works from in Jira: beside the hub's kanban board (screen right), never in front of it. */
-export const ROVO_POST = JIRA_AT.clone().add(new Vector3(1.5, 0, -1.5));
-/** Toolsets go up in slots on a ring around Jira, clear of the gate and of Rovo. */
+/** Toolsets go up in slots on a ring around Jira, clear of the gate. */
 const SLOT_RADIUS = 5;
 export const SLOTS: readonly Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7]
   .map((i) => {
     const a = (i / 8) * Math.PI * 2;
     return JIRA_AT.clone().add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS)).round();
   })
-  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5 && p.distanceTo(ROVO_POST) > 4);
+  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5);
 
 /** What a task needs, picked per task: a code tool, a docs tool, and sometimes a third. Every toolset is a little different. */
 export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
@@ -124,6 +122,8 @@ export class RovoAtlassian {
     this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
     this.rovo.drone.fade = 0;
     attachSignal(stage, this.rovo.drone, this.gate);
+    // Over Jira, Rovo talks with it the whole time it works there.
+    attachSignal(stage, this.rovo.drone, this.jira);
   }
 
   /** Rovo floats in, authenticates, moves into Jira; then tasks flow until `stop()`. */
@@ -138,7 +138,7 @@ export class RovoAtlassian {
     // In through the gate, along its line, and into Jira: that's where Rovo works from.
     await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
     rovo.status = 'working';
-    const flight = fly(stage, DroneFlight.to(rovo, ROVO_POST, { speed: 3 }));
+    const flight = fly(stage, DroneFlight.to(rovo, JIRA_AT, { speed: 3 }));
     // Once Rovo is away from the gate, it locks behind it.
     await wait(stage, 0.7);
     await this.lockGate();

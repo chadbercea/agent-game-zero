@@ -16,12 +16,17 @@ import { tween, wait } from './timeline';
 /** Jira stands a size up from everything around it: it's the quarterback. */
 export const HUB_SCALE = 1.35;
 /** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
-export const PLATE = 2.3;
+export const PLATE = 3;
 /** The task board holds this many open tasks at most. */
 export const BOARD_MAX = COLUMN_MAX;
-/** Height of the kanban board's center over the plate, and how big it stands: the plate's width. */
-const BOARD_AT = 1.05;
-const BOARD_SCALE = 1.5;
+/**
+ * The kanban board stands on the plate's front-left corner, beside the node
+ * (never over it, and clear of an agent hovering over Jira): how far out,
+ * how high its center is, and how big it stands.
+ */
+const BOARD_OUT = new Vector3(-1.1, 0, 1.1);
+const BOARD_AT = 0.5;
+const BOARD_SCALE = 0.8;
 const CARD_SCALE = 0.4;
 /** Seconds a finished card stays in Done before it slides off the board. */
 const DONE_STAYS: [number, number] = [1.4, 3];
@@ -35,7 +40,7 @@ const RIDE_SPEED = 5;
  *
  * - It stands a size up on a low plate of its own with a Teamwork Graph blue
  *   edge (no screen, no lights: not a gate).
- * - Its emblem is a kanban board big enough to read, white cards in To do,
+ * - Its emblem moves out beside it as a kanban board big enough to read, white cards in To do,
  *   In progress and Done. A new task slides into To do (`addTask`); a
  *   sub-agent takes one (`takeTask`): the card moves to In progress and a
  *   copy of it rides off with the sub-agent.
@@ -64,7 +69,7 @@ export class JiraHub {
   ) {
     node.scale.setScalar(HUB_SCALE);
     node.emblem.visible = false;
-    this.kanban.position.copy(node.position).setY(BOARD_AT);
+    this.kanban.position.copy(node.position).add(BOARD_OUT).setY(BOARD_AT);
     this.kanban.rotation.y = FACE_CAMERA;
     this.kanban.scale.setScalar(BOARD_SCALE);
     stage.add(this.kanban);
