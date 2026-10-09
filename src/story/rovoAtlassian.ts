@@ -1,9 +1,11 @@
 import { LineCurve3, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
+import { BEND_RADIUS, GATE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
+import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
@@ -122,9 +124,10 @@ export class RovoAtlassian {
     this.jira.position.copy(JIRA_AT);
     stage.add(this.jira);
     this.hub = new JiraHub(stage, this.jira, () => [ROVO_GATE, ...[...this.toolsets.values()].flat().map((n) => n.position)], this.random);
-    const toward = JIRA_AT.clone().sub(ROVO_GATE).normalize();
+    // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira's plate.
+    const corner = new Vector3(ROVO_GATE.x, 0, JIRA_AT.z);
     this.accessLine = new Branch(
-      new LineCurve3(ROVO_GATE.clone().addScaledVector(toward, 1.05), JIRA_AT.clone().addScaledVector(toward, -PLATE / 2 - 0.05)),
+      roundedPath(trimPolyline([ROVO_GATE.clone(), corner, JIRA_AT.clone()], GATE_FOOTPRINT / 2 + 0.05, PLATE / 2 + 0.05), BEND_RADIUS),
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);
