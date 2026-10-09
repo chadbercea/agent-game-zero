@@ -20,12 +20,12 @@ export const PLATE = 3;
 /** The task board holds this many open tasks at most. */
 export const BOARD_MAX = COLUMN_MAX;
 /**
- * The kanban board stands on the plate's front-left corner, beside the node
+ * The kanban board floats over the plate's front-left corner, beside the node
  * (never over it, and clear of an agent hovering over Jira): how far out,
  * how high its center is, and how big it stands.
  */
-const BOARD_OUT = new Vector3(-1.1, 0, 1.1);
-const BOARD_AT = 0.5;
+const BOARD_OUT = new Vector3(-0.95, 0, 0.95);
+const BOARD_AT = 0.85;
 const BOARD_SCALE = 0.8;
 const CARD_SCALE = 0.4;
 /** Seconds a finished card stays in Done before it slides off the board. */
