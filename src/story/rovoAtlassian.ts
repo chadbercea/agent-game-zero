@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
 import { seededRandom } from '../core/scatter';
-import { SUB_AGENT_SCALE } from '../primitives/drone/Drone';
+import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { ATLASSIAN_KINDS, type AtlassianKind } from '../primitives/node/emblems';
 import { attachSignal } from '../stage/attachSignal';
@@ -24,14 +24,21 @@ const WORK: [number, number] = [2.5, 5];
 const SEND_GAP: [number, number] = [0.8, 2.2];
 const SUB_SPEED = 4;
 const RIDE_SPEED = 5;
+/** A sub-agent is born this small, inside Rovo's body, and grows as it leaves. */
 const BUD = 0.3;
+/** Seconds it takes to pop out of Rovo before it flies. */
+const EMERGE_SECONDS = 0.35;
+
+/** How high a sub-agent's floor anchor sits for its body (at `scale`) to be level with Rovo's body. */
+const atRovosBody = (scale: number) => HOVER_HEIGHT * (1 - SUB_AGENT_SCALE * scale);
 
 /**
  * Rovo working its Atlassian grid (Story Narrative). Rovo floats in at the
  * center, on its gate, and gets access (yellow, then green). From then on it
  * keeps its system busy: it calls up a tool (its line draws out from the
  * gate over the grid and the tool rises; Jira, Confluence, Bitbucket, Code
- * search, laid out by the grid guide), sends a sub-agent straight to it,
+ * search, laid out by the grid guide), sends a sub-agent out of its own body
+ * (it pops out of Rovo, then flies straight to the tool),
  * which builds a tertiary of its own off the tool and works there; the work
  * feeds into the tool, and the tool's product rides its line back to Rovo.
  * Then the sub-agent comes home and dissolves into Rovo. One to three out at
@@ -114,10 +121,19 @@ export class RovoAtlassian {
       subAgent: true,
       status: 'working',
     });
+    // Born inside Rovo: it pops out of Rovo's body, small, then drops to its own height as it flies out, growing.
+    const half = (1 + BUD) / 2;
+    sub.drone.position.y = atRovosBody(BUD);
+    sub.drone.scale.setScalar(SUB_AGENT_SCALE * BUD);
     rovo.flash = 1;
+    await tween(stage, EMERGE_SECONDS, (t) => {
+      const scale = BUD + (half - BUD) * t;
+      sub.drone.scale.setScalar(SUB_AGENT_SCALE * scale);
+      sub.drone.position.y = atRovosBody(scale);
+    });
     await Promise.all([
-      fly(stage, DroneFlight.to(sub.drone, place.spot, { speed: SUB_SPEED })),
-      tween(stage, 0.6, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (BUD + (1 - BUD) * t))),
+      fly(stage, DroneFlight.to(sub.drone, place.spot, { speed: SUB_SPEED, fromHeight: atRovosBody(half), lift: 0 })),
+      tween(stage, 0.6, (t) => sub.drone.scale.setScalar(SUB_AGENT_SCALE * (half + (1 - half) * t))),
     ]);
     this.working.set(kind, (this.working.get(kind) ?? 0) + 1);
     node.light = 'working';
@@ -136,10 +152,10 @@ export class RovoAtlassian {
     this.out--;
   }
 
-  /** A sub-agent flies straight back to Rovo and dissolves into it. */
+  /** A sub-agent flies straight back to Rovo, rising into its body, and dissolves into it. */
   private async home(sub: SpawnedDrone): Promise<void> {
     const { stage } = this;
-    await fly(stage, DroneFlight.to(sub.drone, this.rovo.drone.position, { speed: SUB_SPEED }));
+    await fly(stage, DroneFlight.to(sub.drone, this.rovo.drone.position, { speed: SUB_SPEED, toHeight: atRovosBody(1), lift: 0 }));
     await tween(stage, 0.35, (t) => {
       sub.drone.scale.setScalar(SUB_AGENT_SCALE * (1 - 0.7 * t));
       sub.drone.fade = 1 - t;
