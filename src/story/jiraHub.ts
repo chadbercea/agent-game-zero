@@ -186,8 +186,8 @@ export class JiraHub {
     await tween(this.stage, 0.8, (t) => (edge.drawn = t));
   }
 
-  /** Work rides the tie home into Jira, as that tool's product. */
-  async report(id: string, kind: SystemKind): Promise<void> {
+  /** Something rides the tie home into Jira: that tool's product (`kind`), or plain status (a gray packet) if none. */
+  async report(id: string, kind?: SystemKind): Promise<void> {
     const edge = this.ties.get(id);
     if (edge) await shoot(this.stage, reversed(edge.path), RIDE_SPEED, undefined, kind);
   }

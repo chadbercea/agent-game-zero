@@ -25,6 +25,7 @@ describe('Rovo tasks', () => {
     for (const t of tasks.filter((t) => t.type === 'code')) expect(t.steps).toEqual([{ system: 'gitlab', action: 'code' }]);
     const spec = tasks.find((t) => t.type === 'spec');
     expect(spec?.steps.map((s) => `${s.action} ${s.system}`)).toEqual(['read confluence', 'read figma', 'update confluence']);
+    expect(spec?.reportToUser).toBe(true);
     const random = seededRandom(1);
     for (let i = 0; i < 200; i++) expect(makeTask(random, { scm: 'github', without: ['slack'] }).type).not.toBe('slack');
   });
