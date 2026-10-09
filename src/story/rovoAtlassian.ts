@@ -19,6 +19,8 @@ import { fly, tween, wait } from './timeline';
 
 /** Rovo's gate sits at the origin: Rovo, the first thing on the grid, is dead center. */
 export const ROVO_GATE = new Vector3(0, 0, 0);
+/** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
+export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop up the screen from the gate. */
 export const JIRA_AT = new Vector3(-3, 0, -3);
 /** Toolsets go up in slots on a ring around Jira, clear of the gate. */
@@ -119,21 +121,39 @@ export class RovoAtlassian {
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);
-    this.rovo = spawnDrone(stage, ROVO_GATE.x, ROVO_GATE.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
+    // Progressive: at first there's only Rovo. The gate, Jira and its board each come in when the story gets to them.
+    this.accessLine.drawn = 0;
+    this.gate.visible = false;
+    this.gate.scale.setScalar(0.001);
+    this.hub.hide();
+    this.rovo = spawnDrone(stage, ROVO_START.x, ROVO_START.z, { name: 'Rovo', lineage: 'cyan', showLabel: true, status: 'waiting' });
     this.rovo.drone.fade = 0;
     attachSignal(stage, this.rovo.drone, this.gate);
     // Over Jira, Rovo talks with it the whole time it works there.
     attachSignal(stage, this.rovo.drone, this.jira);
   }
 
-  /** Rovo floats in, authenticates, moves into Jira; then tasks flow until `stop()`. */
+  /**
+   * Progressive: Rovo alone; it flies over to its gate (which comes up as it
+   * nears) and authenticates; Jira appears; Rovo moves in and goes to work;
+   * then the kanban board shows up and tasks flow until `stop()`.
+   */
   async start(): Promise<void> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
     this.running = true;
     await tween(stage, 0.8, (t) => (rovo.fade = t));
-    await wait(stage, 0.4);
+    await wait(stage, 0.6);
+    const toGate = fly(stage, DroneFlight.to(rovo, ROVO_GATE, { speed: 3 }));
+    await wait(stage, 0.5);
+    this.gate.visible = true;
+    await tween(stage, 0.5, (t) => this.gate.scale.setScalar(Math.max(0.001, easeOutBack(t))));
+    await toGate;
+    await wait(stage, 0.3);
     await accessCheck(stage, rovo, this.gate, { thinkSeconds: 1.2 });
+    await wait(stage, 0.3);
+    // Access granted: Jira comes up.
+    await hub.appear();
     await wait(stage, 0.3);
     // In through the gate, along its line, and into Jira: that's where Rovo works from.
     await tween(stage, 0.7, (t) => (this.accessLine.drawn = t));
@@ -145,6 +165,9 @@ export class RovoAtlassian {
     await flight;
     this.inJira = true;
     this.jira.light = 'working';
+    await wait(stage, 0.6);
+    // Work starts: the kanban board shows up.
+    await hub.showBoard();
     for (let i = 0; i < 3; i++) await hub.addTask();
     void this.taskFeed();
     while (this.running) {

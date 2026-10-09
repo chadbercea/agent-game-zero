@@ -2,7 +2,7 @@ import { Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Drone } from '../primitives/drone/Drone';
 import type { SceneHost } from '../stage/Stage';
-import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, RovoAtlassian, SLOTS } from './rovoAtlassian';
+import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, ROVO_START, RovoAtlassian, SLOTS } from './rovoAtlassian';
 
 function testStage(fps = 30) {
   const DT = 1 / fps;
@@ -26,15 +26,39 @@ function testStage(fps = 30) {
 }
 
 describe('Rovo and Jira, the quarterback', () => {
-  it('starts with Rovo dead center on its gate, and Jira, the hub, already there', () => {
+  it('starts with only Rovo: no gate, no Jira, no board yet', () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
-    expect(scene.rovo.drone.position.distanceTo(ROVO_GATE)).toBe(0);
-    expect(scene.jira.visible).toBe(true);
-    expect(scene.jira.scale.x).toBeGreaterThan(1);
+    expect(scene.rovo.drone.position.distanceTo(ROVO_START)).toBe(0);
+    expect(scene.gate.visible).toBe(false);
+    expect(scene.jira.visible).toBe(false);
+    expect(scene.hub.plate.visible).toBe(false);
+    expect(scene.hub.kanban.visible).toBe(false);
+    expect(scene.accessLine.drawn).toBe(0);
     expect(scene.hub.board).toHaveLength(0);
     expect(scene.lock.shown).toBe(0);
     expect(scene.jira.emblem.visible).toBe(false);
+  });
+
+  it('comes in progressively: Rovo, then the gate as it flies over and authenticates, then Jira, then work, then the board', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const order: string[] = [];
+    const mark = (name: string, now: boolean) => now && !order.includes(name) && order.push(name);
+    void scene.start();
+    await run(20, () => {
+      mark('gate', scene.gate.visible);
+      mark('at gate', scene.rovo.drone.position.distanceTo(ROVO_GATE) < 1e-3);
+      mark('open', scene.gate.state === 'open');
+      mark('jira', scene.jira.visible);
+      mark('working', scene.inJira);
+      mark('board', scene.hub.kanban.visible);
+      mark('task', scene.hub.board.length > 0);
+    });
+    scene.stop();
+    expect(order).toEqual(['gate', 'at gate', 'open', 'jira', 'working', 'board', 'task']);
+    expect(scene.gate.scale.x).toBeCloseTo(1);
+    expect(scene.jira.scale.x).toBeCloseTo(1.35);
   });
 
   it('authenticates at the gate, then moves into Jira and works from there', async () => {
@@ -42,7 +66,7 @@ describe('Rovo and Jira, the quarterback', () => {
     const scene = new RovoAtlassian(stage, 3);
     const gate = new Set<string>();
     void scene.start();
-    await run(12, () => gate.add(scene.gate.state));
+    await run(16, () => gate.add(scene.gate.state));
     expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
     expect(scene.inJira).toBe(true);
     expect(scene.rovo.drone.position.distanceTo(JIRA_AT)).toBeLessThan(1e-3);

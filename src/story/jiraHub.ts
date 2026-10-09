@@ -87,6 +87,33 @@ export class JiraHub {
     });
   }
 
+  /**
+   * The hub comes in stages (progressive): `hide()` it all, then Jira itself
+   * grows in (`appear`), and its kanban board only once work starts (`showBoard`).
+   */
+  hide(): void {
+    this.node.visible = false;
+    this.plate.visible = false;
+    this.kanban.visible = false;
+  }
+
+  /** Jira and its plate grow in. */
+  async appear(): Promise<void> {
+    this.node.visible = true;
+    this.plate.visible = true;
+    await tween(this.stage, 0.5, (t) => {
+      const k = Math.max(0.001, easeOutBack(t));
+      this.node.scale.setScalar(HUB_SCALE * k);
+      this.plate.scale.setScalar(k);
+    });
+  }
+
+  /** The kanban board grows in beside Jira. */
+  async showBoard(): Promise<void> {
+    this.kanban.visible = true;
+    await tween(this.stage, 0.45, (t) => this.kanban.scale.setScalar(Math.max(0.001, BOARD_SCALE * easeOutBack(t))));
+  }
+
   /** Open tasks: the cards in To do, oldest first. */
   get board(): readonly KanbanCard[] {
     return this.kanban.columns[0];
@@ -213,4 +240,9 @@ export class JiraHub {
     const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : clean.sort((a, b) => clear(b) - clear(a))[0];
     return roundedPath(trimPolyline(best, PLATE / 2, 0.3), BEND_RADIUS);
   }
+}
+
+function easeOutBack(t: number): number {
+  const c = 1.6;
+  return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
 }
