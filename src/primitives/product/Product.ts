@@ -27,6 +27,7 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   gdocs: 'Doc',
   gitlab: 'Merge request',
   slack: 'Message',
+  worktree: 'Commit',
 };
 
 /** About the size of the old work cube: small enough to ride a line, big enough to read. */
@@ -66,7 +67,7 @@ export function productGeometry(kind: SystemKind): BufferGeometry {
     add(block(), -s * 0.2, -s * 0.34);
     add(block(), s * 0.2, s * 0.34);
     add(new SphereGeometry(s * 0.17, 12, 8), s * 0.2, 0);
-  } else if (kind === 'github') {
+  } else if (kind === 'github' || kind === 'worktree') {
     add(new SphereGeometry(s * 0.3, 14, 10), 0, s * 0.12);
     add(new CylinderGeometry(s * 0.08, s * 0.08, s * 0.9, 8), 0, -s * 0.05);
   } else if (kind === 'notion') {

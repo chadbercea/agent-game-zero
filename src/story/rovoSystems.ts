@@ -35,6 +35,8 @@ export class SystemsOnGrid {
     private readonly hub: JiraHub,
     /** Where each system stands on the grid. */
     readonly places: Partial<Record<SystemKind, Vector3>>,
+    /** The side each system's Graph Line comes in on, where it matters (a grid direction from the node). */
+    private readonly arrive: Partial<Record<SystemKind, Vector3>> = {},
   ) {}
 
   /** A task needs `kind`: bring it up if it isn't (and tie it to Jira), and count the task as a user. */
@@ -72,7 +74,7 @@ export class SystemsOnGrid {
       if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
       // The line draws out from Jira first; then the node appears at its end.
       const tie = `system:${kind}:${++this.ups}`;
-      await this.hub.tie(tie, at, undefined, NODE_FOOTPRINT / 2 + 0.1);
+      await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1);
       const node = new SystemNode({ kind });
       node.position.copy(at);
       node.scale.setScalar(0.001);
