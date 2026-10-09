@@ -22,6 +22,7 @@ import { productGeometry, productMaterial } from '../product/Product';
 export const JOB_TITLE: Record<JobKind, string> = {
   figma: 'Reference the design → write a report',
   github: 'Create a branch → git init',
+  bitbucket: 'Create a branch → git init',
   notion: 'Read the PRD',
 };
 
@@ -33,7 +34,7 @@ export const PRODUCT_OFFSET = { x: 0.42, y: 0.55, z: 0.12 } as const;
  * (0–1) builds the job's visual; at 1 the work product (the old work cube)
  * appears, ready to be carried home. Each system has its own visual:
  * - Figma: a mini design window: a rectangle traces itself, fills, and gets selected
- * - GitHub: a git graph grows and forks, then an init folder appears
+ * - GitHub and Bitbucket: a git graph grows and forks, then an init folder appears
  * - Notion: pages stack up, one after another
  */
 export class Job extends Group {
@@ -56,7 +57,7 @@ export class Job extends Group {
     );
 
     if (kind === 'figma') this.build = this.buildWindow(lit);
-    else if (kind === 'github') this.build = this.buildBranch(shell, graphite);
+    else if (kind === 'github' || kind === 'bitbucket') this.build = this.buildBranch(shell, graphite);
     else this.build = this.buildReport(shell, graphite);
 
     // The job's work product: its system's product shape (see Product), facing the camera.

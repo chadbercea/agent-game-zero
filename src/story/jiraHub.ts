@@ -174,9 +174,13 @@ export class JiraHub {
     if (onBoard) void this.completeOnBoard(onBoard);
   }
 
-  /** Tie a toolset into Jira: a Graph Line draws from Jira out to `to` and stays until `untie`. */
-  async tie(id: string, to: Vector3): Promise<void> {
-    const edge = new GraphEdge(this.route(to));
+  /**
+   * Tie a toolset into Jira: a Graph Line draws from Jira out to `to` and
+   * stays until `untie`. `arriveFrom` (a grid direction from `to`) is the side
+   * its last run comes in on, leaving the other sides free.
+   */
+  async tie(id: string, to: Vector3, arriveFrom?: Vector3): Promise<void> {
+    const edge = new GraphEdge(this.route(to, arriveFrom));
     this.ties.set(id, edge);
     this.stage.add(edge);
     await tween(this.stage, 0.8, (t) => (edge.drawn = t));
@@ -219,7 +223,7 @@ export class JiraHub {
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
-  private route(end: Vector3): Curve<Vector3> {
+  private route(end: Vector3, arriveFrom?: Vector3): Curve<Vector3> {
     const from = this.node.position;
     const options: Vector3[][] = [
       [from.clone(), new Vector3(end.x, 0, from.z), end.clone()],
@@ -231,7 +235,9 @@ export class JiraHub {
       options.push([from.clone(), new Vector3(midX, 0, from.z), new Vector3(midX, 0, end.z), end.clone()]);
       options.push([from.clone(), new Vector3(from.x, 0, midZ), new Vector3(end.x, 0, midZ), end.clone()]);
     }
-    const clean = options.map((l) => l.filter((p, i) => i === 0 || p.distanceTo(l[i - 1]) > 1e-6));
+    const all = options.map((l) => l.filter((p, i) => i === 0 || p.distanceTo(l[i - 1]) > 1e-6));
+    const arrives = (l: Vector3[]) => !arriveFrom || l[l.length - 2].clone().sub(end).normalize().dot(arriveFrom) > 0.999;
+    const clean = all.some(arrives) ? all.filter(arrives) : all;
     const others = this.keepClear().filter((p) => p.distanceTo(end) > 1.6 && p.distanceTo(from) > 0.5);
     const clear = (line: Vector3[]) => Math.min(Infinity, ...others.map((p) => distanceToPolyline(p.x, p.z, line)));
     const length = (line: Vector3[]) => line.reduce((sum, p, i) => sum + (i ? p.distanceTo(line[i - 1]) : 0), 0);
