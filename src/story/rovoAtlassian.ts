@@ -21,16 +21,23 @@ import { fly, tween, wait } from './timeline';
 export const ROVO_GATE = new Vector3(0, 0, 0);
 /** Where Rovo first shows up, alone on the grid, before it flies over to its gate. */
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
-/** Jira, the quarterback, a short hop up the screen from the gate. */
-export const JIRA_AT = new Vector3(-3, 0, -3);
-/** Toolsets go up in slots on a ring around Jira, clear of the gate. */
+/** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
+export const JIRA_AT = new Vector3(-3, 0, 3);
+/** Toolsets go up in slots on a ring around Jira, clear of the gate and of Rovo hovering over Jira. */
 const SLOT_RADIUS = 5;
 export const SLOTS: readonly Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7]
   .map((i) => {
     const a = (i / 8) * Math.PI * 2;
     return JIRA_AT.clone().add(new Vector3(Math.cos(a) * SLOT_RADIUS, 0, Math.sin(a) * SLOT_RADIUS)).round();
   })
-  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5);
+  .filter((p) => p.distanceTo(ROVO_GATE) > 3.5 && !behindOnScreen(p, JIRA_AT));
+
+/** Straight up the screen from `from` (camera looks along -x, -z): where an agent hovering over `from` would cover it. */
+function behindOnScreen(p: Vector3, from: Vector3): boolean {
+  const dx = p.x - from.x;
+  const dz = p.z - from.z;
+  return dx + dz < 0 && Math.abs(dx - dz) < 3;
+}
 
 /** What a task needs, picked per task: a code tool, a docs tool, and sometimes a third. Every toolset is a little different. */
 export const CODE_TOOLS: readonly SystemKind[] = ['bitbucket', 'github'];
