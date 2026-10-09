@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
 import { Inspector } from '../stage/Inspector';
+import { FamilyTree } from './familyTree';
 import { RovoAtlassian, STORY_CENTER } from './rovoAtlassian';
 import { rovoInspectables } from './rovoInspect';
 
@@ -24,7 +25,8 @@ export default meta;
  * checked in, CI passes, merged, deployed down the belt into the portal), and
  * the repo's trunk keeps every commit. Teamwork Graph apps
  * stay; third-party tools go when their task is done. Seeded: `seed` changes
- * the run. No captions. Hover anything to highlight it; click it for its details.
+ * the run. No captions. Hover anything to highlight it; click it for its
+ * details. Click Rovo or a copy for the drone family tree.
  */
 export const Working: StoryObj<{ seed: number }> = {
   argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },
@@ -37,7 +39,10 @@ export const Working: StoryObj<{ seed: number }> = {
     void scene.start();
     // Hover anything to highlight it; click it for its details on the right (Escape or click away to close).
     const inspector = new Inspector(stage, rovoInspectables(scene), root);
-    Object.assign(window, { __story: scene, __inspector: inspector });
+    // Select Rovo or any copy: the drone family tree (the family in Detail, a line from Rovo to each copy).
+    const family = new FamilyTree(stage, scene.rovo.drone, () => [...scene.copies.keys()]);
+    stage.onTick(() => family.focus(inspector.selected?.kind === 'agent' || inspector.selected?.kind === 'sub-agent'));
+    Object.assign(window, { __story: scene, __inspector: inspector, __family: family });
     return root;
   },
 };
