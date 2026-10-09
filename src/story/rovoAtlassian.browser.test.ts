@@ -1,8 +1,16 @@
-import { Object3D, Vector3 } from 'three';
-import { describe, expect, it } from 'vitest';
-import { Drone } from '../primitives/drone/Drone';
-import type { SceneHost } from '../stage/Stage';
-import { CODE_TOOLS, DOC_TOOLS, EXTRA_TOOLS, JIRA_AT, ROVO_GATE, RovoAtlassian, SLOTS } from './rovoAtlassian';
+import { Object3D, Vector3 } from "three";
+import { describe, expect, it } from "vitest";
+import { Drone } from "../primitives/drone/Drone";
+import type { SceneHost } from "../stage/Stage";
+import {
+  CODE_TOOLS,
+  DOC_TOOLS,
+  EXTRA_TOOLS,
+  JIRA_AT,
+  ROVO_GATE,
+  RovoAtlassian,
+  SLOTS,
+} from "./rovoAtlassian";
 
 function testStage(fps = 30) {
   const DT = 1 / fps;
@@ -25,8 +33,8 @@ function testStage(fps = 30) {
   return { root, stage, run };
 }
 
-describe('Rovo and Jira, the quarterback', () => {
-  it('starts with Rovo dead center on its gate, and Jira, the hub, already there', () => {
+describe("Rovo and Jira, the quarterback", () => {
+  it("starts with Rovo dead center on its gate, and Jira, the hub, already there", () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
     expect(scene.rovo.drone.position.distanceTo(ROVO_GATE)).toBe(0);
@@ -35,20 +43,20 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.hub.board).toHaveLength(0);
   });
 
-  it('authenticates at the gate, then moves into Jira and works from there', async () => {
+  it("authenticates at the gate, then moves into Jira and works from there", async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const gate = new Set<string>();
     void scene.start();
     await run(12, () => gate.add(scene.gate.state));
-    expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
+    expect([...gate]).toEqual(expect.arrayContaining(["thinking", "open"]));
     expect(scene.inJira).toBe(true);
     expect(scene.rovo.drone.position.distanceTo(JIRA_AT)).toBeLessThan(1e-3);
     expect(scene.accessLine.drawn).toBe(1);
     scene.stop();
   });
 
-  it('sub-agents spawn out of Rovo, take tasks, spin up their own (varied) tools, and every task comes back done in Jira', async () => {
+  it("sub-agents spawn out of Rovo, take tasks, spin up their own (varied) tools, and every task comes back done in Jira", async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const seen = new Set<Object3D>();
@@ -60,10 +68,21 @@ describe('Rovo and Jira, the quarterback', () => {
         if (!(o instanceof Drone) || !o.subAgent || seen.has(o)) continue;
         seen.add(o);
         // Born inside Rovo (in Jira), not on the floor.
-        births.push(o.rig.hover.getWorldPosition(new Vector3()).distanceTo(scene.rovo.drone.rig.hover.getWorldPosition(new Vector3())));
+        births.push(
+          o.rig.hover
+            .getWorldPosition(new Vector3())
+            .distanceTo(
+              scene.rovo.drone.rig.hover.getWorldPosition(new Vector3()),
+            ),
+        );
         expect(o.scale.x).toBeCloseTo(0.58);
       }
-      maxSubs = Math.max(maxSubs, root.children.filter((o) => o instanceof Drone && o.subAgent && o.visible).length);
+      maxSubs = Math.max(
+        maxSubs,
+        root.children.filter(
+          (o) => o instanceof Drone && o.subAgent && o.visible,
+        ).length,
+      );
     });
     scene.stop();
     await run(25);
@@ -77,7 +96,9 @@ describe('Rovo and Jira, the quarterback', () => {
       if (job.kinds[2]) expect(EXTRA_TOOLS).toContain(job.kinds[2]);
       expect(SLOTS.some((s) => s.distanceTo(job.spot) < 1e-6)).toBe(true);
     }
-    expect(new Set(scene.jobs.map((j) => j.kinds.join())).size).toBeGreaterThan(1);
+    expect(new Set(scene.jobs.map((j) => j.kinds.join())).size).toBeGreaterThan(
+      1,
+    );
     // Every task came home done to Jira; toolsets and ties are gone once the work is over.
     expect(scene.hub.done).toBe(scene.jobs.length);
     expect(scene.toolsets.size).toBe(0);
@@ -85,14 +106,36 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.out).toBe(0);
   });
 
-  it('never puts two toolsets on the same spot at once', async () => {
+  it("a tool's name grows in and folds away with it: never more name than tool", async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    let early = false;
+    let seen = 0;
+    void scene.start();
+    await run(40, () => {
+      for (const tools of scene.toolsets.values())
+        for (const n of tools) {
+          seen++;
+          if (n.labelOpacity > n.scale.x / 0.85 + 0.05) early = true;
+        }
+    });
+    scene.stop();
+    expect(seen).toBeGreaterThan(0);
+    expect(early).toBe(false);
+  });
+
+  it("never puts two toolsets on the same spot at once", async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 7);
     let clash = false;
     void scene.start();
     await run(90, () => {
-      const spots = [...scene.toolsets.keys()].map((id) => scene.jobs.find((j) => j.id === id)!.spot);
-      for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) if (spots[i].distanceTo(spots[j]) < 1e-6) clash = true;
+      const spots = [...scene.toolsets.keys()].map(
+        (id) => scene.jobs.find((j) => j.id === id)!.spot,
+      );
+      for (let i = 0; i < spots.length; i++)
+        for (let j = i + 1; j < spots.length; j++)
+          if (spots[i].distanceTo(spots[j]) < 1e-6) clash = true;
     });
     scene.stop();
     expect(clash).toBe(false);
