@@ -55,12 +55,26 @@ describe('Rovo on the Atlassian grid', () => {
     }
   });
 
-  it('starts with Rovo at the center on its gate, and nothing else up', () => {
+  it('starts with Rovo at the center on its gate, Jira already up, and nothing else', () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
     expect(scene.rovo.drone.position.distanceTo(ROVO_GATE)).toBe(0);
     expect(scene.map.nodes.map((n) => n.kind)).toEqual([...ATLASSIAN_KINDS]);
-    expect(scene.map.nodes.every((n) => !n.visible)).toBe(true);
+    expect(scene.map.nodes.filter((n) => n.visible).map((n) => n.kind)).toEqual(['jira']);
+  });
+
+  it('keeps Jira on the grid the whole time: never called up, never put away', async () => {
+    const { stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 5);
+    const jira = scene.map.nodes[ATLASSIAN_KINDS.indexOf('jira')];
+    let alwaysUp = true;
+    void scene.start();
+    await run(60, () => {
+      if (!jira.visible) alwaysUp = false;
+    });
+    scene.stop();
+    expect(alwaysUp).toBe(true);
+    expect(scene.called).not.toContain('jira');
   });
 
   it('gets access, calls its tools up as needed, and 1–3 sub-agents keep work flowing back to Rovo', async () => {
