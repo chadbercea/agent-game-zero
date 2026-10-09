@@ -7,7 +7,7 @@ import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../prim
 import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
-import { Ticket } from '../primitives/ticket/Ticket';
+import { type Request, Ticket } from '../primitives/ticket/Ticket';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import { COLUMN_MAX, type KanbanCard, KanbanBoard } from './jiraBoard';
@@ -147,13 +147,13 @@ export class JiraHub {
    * A sub-agent takes the oldest open task: its card moves to In progress,
    * and a copy lifts off the board and rides with the sub-agent (on `carrier`).
    */
-  async takeTask(carrier: Object3D, handedBy?: Object3D): Promise<Ticket | null> {
+  async takeTask(carrier: Object3D, handedBy?: Object3D, request: Request = { key: 'DEMO', title: 'Task' }): Promise<Ticket | null> {
     const card = this.board[0];
     if (!card) return null;
     // Handed over by the parent (`handedBy`, Rovo) when given; otherwise it lifts straight off the board.
     const from = (handedBy ?? card.mesh).getWorldPosition(new Vector3());
     this.kanban.moveCard(card, 1);
-    const ticket = new Ticket({ key: 'DEMO', title: 'Task' }, { label: false });
+    const ticket = new Ticket(request, { label: false });
     this.carried.set(ticket, card);
     carrier.add(ticket);
     carrier.worldToLocal(from);

@@ -23,7 +23,7 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
 import { JiraHub, PLATE } from './jiraHub';
-import { makeTask, type Step, TASK_TYPES, type Task } from './rovoTasks';
+import { makeTask, type Step, TASK_TITLE, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, LANE_Z, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
@@ -118,6 +118,9 @@ const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
 /** One Jira task, run by one copy of Rovo. */
 export interface TaskRun {
   id: string;
+  /** Its Jira issue: key and title. */
+  key: string;
+  title: string;
   task: Task;
   /** Steps finished so far. */
   done: number;
@@ -160,6 +163,10 @@ export class RovoAtlassian {
   readonly scm: ScmKind;
   /** The repo's trunk at the SCM: one commit per merge (its final state). */
   readonly trunk = new RepoTrunk();
+  /** Rovo's copies out on the grid, with the ticket and task each holds right now (none while it waits). */
+  readonly copies = new Map<Drone, { card?: Ticket; run?: TaskRun }>();
+  /** Jira issues handed out so far. */
+  private issues = 0;
   /** Copies at work right now, and the node each is working (always over it). */
   readonly working = new Map<Drone, Object3D>();
   /** Slack, the comms hub behind its gateway (up once a copy first sends a message). */
@@ -390,20 +397,24 @@ export class RovoAtlassian {
         const drone = sub.drone;
         await tween(stage, EMERGE_SECONDS, (t) => (drone.fade = t));
       }
-      // Rovo hands it the next ticket off the board.
+      // Rovo hands it the next ticket off the board: a Jira issue of its own.
       rovo.flash = 1;
-      const card = await hub.takeTask(sub.drone.rig.hover, rovo.rig.hover);
+      const task = makeTask(this.random, { scm: this.scm, without: coder ? NOT_CODE : ['code'] });
+      const card = await hub.takeTask(sub.drone.rig.hover, rovo.rig.hover, { key: `DEMO-${101 + this.issues++}`, title: TASK_TITLE[task.type] });
       if (!card) continue;
       sub.drone.status = 'working';
-      const task = makeTask(this.random, { scm: this.scm, without: coder ? NOT_CODE : ['code'] });
-      from = await this.runTask(sub, task, card, coder ? laneIndex : -1, from);
+      const copy = { card, run: undefined as TaskRun | undefined };
+      this.copies.set(sub.drone, copy);
+      from = await this.runTask(sub, task, card, coder ? laneIndex : -1, from, (run) => (copy.run = run));
       // Done: it waits where it is for its next ticket.
+      this.copies.set(sub.drone, {});
       sub.drone.status = 'waiting';
     }
     if (!sub) return;
     await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
     const drone = sub.drone;
     await tween(stage, 0.3, (t) => (drone.fade = 1 - t));
+    this.copies.delete(sub.drone);
     sub.despawn();
     rovo.flash = 1;
   }
@@ -414,11 +425,19 @@ export class RovoAtlassian {
    * lane; then the finished card is shot to Rovo and the systems only this
    * task needed go. Returns the copy's flying height where it ends up.
    */
-  private async runTask(sub: SpawnedDrone, task: Task, card: Ticket, laneIndex: number, startFrom: number): Promise<number> {
+  private async runTask(
+    sub: SpawnedDrone,
+    task: Task,
+    card: Ticket,
+    laneIndex: number,
+    startFrom: number,
+    started: (run: TaskRun) => void = () => {},
+  ): Promise<number> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
-    const run: TaskRun = { id: `task-${this.tasks.length + 1}`, task, done: 0 };
+    const run: TaskRun = { id: `task-${this.tasks.length + 1}`, key: card.request.key, title: card.request.title, task, done: 0 };
     this.tasks.push(run);
+    started(run);
     const lane = laneIndex >= 0 ? new CodeLane(stage, laneIndex, this.tasks.length) : undefined;
     if (lane) {
       this.lanes[laneIndex] = lane;
