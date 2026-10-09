@@ -318,6 +318,30 @@ describe('Rovo and Jira, the quarterback', () => {
     for (const t of slackTasks) expect(t.done).toBe(1);
   });
 
+  it('copies stay on: each comes out of Rovo once, and after a task waits where it is for its next ticket (no trip home until the work stops)', async () => {
+    const { root, stage, run } = testStage();
+    const scene = new RovoAtlassian(stage, 3);
+    const copies = () => root.children.filter((o) => o instanceof Drone && o.subAgent);
+    let left = 0;
+    let waited = 0;
+    let seen = 0;
+    void scene.start();
+    await run(150, () => {
+      const now = copies();
+      if (now.length < seen) left++;
+      seen = Math.max(seen, now.length);
+      if (now.some((d) => (d as Drone).status === 'waiting' && (d as Drone).position.distanceTo(scene.rovo.drone.position) > 1)) waited++;
+    });
+    expect(seen).toBe(scene.crew);
+    expect(left).toBe(0);
+    // Copies took ticket after ticket, waiting out in the grid in between.
+    expect(scene.tasks.length).toBeGreaterThan(scene.crew * 2);
+    expect(waited).toBeGreaterThan(0);
+    scene.stop();
+    await run(50);
+    expect(copies().length).toBe(0);
+  });
+
   it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {
     const { stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);

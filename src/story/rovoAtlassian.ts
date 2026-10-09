@@ -15,13 +15,14 @@ import { RepoTrunk } from '../primitives/job/RepoTrunk';
 import { hasJob, type ScmKind, type SystemKind } from '../primitives/node/emblems';
 import { NODE_SCALE, SystemNode } from '../primitives/node/SystemNode';
 import { PAD_TOP } from '../primitives/pad/Pad';
+import type { Ticket } from '../primitives/ticket/Ticket';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { JiraHub, PLATE } from './jiraHub';
-import { makeTask, type Step, type Task } from './rovoTasks';
+import { makeTask, type Step, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
 import type { OutputLine } from './shipOutput';
@@ -56,6 +57,8 @@ export const PLACES: Partial<Record<SystemKind, Vector3>> = {
 };
 
 const WORK: [number, number] = [1.1, 1.9];
+/** A coder only takes code tasks. */
+const NOT_CODE = TASK_TYPES.filter((t) => t !== 'code');
 /** Little cubes a deploy sends down the output line: two merges fill the assembler's 2 × 2 × 2. */
 const DEPLOY_CUBES = 4;
 /** A job animation takes a little longer than plain work, so it reads. */
@@ -136,8 +139,6 @@ export class RovoAtlassian {
   out = 0;
   codeOut = 0;
   peakOut = 0;
-  /** The next task, waiting for a copy (or a free lane) to take it. */
-  private next?: Task;
   private building?: Promise<OutputLine>;
   /** Merges at the repo happen one at a time. */
   private merging: Promise<void> = Promise.resolve();
@@ -257,18 +258,12 @@ export class RovoAtlassian {
     await hub.showBoard();
     for (let i = 0; i < 3; i++) await hub.addTask();
     void this.taskFeed();
-    while (this.running) {
-      if (hub.board.length > 0) {
-        const task = (this.next ??= makeTask(this.random, { scm: this.scm }));
-        const code = task.type === 'code';
-        const lane = this.lanes.indexOf(null);
-        if (code ? this.codeOut < this.codeCrew && lane >= 0 : this.out - this.codeOut < this.loopCrew) {
-          this.next = undefined;
-          void this.runTask(task, code ? lane : -1);
-        }
-      }
-      await wait(stage, 0.6);
-    }
+    // Rovo's crew: copies that stay on. Coders each keep a lane; the rest run loops in the mini systems.
+    const crew = [
+      ...Array.from({ length: this.codeCrew }, (_, i) => this.copy(i)),
+      ...Array.from({ length: this.loopCrew }, () => this.copy(-1)),
+    ];
+    await Promise.all(crew);
   }
 
   /** A padlock fades in open over the gate, then snaps shut. The gate stays lit under it: security is on, not off. */
@@ -295,12 +290,58 @@ export class RovoAtlassian {
   }
 
   /**
-   * One task, one copy of Rovo: out of Rovo with the card, then each step in
-   * turn (fly to the system, work it while hovering over it, report to Jira),
-   * then the card goes to Done, the copy flies home into Rovo, and the
-   * systems only this task needed go.
+   * One copy of Rovo, for as long as Rovo works. It comes out of Rovo at its
+   * first ticket and stays on: Rovo hands it a ticket (shoots it the card), it
+   * runs that task, shoots the finished card back to Rovo, and waits right
+   * where it is (yellow) for the next one. Only when the work stops does it fly
+   * home into Rovo. A coder (`laneIndex` 0–2) only takes code tasks, in its own
+   * lane; the others take everything else.
    */
-  private async runTask(task: Task, laneIndex: number): Promise<void> {
+  private async copy(laneIndex: number): Promise<void> {
+    const { stage, hub } = this;
+    const rovo = this.rovo.drone;
+    const coder = laneIndex >= 0;
+    let sub: SpawnedDrone | undefined;
+    let from = AT_ROVOS_BODY;
+    while (this.running) {
+      if (hub.board.length === 0) {
+        await wait(stage, 0.4);
+        continue;
+      }
+      if (!sub) {
+        // Born inside Rovo, full size, at its first ticket.
+        sub = spawnDrone(stage, rovo.position.x, rovo.position.z, { name: `Rovo.${++this.subs}`, lineage: 'cyan', subAgent: true, status: 'waiting' });
+        sub.drone.position.y = AT_ROVOS_BODY;
+        sub.drone.fade = 0;
+        rovo.flash = 1;
+        const drone = sub.drone;
+        await tween(stage, EMERGE_SECONDS, (t) => (drone.fade = t));
+      }
+      // Rovo hands it the next ticket off the board.
+      rovo.flash = 1;
+      const card = await hub.takeTask(sub.drone.rig.hover, rovo.rig.hover);
+      if (!card) continue;
+      sub.drone.status = 'working';
+      const task = makeTask(this.random, { scm: this.scm, without: coder ? NOT_CODE : ['code'] });
+      from = await this.runTask(sub, task, card, coder ? laneIndex : -1, from);
+      // Done: it waits where it is for its next ticket.
+      sub.drone.status = 'waiting';
+    }
+    if (!sub) return;
+    await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
+    const drone = sub.drone;
+    await tween(stage, 0.3, (t) => (drone.fade = 1 - t));
+    sub.despawn();
+    rovo.flash = 1;
+  }
+
+  /**
+   * One task, run by a copy holding its card: each step in turn (fly to the
+   * system, work it while hovering over it, report to Jira), or for code its
+   * lane; then the finished card is shot to Rovo and the systems only this
+   * task needed go. Returns the copy's flying height where it ends up.
+   */
+  private async runTask(sub: SpawnedDrone, task: Task, card: Ticket, laneIndex: number, startFrom: number): Promise<number> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
     const run: TaskRun = { id: `task-${this.tasks.length + 1}`, task, done: 0 };
@@ -313,20 +354,7 @@ export class RovoAtlassian {
     this.out++;
     this.peakOut = Math.max(this.peakOut, this.out);
 
-    // Born inside Rovo, full size; it takes the card off Jira's board on its way out.
-    const sub = spawnDrone(stage, rovo.position.x, rovo.position.z, {
-      name: `Rovo.${++this.subs}`,
-      lineage: 'cyan',
-      subAgent: true,
-      status: 'working',
-    });
-    sub.drone.position.y = AT_ROVOS_BODY;
-    sub.drone.fade = 0;
-    rovo.flash = 1;
-    await tween(stage, EMERGE_SECONDS, (t) => (sub.drone.fade = t));
-    const card = await hub.takeTask(sub.drone.rig.hover);
-
-    let from = AT_ROVOS_BODY;
+    let from = startFrom;
     if (lane) {
       await this.code(sub.drone, lane, from);
       run.done = run.task.steps.length;
@@ -380,16 +408,9 @@ export class RovoAtlassian {
       this.userReports++;
     }
 
-    // The task is done: the card goes home to Done, the copy flies home into Rovo.
-    // A coding copy collapses its lane back into itself before it goes.
+    // The task is done: a coding copy collapses its lane back into itself, then the card is shot to Rovo.
     if (lane) await lane.collapse();
-    if (card) {
-      await hub.finish(card, rovo.rig.hover);
-      rovo.flash = 1;
-    }
-    await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
-    await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
-    sub.despawn();
+    await hub.finish(card, rovo.rig.hover);
     rovo.flash = 1;
     if (lane) {
       lane.dispose();
@@ -399,6 +420,7 @@ export class RovoAtlassian {
     this.out--;
     // Third-party tools this task called go, unless another open task still needs them.
     for (const step of run.task.steps) void this.systems.release(step.system);
+    return from;
   }
 
   /**

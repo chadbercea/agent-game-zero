@@ -147,10 +147,11 @@ export class JiraHub {
    * A sub-agent takes the oldest open task: its card moves to In progress,
    * and a copy lifts off the board and rides with the sub-agent (on `carrier`).
    */
-  async takeTask(carrier: Object3D): Promise<Ticket | null> {
+  async takeTask(carrier: Object3D, handedBy?: Object3D): Promise<Ticket | null> {
     const card = this.board[0];
     if (!card) return null;
-    const from = card.mesh.getWorldPosition(new Vector3());
+    // Handed over by the parent (`handedBy`, Rovo) when given; otherwise it lifts straight off the board.
+    const from = (handedBy ?? card.mesh).getWorldPosition(new Vector3());
     this.kanban.moveCard(card, 1);
     const ticket = new Ticket({ key: 'DEMO', title: 'Task' }, { label: false });
     this.carried.set(ticket, card);
