@@ -27,13 +27,15 @@ function testStage(fps = 30) {
 }
 
 describe('Rovo on the Atlassian grid', () => {
-  it('spawns each sub-agent out of Rovo’s body, not out of the floor', async () => {
+  it('spawns each sub-agent out of Rovo’s body at full size: never from the floor, never scaling', async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
     const seen = new Set<Object3D>();
     const births: { sub: number; rovo: number; apart: number }[] = [];
+    const scales = new Set<number>();
     void scene.start();
     await run(20, () => {
+      for (const o of root.children) if (o instanceof Drone && o.subAgent) scales.add(+o.scale.x.toFixed(4));
       for (const o of root.children) {
         if (!(o instanceof Drone) || !o.subAgent || seen.has(o)) continue;
         seen.add(o);
@@ -44,6 +46,8 @@ describe('Rovo on the Atlassian grid', () => {
     });
     scene.stop();
     expect(births.length).toBeGreaterThan(0);
+    // One size, always: sub-agents don't grow or shrink.
+    expect([...scales]).toEqual([0.58]);
     for (const b of births) {
       // Born level with Rovo's body (within its bob), right under it: inside Rovo, not on the gate.
       expect(Math.abs(b.sub - b.rovo)).toBeLessThan(0.25);
