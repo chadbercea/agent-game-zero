@@ -1,6 +1,7 @@
-import { type Curve, Object3D, Vector3 } from 'three';
+import { type Curve, CurvePath, LineCurve3, Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { Branch } from '../primitives/branch/Branch';
+import { Terminal } from '../primitives/terminal/Terminal';
 import { Drone } from '../primitives/drone/Drone';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
@@ -61,13 +62,12 @@ describe('Rovo and Jira, the quarterback', () => {
   it('every line runs along the grid, never diagonal', async () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 3);
-    const offGrid = (curve: Curve<Vector3>) => {
-      let on = 0;
-      for (let i = 0; i <= 100; i++) {
-        const t = curve.getTangentAt(i / 100);
-        if (Math.abs(t.x) < 1e-3 || Math.abs(t.z) < 1e-3) on++;
-      }
-      return on / 101 < 0.75;
+    // Every straight run is along x or z; the only turns are the rounded corners between runs.
+    const offGrid = (curve: Curve<Vector3>): boolean => {
+      if (curve instanceof CurvePath) return curve.curves.some((c) => offGrid(c as Curve<Vector3>));
+      if (!(curve instanceof LineCurve3)) return false;
+      const d = curve.v2.clone().sub(curve.v1);
+      return Math.abs(d.x) > 1e-3 && Math.abs(d.z) > 1e-3;
     };
     let lines = 0;
     let bad = 0;
@@ -167,7 +167,9 @@ describe('Rovo and Jira, the quarterback', () => {
       for (const o of root.children) {
         if (!(o instanceof SystemNode) || o.kind === 'jira' || o.scale.x < 0.01) continue;
         appeared.add(o.kind);
-        const line = root.children.some((e) => e instanceof GraphEdge && e.drawn > 0.99 && e.path.getPoint(1).distanceTo(o.position) < 0.8);
+        const line = root.children.some(
+          (e) => (e instanceof GraphEdge ? e.drawn > 0.99 && e.path.getPoint(1).distanceTo(o.position) < 0.8 : e instanceof Branch && e.drawn > 0.99 && e.curve.getPoint(1).distanceTo(o.position) < 0.8),
+        );
         if (!line) nodeBeforeLine++;
       }
     });
@@ -175,7 +177,8 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(40);
     expect(appeared.size).toBeGreaterThan(1);
     expect(nodeBeforeLine).toBe(0);
-    for (const kind of appeared) expect(PLACES[kind]).toBeDefined();
+    // Systems stand at their places; worktrees stand in the code lanes.
+    for (const kind of appeared) if (kind !== 'worktree') expect(PLACES[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.
     const standing = [...scene.systems.placed.keys()];
     for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
@@ -192,6 +195,44 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(code.length).toBeGreaterThan(0);
     for (const t of code) expect(t.task.steps[0].system).toBe(scene.scm);
     expect(scene.trunk.count).toBe(code.length);
+  });
+
+  it('a code task runs like real life: terminal admin → diff → (check in) → tail → pass, merge, deploy, and the lane is taken down', async () => {
+    const { root, stage, run } = testStage();
+    // A run with room for three coding copies at once.
+    let seed = 1;
+    while (new RovoAtlassian(testStage().stage, seed).codeCrew < 3) seed++;
+    const scene = new RovoAtlassian(stage, seed);
+    const states = new Map<object, string[]>();
+    let maxLanes = 0;
+    const watch = () => {
+      for (const lane of scene.lanes) {
+        if (!lane) continue;
+        const seen = states.get(lane) ?? [];
+        const now = lane.terminal.passed ? 'pass' : lane.terminal.state;
+        if (seen[seen.length - 1] !== now) seen.push(now);
+        states.set(lane, seen);
+      }
+      maxLanes = Math.max(maxLanes, scene.lanes.filter(Boolean).length);
+    };
+    void scene.start();
+    await run(160, watch);
+    scene.stop();
+    await run(50, watch);
+    const code = scene.tasks.filter((t) => t.task.type === 'code');
+    expect(code.length).toBeGreaterThan(1);
+    // Every lane that finished went through the steps in order.
+    const finished = [...states.values()].filter((s) => s.includes('pass'));
+    expect(finished.length).toBe(code.length);
+    for (const s of finished) expect(s.filter((x) => x !== 'off')).toEqual(['admin', 'diff', 'tail', 'pass']);
+    expect(scene.trunk.count).toBe(code.length);
+    expect(scene.output).toBeDefined();
+    // Coding copies work in parallel, one per lane, never more than the run allows.
+    expect(maxLanes).toBeGreaterThanOrEqual(2);
+    expect(maxLanes).toBeLessThanOrEqual(scene.codeCrew);
+    // Lanes are taken down once their tasks are done.
+    expect(scene.lanes.every((l) => l === null)).toBe(true);
+    expect(root.children.some((o) => o instanceof Terminal)).toBe(false);
   });
 
   it('the kanban board moves: tasks come into To do, go to In progress, finish in Done, and slide off', async () => {

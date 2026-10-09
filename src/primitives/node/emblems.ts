@@ -25,8 +25,10 @@ export type DocsKind = 'gdocs';
 export type CodeHostKind = 'gitlab';
 /** Comms: messages in and out. */
 export type CommsKind = 'slack';
+/** Where code is written: a worktree, a checkout of the repo a coding agent works in. */
+export type WorkspaceKind = 'worktree';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind | CommsKind;
+export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind | CommsKind | WorkspaceKind;
 
 /** Act 1 systems (outside Atlassian). */
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
@@ -37,7 +39,16 @@ export const TRACKER_KINDS: readonly TrackerKind[] = ['linear'];
 export const DOCS_KINDS: readonly DocsKind[] = ['gdocs'];
 export const CODE_HOST_KINDS: readonly CodeHostKind[] = ['gitlab'];
 export const COMMS_KINDS: readonly CommsKind[] = ['slack'];
-export const SYSTEM_KINDS: readonly SystemKind[] = [...JOB_KINDS, ...ATLASSIAN_KINDS, ...TRACKER_KINDS, ...DOCS_KINDS, ...CODE_HOST_KINDS, ...COMMS_KINDS];
+export const WORKSPACE_KINDS: readonly WorkspaceKind[] = ['worktree'];
+export const SYSTEM_KINDS: readonly SystemKind[] = [
+  ...JOB_KINDS,
+  ...ATLASSIAN_KINDS,
+  ...TRACKER_KINDS,
+  ...DOCS_KINDS,
+  ...CODE_HOST_KINDS,
+  ...COMMS_KINDS,
+  ...WORKSPACE_KINDS,
+];
 /** Source code managers: code is checked in, merged and shipped from these. They share the branch emblem and job. */
 export const SCM_KINDS = ['github', 'bitbucket', 'gitlab'] as const satisfies readonly SystemKind[];
 export type ScmKind = (typeof SCM_KINDS)[number];
@@ -62,6 +73,7 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   gdocs: 'Google Docs',
   gitlab: 'GitLab',
   slack: 'Slack',
+  worktree: 'Worktree',
 };
 
 export interface EmblemMaterials {
@@ -150,6 +162,13 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     for (let i = 0; i < 4; i++) {
       place(solid(new BoxGeometry(i === 3 ? 0.12 : 0.2, 0.022, 0.012), m.graphite), i === 3 ? -0.04 : 0, 0.07 - i * 0.07, 0.012);
     }
+  } else if (kind === 'worktree') {
+    // A checkout of the repo: a folder, its tab up, with a small branch mark on it.
+    place(solid(new RoundedBoxGeometry(0.42, 0.28, 0.08, 2, 0.03), m.shell), 0, -0.02);
+    place(solid(new RoundedBoxGeometry(0.16, 0.07, 0.08, 2, 0.02), m.shell), -0.11, 0.14);
+    place(solid(new CylinderGeometry(0.018, 0.018, 0.16, 6), m.graphite), -0.04, -0.02, 0.045);
+    place(solid(new SphereGeometry(0.035, 10, 8), m.graphite), -0.04, 0.07, 0.045);
+    place(solid(new SphereGeometry(0.035, 10, 8), m.graphite), 0.06, 0.03, 0.045);
   } else if (kind === 'slack') {
     // Comms: a speech bubble with three lines of chat in it.
     place(solid(new RoundedBoxGeometry(0.42, 0.3, 0.06, 2, 0.06), m.shell), 0, 0.04);
