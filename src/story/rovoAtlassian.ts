@@ -379,7 +379,10 @@ export class RovoAtlassian {
     // The task is done: the card goes home to Done, the copy flies home into Rovo.
     // A coding copy collapses its lane back into itself before it goes.
     if (lane) await lane.collapse();
-    if (card) await hub.finish(card);
+    if (card) {
+      await hub.finish(card, rovo.rig.hover);
+      rovo.flash = 1;
+    }
     await fly(stage, DroneFlight.to(sub.drone, rovo.position, { speed: SUB_SPEED, fromHeight: from, toHeight: AT_ROVOS_BODY, lift: 0 }));
     await tween(stage, 0.3, (t) => (sub.drone.fade = 1 - t));
     sub.despawn();
