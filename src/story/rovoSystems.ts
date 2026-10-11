@@ -123,7 +123,7 @@ export class SystemsOnGrid {
     if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
     const tie = `system:${kind}:${++this.ups}`;
     await this.hub.tie(tie, at, this.arrive[kind], TWG_PLATE / 2 + 0.05, false, this.routes[kind]);
-    const plate = graphPlate(TWG_PLATE);
+    const plate = graphPlate(TWG_PLATE, kind, NODE_FOOTPRINT * TWG_SCALE);
     plate.position.copy(at);
     plate.scale.setScalar(0.001);
     const node = new SystemNode({ kind });
