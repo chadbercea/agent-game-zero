@@ -8,7 +8,7 @@ const preview: Preview = {
   parameters: {
     options: {
       // The narrative first, then the story (the demos), then the parts it's built from, then the primitives.
-      storySort: { order: ['Story Narrative', 'Story Parts', 'Primitives'] },
+      storySort: { order: ['Story Narrative', 'Primitives'] },
     },
     controls: {
       matchers: {
