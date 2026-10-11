@@ -21,6 +21,8 @@ const GEAR_THICK = 0.15;
 const TOOTH = 0.05;
 /** Teeth per unit of radius: the same tooth size on every gear. */
 const TEETH_PER_RADIUS = 34;
+/** How soft a gear's edges are: its bevel (pad units), in two flat steps. */
+const GEAR_BEVEL = 0.02;
 /** The one gray every gear is made of. */
 const GEAR_GRAY = NEUTRAL.shellShade;
 
@@ -72,7 +74,7 @@ export class Gearworks extends Group {
     super();
     const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05 });
     const core = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.7, metalness: 0.1 });
-    const gear = new MeshStandardMaterial({ color: GEAR_GRAY, roughness: 0.4, metalness: 0.35 });
+    const gear = new MeshStandardMaterial({ color: GEAR_GRAY, roughness: 0.4, metalness: 0.35, flatShading: true });
     this.materials = [shell, core, gear];
 
     // The housing: a base and a cap, solid back walls, and pillars either side of each front window.
@@ -182,7 +184,7 @@ function meshPhase(toward: number, beforeTeeth: number, beforePhase: number, tee
   return toward + Math.PI - (GAP_CENTER - off) * pitch;
 }
 
-/** A spur gear with depth: `teeth` round a rim, a plain solid face, bevelled so its faces and tooth sides catch the light. */
+/** A low-poly spur gear with depth: `teeth` round a rim, a plain solid face, soft bevelled edges, flat-shaded so its faces and tooth sides catch the light. */
 function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
   const root = radius - TOOTH;
   const shape = new Shape();
@@ -202,13 +204,15 @@ function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
     }
   }
   shape.closePath();
-  const bevel = 0.006;
+  // Soft, low-poly edges: a wide bevel in two flat steps round every edge and tooth corner, pulled
+  // in by its own size so the gear stays the size it meshes at.
   return new ExtrudeGeometry(shape, {
-    depth: GEAR_THICK - 2 * bevel,
+    depth: GEAR_THICK - 2 * GEAR_BEVEL,
     bevelEnabled: true,
-    bevelThickness: bevel,
-    bevelSize: bevel,
-    bevelSegments: 1,
-    curveSegments: 8,
+    bevelThickness: GEAR_BEVEL,
+    bevelSize: GEAR_BEVEL,
+    bevelOffset: -GEAR_BEVEL,
+    bevelSegments: 2,
+    curveSegments: 4,
   });
 }
