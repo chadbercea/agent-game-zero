@@ -4,7 +4,7 @@ import { BEND_RADIUS, FACE_CAMERA } from '../core/grid';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
 import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
-import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
+import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { type Request, Ticket } from '../primitives/ticket/Ticket';
@@ -17,17 +17,28 @@ import { tween, wait } from './timeline';
 export const HUB_SCALE = 1.35;
 /** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
 export const PLATE = 3;
+/** A permanent plate's foundation: how far it reaches past the plate's width on each side, and how high it stands. */
+const FOUNDATION_OUT = 0.04;
+const FOUNDATION_HIGH = 0.025;
+/** How far the plate's top steps in from the foundation's edge, and how high it stands on it. */
+const STEP_IN = 0.2;
+const TOP_HIGH = 0.035;
+
 /**
- * A Teamwork Graph plate: the low white platform a Teamwork Graph app stands
- * on (Jira, Confluence, Bitbucket), a little wider than its node, with a
- * Teamwork Graph blue edge. `size` is its width.
+ * A Teamwork Graph plate: the platform a Teamwork Graph app stands on (Jira,
+ * Confluence, Bitbucket), a little wider than its node. What makes it read as
+ * permanent is its shape, not a color: a stepped plinth, a broad foundation
+ * with the plate stepping up and in from it, like something built to stay.
+ * `size` is its width; the foundation reaches FOUNDATION_OUT past it.
  */
 export function graphPlate(size: number): Group {
   const plate = new Group();
   const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
-  const edge = new MeshStandardMaterial({ color: GRAPH_COLOR, emissive: GRAPH_COLOR, emissiveIntensity: 0.5, roughness: 0.4 });
-  plate.add(solid(new RoundedBoxGeometry(size, 0.06, size, 2, 0.03), shell)).position.y = 0.03;
-  plate.add(solid(new RoundedBoxGeometry(size + 0.08, 0.025, size + 0.08, 2, 0.012), edge)).position.y = 0.012;
+  const footing = new MeshStandardMaterial({ color: NEUTRAL.shellShade, roughness: 0.55 });
+  const base = size + 2 * FOUNDATION_OUT;
+  const top = base - 2 * STEP_IN;
+  plate.add(solid(new RoundedBoxGeometry(base, FOUNDATION_HIGH, base, 2, 0.015), footing)).position.y = FOUNDATION_HIGH / 2;
+  plate.add(solid(new RoundedBoxGeometry(top, TOP_HIGH, top, 2, 0.025), shell)).position.y = FOUNDATION_HIGH + TOP_HIGH / 2;
   return plate;
 }
 
@@ -53,8 +64,8 @@ const SHOT_SECONDS = 0.6;
  * Jira as the quarterback (Story Narrative): the system of record for
  * everything that happens on the grid.
  *
- * - It stands a size up on a low plate of its own with a Teamwork Graph blue
- *   edge (no screen, no lights: not a gate).
+ * - It stands a size up on a stepped plate of its own, a foundation with the
+ *   plate stepping up from it (no screen, no lights: not a gate).
  * - Its emblem moves out beside it as a kanban board big enough to read, white cards in To do,
  *   In progress and Done. A new task slides into To do (`addTask`); a
  *   sub-agent takes one (`takeTask`): the card moves to In progress and a
