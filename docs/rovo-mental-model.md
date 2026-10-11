@@ -1,37 +1,67 @@
 # Rovo mental model
 
-The reference for the Rovo stories: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end) and **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production, built from the same pieces). Everything here comes from Chad (2026-10-09). If a visual isn't covered here, ask; don't invent one.
+The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end) and **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production). Everything here comes from Chad (from 2026-10-09). **If a visual isn't covered here, ask Chad; don't invent one.** To build a story from these rules, see [`mapping-a-story.md`](mapping-a-story.md).
 
 ## Who
 
 - **Rovo is the only real agent.** It authenticates at its gate (the gate locks behind it) and works from **Jira**, the quarterback and system of record.
-- **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They spawn out of Rovo once and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to Rovo (the parent, already talking two-way with Jira; never to the base), and waits where it is for its next ticket. They go home into Rovo only when the work stops.
+- **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They emerge out of Rovo and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to **Rovo** (the parent, already talking two-way with Jira; never to Jira directly), and waits where it is, yellow, for its next ticket. They fly home into Rovo only when the work stops.
 
 ## Tasks
 
 - **One copy, one task, one loop.** A copy runs its task's steps one at a time. Example (spec): read Confluence → read Figma (MCP) → update Confluence → update the terminal back to the user.
-- **Types:** code, write a doc, read a doc, update Jira, send a Slack message, write a spec from Figma. Confluence carries most docs and reads; Figma comes up often, and about half its reads go **through MCP**: the copy builds a terminal (the MCP client) beside Figma, the design rides back along its line, then the copy collapses it. Notion is rare. Seeded RNG, **biased toward less complex but varied** (`src/story/rovoTasks.ts`).
-- **Parallel.** For example, 3 copies in mini systems (the 3–4-node areas a copy works through) plus 3 copies coding in separate worktrees, all from the same Jira.
+- **Types** (`src/story/rovoTasks.ts`): code, write a doc, read a doc, update Jira, send a Slack message, write a spec from Figma.
+  - Confluence carries most docs and reads. Notion is rare.
+  - Figma comes up often, and about half its reads go **through MCP**: the copy builds a terminal (the MCP client) beside Figma, the design rides back along its line, then the copy collapses it.
+  - Seeded RNG, **biased toward less complex but varied**.
+- **Parallel.** For example, copies working the mini systems (the systems round Jira a copy works through) while others code in separate worktrees, all from the same Jira.
 
 ## Systems
 
-- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. Its core, **Jira, Confluence and Bitbucket**, is prominent and persistent: it comes up as Rovo gets into Jira, each on a plate, a size up. Code search hangs off Bitbucket (it indexes the repositories): it comes up beside Bitbucket, its line into Bitbucket, and stays once called.
-- **Bitbucket is the repo** in this story: all the code activity is around it.
-- **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through connectors and **despawn when the Jira issue is done**.
-- **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway.
+- **Teamwork Graph** is Atlassian's data layer of links between work, under Rovo. Its core, **Jira, Confluence and Bitbucket**, is permanent: it comes up as Rovo gets into Jira and stays.
+  - Permanent systems **stand taller**: a soft, low-poly housing with windows on the camera-facing sides, where solid one-gray gears turn while the system works and run down when it stops. Permanence is shape, never color.
+  - **Code search** hangs off Bitbucket (it indexes the repositories): it comes up beside Bitbucket, its line into Bitbucket, and stays once called.
+- **Bitbucket is the repo:** all the code activity is around it.
+- **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through a connector and **despawn when their Jira issue is done**. Work written to a tool stays there (write-back).
+- **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway. It catches comms and sends comms.
+- **The user's terminal** is where copies report back to the human.
 
 ## Code
 
-Linear, like real life: the Jira issue calls for code → Rovo spawns a code copy → generate code → check in → CI/CD runs and passes → auto-merge (squash) → auto-deploy. Merging the PR deletes the branch, and the SCM keeps the final state (`RepoTrunk`). The copy marks its task done in Jira and despawns.
+Linear, like real life: the Jira issue calls for code → a coding copy → generate code → check in → CI/CD runs and passes → squash-merge → deploy. Merging deletes the branch; the repo keeps the final state (`RepoTrunk`, one commit per merge). The copy shoots its ticket to Rovo and waits for its next one.
 
 - **SCMs** (GitHub, Bitbucket, GitLab) share the branch emblem and job; the job ends in a squash merge.
-- **Output:** the SCM fires small, fast cubes into the assembler, and bigger cubes ride a short, fast belt into the portal.
-- **Terminal:** flat on the grid, with lines plugging into its back. States: admin, live tail logs, code gen (a diff view, also used for code review).
+- **Output:** each merge sends small, fast cubes down the output line into the assembler. Every 2 × 2 × 2 set fuses into a release, which rides a short, fast belt through the portal.
+- **Terminal:** flat on the grid, lines plugging into its back. States: admin, live tail logs (pass turns it green), code gen (a diff view, also used for code review).
+- **Coding lanes** (worktree → terminal → repo) go to Bitbucket first and spawn out from there (ILI-1004). They fold back up when the work is done.
+
+## Visual vocabulary
+
+What things mean on screen. Use these; don't add meanings.
+
+| Thing | Means |
+|---|---|
+| Green / yellow / red light | Working / waiting / stopped (status). Used on nodes, drones, terminals. |
+| Cyan | Rovo's lineage (Rovo and its copies). |
+| Blue dotted line (Graph line) | A link in the Teamwork Graph: Jira to a system, a system to the system it hangs off. |
+| Gray line | Rovo's access line, a coding lane, the output line. |
+| Packet riding a line | Status or a product going home to Jira (the tool's product shape when it carries one). |
+| Ticket card | A Jira issue, carried by the copy working it; it glows green when shot back to Rovo. |
+| Tall housing with gear windows | A permanent (Teamwork Graph) system. Gears turn while it works. |
+| Small plug on a node | A third-party connector into the Teamwork Graph. |
+| Glass gateway with a lock | A secure crossing (Slack). |
+| Cubes, assembler, belt, portal | Code merged, released and shipped to production. |
 
 ## Rules on screen
 
 1. An agent only works while hovering over a real node.
 2. Every line connects two real things, runs on the grid (never diagonal), and draws in.
 3. **The line draws first, then the node appears at its end.** Going away, the node folds first, then its line draws back.
-4. Things come in progressively, as the story reaches them.
-5. **The seed drives the whole map** (`src/story/storyMap.ts`): the gate's corner off Jira, which side the code side grows out on, Slack's side, the user's terminal and the mini systems. Each story lays out only the systems it uses, and the camera frames the map it gets.
+4. **The system reacts to the agents:** things come up because a copy arrived or work reached them, progressively, as the story gets there.
+5. **Only draw and spawn the next thing needed, never the whole chain** (ILI-1004). The output line comes with the first cubes, the assembler when cubes arrive, the belt and portal only when a release needs them.
+6. **The seed drives the whole map** (`src/story/storyMap.ts`): the gate's corner off Jira, which side the code side grows out on, Slack's side, the user's terminal, the mini systems. Each story lays out only the systems it uses, and the camera frames the map it gets.
+7. **No captions.** The scene explains itself. Hover highlights, click shows a details card, and clicking Rovo or a copy shows the drone family tree.
+
+## Status
+
+- ILI-1004 (rule 5, and lanes spawning out of Bitbucket) is agreed but **not built yet**: today the code side still builds its lanes from the copy's spot and the whole output chain on the first code task.
