@@ -105,14 +105,14 @@ const TASK_GAP: [number, number] = [0.9, 2.2];
 /** Rovo's crew: always 1–3 coders working branches; a few more in the mini systems; never more than this in all. */
 export const MAX_CREW = 5;
 const MAX_LOOPERS = 2;
-const SUB_SPEED = 4;
+export const SUB_SPEED = 4;
 /** Seconds a sub-agent takes to fade into being inside Rovo before it flies out. */
-const EMERGE_SECONDS = 0.25;
+export const EMERGE_SECONDS = 0.25;
 /** How high the padlock floats over the gate once Rovo is through. */
 const LOCK_HEIGHT = 0.9;
 
 /** How high a sub-agent's floor anchor sits for its body to be level with Rovo's body. */
-const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
+export const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
 
 /** One Jira task, run by one copy of Rovo. */
 export interface TaskRun {
@@ -165,7 +165,7 @@ export class RovoAtlassian {
   /** Rovo's copies out on the grid, with the ticket and task each holds right now (none while it waits). */
   readonly copies = new Map<Drone, { card?: Ticket; run?: TaskRun }>();
   /** Jira issues handed out so far. */
-  private issues = 0;
+  protected issues = 0;
   /** Copies at work right now, and the node each is working (always over it). */
   readonly working = new Map<Drone, Object3D>();
   /** Slack, the comms hub behind its gateway (up once a copy first sends a message). */
@@ -193,15 +193,17 @@ export class RovoAtlassian {
   out = 0;
   codeOut = 0;
   peakOut = 0;
-  private building?: Promise<OutputLine>;
+  /** Releases through the portal so far (each a 2 × 2 × 2 of merged code). */
+  shipped = 0;
+  protected building?: Promise<OutputLine>;
   /** Merges at the repo happen one at a time. */
   private merging: Promise<void> = Promise.resolve();
-  private readonly random: () => number;
-  private running = false;
-  private subs = 0;
+  protected readonly random: () => number;
+  protected running = false;
+  protected subs = 0;
 
   constructor(
-    private readonly stage: SceneHost,
+    protected readonly stage: SceneHost,
     seed = 3,
   ) {
     this.random = seededRandom(seed);
@@ -303,9 +305,30 @@ export class RovoAtlassian {
    * then the kanban board shows up and tasks flow until `stop()`.
    */
   async start(): Promise<void> {
+    const { hub } = this;
+    this.running = true;
+    await this.enter();
+    // Work starts: the kanban board shows up.
+    await hub.showBoard();
+    for (let i = 0; i < 3; i++) await hub.addTask();
+    void this.taskFeed();
+    // Rovo's crew: copies that stay on. Coders each keep a lane; the rest run loops in the mini systems.
+    const crew = [
+      ...Array.from({ length: this.codeCrew }, (_, i) => this.copy(i)),
+      ...Array.from({ length: this.loopCrew }, () => this.copy(-1)),
+    ];
+    await Promise.all(crew);
+  }
+
+  /**
+   * Rovo's way in, the same in every story: alone, it flies to its gate (which
+   * comes up as it nears) and authenticates; the line draws to Jira and Jira
+   * comes up; Rovo moves in (the gate locks behind it), and the Teamwork
+   * Graph's core comes up around it: Confluence, then Bitbucket.
+   */
+  protected async enter(): Promise<void> {
     const { stage, hub } = this;
     const rovo = this.rovo.drone;
-    this.running = true;
     await tween(stage, 0.8, (t) => (rovo.fade = t));
     await wait(stage, 0.6);
     const toGate = fly(stage, DroneFlight.to(rovo, ROVO_GATE, { speed: 3 }));
@@ -333,20 +356,10 @@ export class RovoAtlassian {
     await this.systems.establish('confluence');
     await this.systems.establish('bitbucket');
     await wait(stage, 0.6);
-    // Work starts: the kanban board shows up.
-    await hub.showBoard();
-    for (let i = 0; i < 3; i++) await hub.addTask();
-    void this.taskFeed();
-    // Rovo's crew: copies that stay on. Coders each keep a lane; the rest run loops in the mini systems.
-    const crew = [
-      ...Array.from({ length: this.codeCrew }, (_, i) => this.copy(i)),
-      ...Array.from({ length: this.loopCrew }, () => this.copy(-1)),
-    ];
-    await Promise.all(crew);
   }
 
   /** A padlock fades in open over the gate, then snaps shut. The gate stays lit under it: security is on, not off. */
-  private async lockGate(): Promise<void> {
+  protected async lockGate(): Promise<void> {
     const { stage, lock } = this;
     await tween(stage, 0.35, (t) => {
       lock.shown = t;
@@ -424,7 +437,7 @@ export class RovoAtlassian {
    * lane; then the finished card is shot to Rovo and the systems only this
    * task needed go. Returns the copy's flying height where it ends up.
    */
-  private async runTask(
+  protected async runTask(
     sub: SpawnedDrone,
     task: Task,
     card: Ticket,
@@ -528,14 +541,14 @@ export class RovoAtlassian {
    * folds in, the trunk keeps the commit) and deployed (small cubes shoot down
    * the output line to the assembler, belt and portal); and the status goes to Jira.
    */
-  private async code(drone: Drone, lane: CodeLane, from: number): Promise<void> {
+  protected async code(drone: Drone, lane: CodeLane, from: number): Promise<void> {
     const { stage, hub } = this;
     // The copy goes out to its lane's spot and builds the lane out from itself, into the repo.
     await fly(stage, DroneFlight.to(drone, lane.spot, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
     this.working.set(drone, lane.worktree);
     let repo!: PlacedSystem;
     await lane.build(async () => (repo = await this.systems.call(this.scm)));
-    this.building ??= buildOutput(stage).then((output) => (this.output = output));
+    this.building ??= buildOutput(stage, () => this.shipped++).then((output) => (this.output = output));
     lane.worktree.light = 'working';
     const signal = attachSignal(stage, drone, lane.worktree);
     const { terminal } = lane;
@@ -556,7 +569,7 @@ export class RovoAtlassian {
   }
 
   /** A squash merge at the repo, one at a time: the branch forks and folds back in, the trunk keeps the commit, and the deploy shoots down the line. */
-  private mergeAt(node: SystemNode): Promise<void> {
+  protected mergeAt(node: SystemNode): Promise<void> {
     const merge = this.merging.then(async () => {
       const { stage } = this;
       node.light = 'working';
@@ -593,7 +606,7 @@ export class RovoAtlassian {
    * system has a job animation and the step makes something (write, update),
    * it plays in place of the emblem. Otherwise the copy's signal dots show the work.
    */
-  private async work(drone: Drone, node: SystemNode, step: Step): Promise<void> {
+  protected async work(drone: Drone, node: SystemNode, step: Step): Promise<void> {
     const { stage } = this;
     this.working.set(drone, node);
     node.light = 'working';
@@ -629,7 +642,7 @@ export class RovoAtlassian {
    * passes, and the read reports to Jira. Then the copy collapses it: the line
    * draws back, the terminal folds. One MCP session at a time.
    */
-  private mcpRead(drone: Drone, from: number): Promise<number> {
+  protected mcpRead(drone: Drone, from: number): Promise<number> {
     const session = this.mcpSession.then(async () => {
       const { stage, hub } = this;
       const at = this.mcpAt;
@@ -676,7 +689,7 @@ export class RovoAtlassian {
   }
 
   /** The user's terminal, brought up the first time a copy reports back: it comes up under the copy, then its line reaches in to Jira. It stays. */
-  private userTerminal(): Promise<Terminal> {
+  protected userTerminal(): Promise<Terminal> {
     this.terminalUp ??= (async () => {
       const { stage } = this;
       const terminal = new Terminal({ state: 'admin', seed: 7 });
@@ -692,7 +705,7 @@ export class RovoAtlassian {
     return this.terminalUp;
   }
 
-  private between([lo, hi]: [number, number]): number {
+  protected between([lo, hi]: [number, number]): number {
     return lo + this.random() * (hi - lo);
   }
 }
