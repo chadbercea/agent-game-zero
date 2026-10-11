@@ -25,6 +25,8 @@ const SPIN_DOWN = 1.4;
 const TOOTH = 0.05;
 /** Teeth per unit of radius: the same tooth size on every gear, so meshing gears turn at their real ratio. */
 const TEETH_PER_RADIUS = 34;
+/** Spokes on every gear. */
+const SPOKES = 5;
 
 /**
  * A gear train in a window: the first gear, then each next one meshing with
@@ -39,14 +41,14 @@ interface Train {
 }
 
 /**
- * One train per window: a large gear just taller than the window (its
- * teeth show at the sides, its rim cut off top and bottom), driving smaller
- * ones, so you see part of a bigger machine inside. The second
- * window is the first turned round, so the two faces don't match.
+ * One train per window: two or three big gears, too big for it, side by
+ * side and meshing, so the window is full and you see only their middles
+ * (hubs, spokes, the teeth where they meet), cropped on every side, like a
+ * glimpse of a much bigger machine.
  */
 const TRAINS: Train[] = [
-  { x: -0.22, y: -0.03, radii: [0.21, 0.12, 0.1], angles: [0.35, -0.55] },
-  { x: 0.22, y: -0.02, radii: [0.22, 0.11, 0.09], angles: [Math.PI - 0.4, Math.PI + 0.5] },
+  { x: -0.45, y: 0.03, radii: [0.25, 0.25, 0.25], angles: [-0.13, 0.13] },
+  { x: -0.27, y: -0.02, radii: [0.3, 0.3], angles: [0.07] },
 ];
 
 /**
@@ -155,7 +157,7 @@ export class Gearworks extends Group {
   }
 }
 
-/** A flat spur gear (seen face on, through glass): `teeth` round a rim, a bored center, and on a big gear three round lightening holes. */
+/** A flat spur gear (seen face on, through glass): `teeth` round a rim, spokes out from a bored hub. */
 function gearGeometry(radius: number, teeth: number): ShapeGeometry {
   const root = radius - TOOTH;
   const shape = new Shape();
@@ -176,12 +178,17 @@ function gearGeometry(radius: number, teeth: number): ShapeGeometry {
   }
   shape.closePath();
   shape.holes.push(new Path().absarc(0, 0, radius * 0.1, 0, Math.PI * 2, true));
-  if (radius > 0.18) {
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
-      const d = radius * 0.52;
-      shape.holes.push(new Path().absarc(Math.cos(a) * d, Math.sin(a) * d, radius * 0.17, 0, Math.PI * 2, true));
-    }
+  // Spokes: the rim joined to the hub by SPOKES arms, open between them.
+  const hub = radius * 0.3;
+  const rim = root * 0.8;
+  const arm = 0.21; // half an arm's width, as a share of the turn between spokes
+  for (let k = 0; k < SPOKES; k++) {
+    const a0 = ((k + arm) / SPOKES) * Math.PI * 2;
+    const a1 = ((k + 1 - arm) / SPOKES) * Math.PI * 2;
+    const hole = new Path();
+    hole.absarc(0, 0, rim, a0, a1, false);
+    hole.absarc(0, 0, hub, a1, a0, true);
+    shape.holes.push(hole);
   }
   return new ShapeGeometry(shape, 8);
 }
