@@ -9,8 +9,6 @@ Pre-alpha: one approved demo, **Rovo on the Atlassian Grid** (`src/story/rovoAtl
 
 Rovo authenticates at its gate and works from Jira. The Teamwork Graph core (Jira, Confluence, Bitbucket) comes up around it. Seeded Jira tasks (code, docs, reads, Jira updates, Slack, specs from Figma) keep landing on Jira's board, and Rovo hands each one to a copy of itself. A copy runs its task's steps one node at a time and reports to Jira. Third-party tools come up through connectors when called and go when the issue is done. Slack sits behind the glass gateway, always busy. Code runs its own lane: worktree, terminal, check in, CI, squash merge into Bitbucket, then cubes, assembler, belt and portal. No captions. Hover anything to highlight it; click it for its details; click Rovo or a copy for the drone family tree.
 
-Earlier stories (two acts, story v2, One Ticket A/B, Two Systems) were removed; they're in git history.
-
 ## Running
 
 ```sh
