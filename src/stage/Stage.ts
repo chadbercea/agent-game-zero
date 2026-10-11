@@ -25,6 +25,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { NEUTRAL } from '../core/palette';
+import { fastForward, type SkipOptions } from './fastForward';
 
 export type TickFn = (dt: number, elapsed: number) => void;
 
@@ -72,6 +73,8 @@ export class Stage implements DetailHost {
   private readonly labels = new CSS2DRenderer();
   private readonly timer = new Timer();
   private readonly ticks = new Set<TickFn>();
+  /** Fast-forwarding: the skip drives the ticks, so frames only draw. */
+  private skipping = false;
   private readonly rendered = new Set<() => void>();
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new Raycaster();
@@ -193,6 +196,22 @@ export class Stage implements DetailHost {
     return this.raycaster.intersectObjects(targets, true)[0];
   }
 
+  /**
+   * Jump ahead: run the clock at a fixed step without waiting for frames until
+   * `until()` holds or `seconds` pass, then play on in real time. Resolves
+   * with the stage seconds skipped.
+   */
+  async skip(options: SkipOptions): Promise<number> {
+    this.skipping = true;
+    try {
+      return await fastForward((dt) => {
+        for (const tick of this.ticks) tick(dt, this.timer.getElapsed());
+      }, options);
+    } finally {
+      this.skipping = false;
+    }
+  }
+
   /** Pan the camera so `point` sits at the center of the view. */
   centerOn(point: Vector3): void {
     const offset = this.camera.position.clone().sub(this.controls.target);
@@ -204,7 +223,7 @@ export class Stage implements DetailHost {
     this.timer.update();
     const dt = Math.min(this.timer.getDelta(), 1 / 20) * this.timeScale;
     const elapsed = this.timer.getElapsed();
-    for (const tick of this.ticks) tick(dt, elapsed);
+    if (!this.skipping) for (const tick of this.ticks) tick(dt, elapsed);
     this.controls.update();
 
     const target = this.detailProvider ? 1 : 0;

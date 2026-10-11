@@ -25,18 +25,24 @@ export default meta;
  * checked in, CI passes, merged, deployed down the belt into the portal), and
  * the repo's trunk keeps every commit. Teamwork Graph apps
  * stay; third-party tools go when their task is done. Seeded: `seed` changes
- * the run. No captions. Hover anything to highlight it; click it for its
- * details. Click Rovo or a copy for the drone family tree.
+ * the run; `at` opens it that many seconds in. No captions. Hover anything to
+ * highlight it; click it for its details. Click Rovo or a copy for the drone
+ * family tree.
  */
-export const Working: StoryObj<{ seed: number }> = {
-  argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },
-  args: { seed: 3 },
+export const Working: StoryObj<{ seed: number; at: number }> = {
+  argTypes: {
+    seed: { control: { type: 'number', min: 1, step: 1 } },
+    at: { control: { type: 'number', min: 0, max: 600, step: 5 } },
+  },
+  args: { seed: 3, at: 0 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
     // Framed on the whole grid: the mini systems around Jira on the left, the code side out to the portal on the right.
     stage.centerOn(STORY_CENTER);
     const scene = new RovoAtlassian(stage, args.seed);
     void scene.start();
+    // Open the run `at` seconds in: everything up to then plays out at once.
+    if (args.at > 0) void stage.skip({ seconds: args.at });
     // Hover anything to highlight it; click it for its details on the right (Escape or click away to close).
     const inspector = new Inspector(stage, rovoInspectables(scene), root);
     // Select Rovo or any copy: the drone family tree (the family in Detail, a line from Rovo to each copy).
