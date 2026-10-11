@@ -1,18 +1,14 @@
 import { LineCurve3, Vector3 } from 'three';
 import { NODE_FOOTPRINT } from '../core/grid';
-import type { SharedRun } from '../core/sharedRuns';
 import { reversed } from '../primitives/branch/gridPath';
 import { Gateway } from '../primitives/gateway/Gateway';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
+import type { SlackPlace } from './storyMap';
 import { tween, wait } from './timeline';
 
-/** Slack stands on its own at the top, straight up the grid from Jira, behind its gateway. */
-export const SLACK_AT = new Vector3(-3, 0, -7);
-/** The glass gateway on Slack's line, two squares long. */
-export const SLACK_RUN: SharedRun = { along: 'z', from: -5, to: -3, low: -3, high: -3 };
 const MESSAGE_SPEED = 7;
 /** Seconds between messages in the background chatter (seeded). */
 const CHATTER: [number, number] = [0.3, 0.9];
@@ -29,7 +25,7 @@ const CHATTER: [number, number] = [0.3, 0.9];
  */
 export class SlackHub {
   readonly node = new SystemNode({ kind: 'slack' });
-  readonly gateway = new Gateway(SLACK_RUN);
+  readonly gateway: Gateway;
   /** Slack → the gateway's far end. */
   readonly toGateway: GraphEdge;
   /** The gateway's near end → Jira's edge. */
@@ -43,14 +39,17 @@ export class SlackHub {
 
   constructor(
     private readonly stage: SceneHost,
+    /** Where Slack stands (from the story's map): straight out from Jira, its gateway on the line between. */
+    readonly place: SlackPlace,
     jiraEdge: Vector3,
     private readonly random: () => number,
   ) {
-    const slackEdge = SLACK_AT.clone().setZ(SLACK_AT.z + NODE_FOOTPRINT / 2 + 0.1);
-    this.toGateway = new GraphEdge(new LineCurve3(slackEdge, new Vector3(SLACK_AT.x, 0, SLACK_RUN.from)));
-    this.toJira = new GraphEdge(new LineCurve3(new Vector3(SLACK_AT.x, 0, SLACK_RUN.to), jiraEdge.clone()));
+    this.gateway = new Gateway(place.run);
+    const slackEdge = place.at.clone().addScaledVector(place.out, -(NODE_FOOTPRINT / 2 + 0.1));
+    this.toGateway = new GraphEdge(new LineCurve3(slackEdge, place.slackEnd.clone()));
+    this.toJira = new GraphEdge(new LineCurve3(place.jiraEnd.clone(), jiraEdge.clone()));
     this.path = new LineCurve3(slackEdge.clone(), jiraEdge.clone());
-    this.node.position.copy(SLACK_AT);
+    this.node.position.copy(place.at);
     this.node.scale.setScalar(0.001);
     this.node.labelOpacity = 0;
     this.node.visible = false;

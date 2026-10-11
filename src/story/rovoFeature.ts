@@ -1,4 +1,5 @@
 import { DroneFlight } from '../animation/DroneFlight';
+import type { SceneHost } from '../stage/Stage';
 import type { Request, Ticket } from '../primitives/ticket/Ticket';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import { AT_ROVOS_BODY, EMERGE_SECONDS, RovoAtlassian, SUB_SPEED, type TaskRun } from './rovoAtlassian';
@@ -14,6 +15,9 @@ export const FEATURE_RELEASES = FEATURE_PARTS.length / 2;
 
 /** The story's beats, in order. */
 export const FEATURE_BEATS = ['arriving', 'asked', 'spec', 'build', 'ship', 'wrap-up', 'done'] as const;
+/** The mini systems the feature story calls on: the spec reads Confluence and Figma. */
+export const FEATURE_MINI = ['confluence', 'figma'] as const;
+
 /** Where the story is. */
 export type FeatureBeat = (typeof FEATURE_BEATS)[number];
 
@@ -62,6 +66,11 @@ interface Copy {
  * Seeded (`seed`): the map, timings and crew order; the plot is the same.
  */
 export class RovoFeature extends RovoAtlassian {
+  /** Its own map: only the systems it calls on (Confluence and Figma round Jira, plus the code side and Slack). */
+  constructor(stage: SceneHost, seed = 8) {
+    super(stage, seed, { mini: FEATURE_MINI });
+  }
+
   /** Where the story is now. */
   beat: FeatureBeat = 'arriving';
   /** The story has run to its end. */

@@ -10,29 +10,17 @@ import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import { TWG_EDGE } from './rovoSystems';
 import { type OutputLine, shipOutput } from './shipOutput';
+import type { CodeSide } from './storyMap';
 import { tween } from './timeline';
 
 /**
- * The code side of Rovo's grid (docs/rovo-mental-model.md, "Code"), on the
- * open right past the gate. One repo (the run's SCM); up to three lanes
- * into it, each a worktree (where a coding copy works) → its terminal → the
- * repo, all merging into one run into the repo like branches into main;
- * and out of the repo, the output line to the assembler, the short fast belt
- * and the portal.
+ * The code side of Rovo's grid (docs/rovo-mental-model.md, "Code"). One repo
+ * (the run's SCM); up to three lanes into it, each a worktree (where a coding
+ * copy works) → its terminal → the repo, all merging into one run into the
+ * repo like branches into main; and out of the repo, the output line to the
+ * assembler, the short fast belt and the portal. Where it all stands, and
+ * which way it flows, comes from the story's map (storyMap, `CodeSide`).
  */
-export const SCM_AT = new Vector3(7, 0, -5);
-/** Lanes, side by side along z; the middle one runs straight into the repo. */
-export const LANE_Z = [-5, -3, -7] as const;
-const TERMINAL_X = 4;
-const WORKTREE_X = 1.5;
-/** Where the outer lanes turn to join the middle one, just before the repo. */
-const MERGE_X = 5.3;
-export const ASSEMBLER_AT = new Vector3(9.5, 0, -5);
-const BELT_FROM = new Vector3(10.4, 0, -5);
-const BELT_LENGTH = 2.2;
-export const PORTAL_AT = new Vector3(13.2, 0, -5);
-/** The tie from Jira comes into the repo from this side, leaving the others to the lanes and the output. */
-export const SCM_TIE_SIDE = new Vector3(0, 0, 1);
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
 /** The repo is a Teamwork Graph core app, a size up: lines meet it at its edge. */
 const REPO_EDGE = TWG_EDGE + 0.05;
@@ -63,19 +51,16 @@ export class CodeLane {
     private readonly stage: SceneHost,
     readonly index: number,
     seed: number,
+    code: CodeSide,
   ) {
-    const z = LANE_Z[index];
-    const terminalAt = new Vector3(TERMINAL_X, 0, z);
-    this.spot = new Vector3(WORKTREE_X, 0, z);
-    const intoRepo =
-      z === SCM_AT.z
-        ? [terminalAt.clone(), SCM_AT.clone()]
-        : [terminalAt.clone(), new Vector3(MERGE_X, 0, z), new Vector3(MERGE_X, 0, SCM_AT.z), SCM_AT.clone()];
+    const place = code.lanes[index];
+    const terminalAt = place.terminal.clone();
+    this.spot = place.spot.clone();
     this.toTerminal = new Branch(
-      new LineCurve3(this.spot.clone().setX(WORKTREE_X + HALF_NODE), terminalAt.clone().setX(TERMINAL_X - HALF_TERMINAL)),
+      new LineCurve3(this.spot.clone().addScaledVector(code.flow, HALF_NODE), terminalAt.clone().addScaledVector(code.flow, -HALF_TERMINAL)),
       NEUTRAL.packet,
     );
-    this.toRepo = new Branch(roundedPath(trimPolyline(intoRepo, HALF_TERMINAL, REPO_EDGE), BEND_RADIUS), NEUTRAL.packet);
+    this.toRepo = new Branch(roundedPath(trimPolyline(place.intoRepo.map((p) => p.clone()), HALF_TERMINAL, REPO_EDGE), BEND_RADIUS), NEUTRAL.packet);
     this.terminal = new Terminal({ seed });
     this.terminal.position.copy(terminalAt);
     this.worktree = new SystemNode({ kind: 'worktree' });
@@ -131,9 +116,21 @@ export class CodeLane {
 }
 
 /** The output, built the first time code merges: the line draws out of the repo, then the assembler, belt and portal appear. */
-export function buildOutput(stage: SceneHost, onShipped?: () => void): Promise<OutputLine> {
-  const route: Curve<Vector3> = new LineCurve3(SCM_AT.clone().setX(SCM_AT.x + REPO_EDGE), ASSEMBLER_AT.clone().setX(ASSEMBLER_AT.x - 0.45));
-  return shipOutput(stage, { route, assembler: ASSEMBLER_AT, beltFrom: BELT_FROM, beltLength: BELT_LENGTH, beltSpeed: 2.2, portal: PORTAL_AT, onShipped });
+export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => void): Promise<OutputLine> {
+  const route: Curve<Vector3> = new LineCurve3(
+    code.scm.clone().addScaledVector(code.flow, REPO_EDGE),
+    code.assembler.clone().addScaledVector(code.flow, -0.45),
+  );
+  return shipOutput(stage, {
+    route,
+    assembler: code.assembler,
+    beltFrom: code.beltFrom,
+    beltLength: code.beltLength,
+    beltDirection: code.flow,
+    beltSpeed: 2.2,
+    portal: code.portal,
+    onShipped,
+  });
 }
 
 /** Grow a thing in at its place (or fold it away, `out`), easing with a little overshoot. */

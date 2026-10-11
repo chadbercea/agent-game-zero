@@ -78,7 +78,7 @@ export class Stage implements DetailHost {
   private readonly rendered = new Set<() => void>();
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new Raycaster();
-  private readonly viewSize: number;
+  private viewSize: number;
 
   // Detail view: a white veil over the scene, with the focused objects redrawn on top.
   private detailProvider: (() => Object3D[]) | null = null;
@@ -210,6 +210,13 @@ export class Stage implements DetailHost {
     } finally {
       this.skipping = false;
     }
+  }
+
+  /** Frame a map: center the view on `center` and show `viewSize` world units top to bottom (at zoom 1). */
+  frame(center: Vector3, viewSize: number): void {
+    this.viewSize = viewSize;
+    this.centerOn(center);
+    this.resize();
   }
 
   /** Pan the camera so `point` sits at the center of the view. */

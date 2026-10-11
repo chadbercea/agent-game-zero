@@ -34,3 +34,4 @@ Linear, like real life: the Jira issue calls for code → Rovo spawns a code cop
 2. Every line connects two real things, runs on the grid (never diagonal), and draws in.
 3. **The line draws first, then the node appears at its end.** Going away, the node folds first, then its line draws back.
 4. Things come in progressively, as the story reaches them.
+5. **The seed drives the whole map** (`src/story/storyMap.ts`): the gate's corner off Jira, which side the code side grows out on, Slack's side, the user's terminal and the mini systems. Each story lays out only the systems it uses, and the camera frames the map it gets.

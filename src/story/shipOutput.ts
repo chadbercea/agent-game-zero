@@ -22,9 +22,10 @@ const THROUGH_SECONDS = 0.45;
 export interface OutputPlace {
   route: Curve<Vector3>;
   assembler: Vector3;
-  /** The belt runs along +x from here for `beltLength`. */
+  /** The belt runs from here for `beltLength`, along `beltDirection` (a grid direction; +x if left out), into the portal. */
   beltFrom: Vector3;
   beltLength: number;
+  beltDirection?: Vector3;
   /** How fast the belt runs, world units per second (the Conveyor's own pace if left out). */
   beltSpeed?: number;
   portal: Vector3;
@@ -65,9 +66,13 @@ export async function shipOutput(
   assembler.position.copy(output.assembler);
   const conveyor = new Conveyor(output.beltLength);
   conveyor.position.copy(output.beltFrom);
+  // The belt, and the portal it feeds, both run along local +x: turn them to the belt's direction.
+  const heading = output.beltDirection ? Math.atan2(-output.beltDirection.z, output.beltDirection.x) : 0;
+  conveyor.rotation.y = heading;
   if (output.beltSpeed) conveyor.speed = output.beltSpeed;
   const portal = new Portal();
   portal.position.copy(output.portal);
+  portal.rotation.y = heading;
   for (const part of [assembler, conveyor, portal]) part.scale.setScalar(0.001);
   stage.add(line, assembler, conveyor, portal);
   const untickParts = stage.onTick((dt) => {
