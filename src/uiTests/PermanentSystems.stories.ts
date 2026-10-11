@@ -85,3 +85,23 @@ export const RaisedRim = version('raised-rim');
 export const CornerPosts = version('corner-posts');
 /** The slab in two layers with a recessed graphite seam between. */
 export const SeamBand = version('seam-band');
+
+/**
+ * Stands taller, as the story has it, with gear windows: Jira working (its
+ * gears churn), Confluence idle (its gears run down and stop), close up.
+ */
+export const GearWindows: StoryObj = {
+  name: 'Gear windows (working vs idle)',
+  render: () => {
+    const { root, stage } = specimenStage({ viewSize: 3, focusY: 0.4 });
+    const working = new SystemNode({ kind: 'jira', permanent: true });
+    working.light = 'working';
+    const idle = new SystemNode({ kind: 'confluence', permanent: true });
+    [working, idle].forEach((node, i) => {
+      const { x, z } = rowPosition(i, 2, 1.7);
+      node.position.set(x, 0, z);
+      stage.add(node);
+    });
+    return root;
+  },
+};
