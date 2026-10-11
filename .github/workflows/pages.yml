@@ -2,6 +2,8 @@
 # push to main:
 #   https://chadbercea.github.io/agent-game-zero/            → sandbox
 #   https://chadbercea.github.io/agent-game-zero/storybook/  → Storybook
+# Then it checks the live site: the published build is this commit, and the
+# sandbox and Story Narrative load and run with no console errors.
 #
 # One-time setup in the repo: the repo must be public (or on a paid plan), and
 # Settings → Pages → Source must be "GitHub Actions".
@@ -37,6 +39,8 @@ jobs:
           BASE: /agent-game-zero/
       - name: Build Storybook into /storybook
         run: npx storybook build --output-dir dist/storybook --quiet
+      - name: Stamp the build with its commit
+        run: echo "{\"sha\":\"$GITHUB_SHA\"}" > dist/version.json
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
@@ -50,3 +54,17 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check the live site
+        run: node scripts/verify-live.mjs https://chadbercea.github.io/agent-game-zero/ "$GITHUB_SHA"
