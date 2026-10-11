@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
 import { Inspector } from '../stage/Inspector';
 import { FamilyTree } from './familyTree';
-import { RovoAtlassian, STORY_CENTER } from './rovoAtlassian';
+import { RovoAtlassian } from './rovoAtlassian';
 import { rovoInspectables } from './rovoInspect';
 
 const meta: Meta = {
@@ -37,9 +37,9 @@ export const Working: StoryObj<{ seed: number; at: number }> = {
   args: { seed: 3, at: 0 },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
-    // Framed on the whole grid: the mini systems around Jira on the left, the code side out to the portal on the right.
-    stage.centerOn(STORY_CENTER);
     const scene = new RovoAtlassian(stage, args.seed);
+    // Framed on this seed's map: everything on it, whichever way it's laid out.
+    stage.frame(scene.map.center, scene.map.viewSize);
     void scene.start();
     // Open the run `at` seconds in: everything up to then plays out at once.
     if (args.at > 0) void stage.skip({ seconds: args.at });

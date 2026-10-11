@@ -5,7 +5,7 @@ import { Terminal } from '../primitives/terminal/Terminal';
 import { Drone } from '../primitives/drone/Drone';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SceneHost } from '../stage/Stage';
-import { JIRA_AT, MAX_CREW, MINI_SYSTEMS, ROVO_GATE, ROVO_START, RovoAtlassian, USER_TERMINAL_AT } from './rovoAtlassian';
+import { MAX_CREW, MINI_SYSTEMS, RovoAtlassian } from './rovoAtlassian';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { TASK_TYPES } from './rovoTasks';
@@ -54,14 +54,15 @@ describe('Rovo and Jira, the quarterback', () => {
       for (const [i, p] of spots.entries()) {
         // On the grid, clear of Jira, and a cluster around Jira, not a sprawl.
         expect(p.x * 2).toBe(Math.round(p.x * 2));
-        expect(p.distanceTo(JIRA_AT)).toBeGreaterThanOrEqual(3);
-        expect(p.distanceTo(JIRA_AT)).toBeLessThan(12);
+        expect(p.distanceTo(scene.map.jira)).toBeGreaterThanOrEqual(3);
+        expect(p.distanceTo(scene.map.jira)).toBeLessThan(12);
         for (const q of spots.slice(i + 1)) expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2 - 1e-6);
-        for (const fixed of [ROVO_GATE, USER_TERMINAL_AT]) expect(p.distanceTo(fixed)).toBeGreaterThanOrEqual(2 - 1e-6);
+        for (const fixed of [scene.map.gate, scene.map.userTerminal]) expect(p.distanceTo(fixed)).toBeGreaterThanOrEqual(2 - 1e-6);
       }
       // The MCP terminal stands straight out from Figma along the grid.
       const figma = scene.places.figma as Vector3;
-      expect(Math.min(Math.abs(scene.mcpAt.x - figma.x), Math.abs(scene.mcpAt.z - figma.z))).toBeLessThan(1e-6);
+      const mcp = scene.mcpAt as Vector3;
+      expect(Math.min(Math.abs(mcp.x - figma.x), Math.abs(mcp.z - figma.z))).toBeLessThan(1e-6);
     }
   });
 
@@ -82,7 +83,7 @@ describe('Rovo and Jira, the quarterback', () => {
   it('starts with only Rovo: no gate, no Jira, no board yet', () => {
     const { stage } = testStage();
     const scene = new RovoAtlassian(stage);
-    expect(scene.rovo.drone.position.distanceTo(ROVO_START)).toBe(0);
+    expect(scene.rovo.drone.position.distanceTo(scene.map.rovoStart)).toBe(0);
     expect(scene.gate.visible).toBe(false);
     expect(scene.jira.visible).toBe(false);
     expect(scene.jira.permanent).toBe(true);
@@ -140,7 +141,7 @@ describe('Rovo and Jira, the quarterback', () => {
     void scene.start();
     await run(20, () => {
       mark('gate', scene.gate.visible);
-      mark('at gate', scene.rovo.drone.position.distanceTo(ROVO_GATE) < 1e-3);
+      mark('at gate', scene.rovo.drone.position.distanceTo(scene.map.gate) < 1e-3);
       mark('open', scene.gate.state === 'open');
       mark('line', scene.accessLine.drawn > 0.99);
       mark('jira', scene.jira.visible);
@@ -162,7 +163,7 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(16, () => gate.add(scene.gate.state));
     expect([...gate]).toEqual(expect.arrayContaining(['thinking', 'open']));
     expect(scene.inJira).toBe(true);
-    expect(scene.rovo.drone.position.distanceTo(JIRA_AT)).toBeLessThan(1e-3);
+    expect(scene.rovo.drone.position.distanceTo(scene.map.jira)).toBeLessThan(1e-3);
     expect(scene.accessLine.drawn).toBe(1);
     // Rovo through, the gate locks behind it.
     expect(scene.lock.shown).toBe(1);

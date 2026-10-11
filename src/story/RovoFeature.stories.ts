@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/html-vite';
 import { specimenStage } from '../stage/specimen';
 import { Inspector } from '../stage/Inspector';
 import { FamilyTree } from './familyTree';
-import { STORY_CENTER } from './rovoAtlassian';
 import { FEATURE_BEATS, type FeatureBeat, RovoFeature } from './rovoFeature';
 import { rovoInspectables } from './rovoInspect';
 
@@ -31,11 +30,12 @@ export const Feature: StoryObj<{ seed: number; beat: FeatureBeat }> = {
     seed: { control: { type: 'number', min: 1, step: 1 } },
     beat: { control: 'select', options: FEATURE_BEATS },
   },
-  args: { seed: 4, beat: 'arriving' },
+  args: { seed: 8, beat: 'arriving' },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
-    stage.centerOn(STORY_CENTER);
     const scene = new RovoFeature(stage, args.seed);
+    // Framed on this seed's map: everything on it, whichever way it's laid out.
+    stage.frame(scene.map.center, scene.map.viewSize);
     void scene.start();
     if (args.beat !== FEATURE_BEATS[0]) void stage.skip({ until: () => scene.beat === args.beat });
     const inspector = new Inspector(stage, rovoInspectables(scene), root);

@@ -2,7 +2,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { Inspector } from '../stage/Inspector';
 import { Stage } from '../stage/Stage';
 import { FamilyTree } from '../story/familyTree';
-import { RovoAtlassian, STORY_CENTER } from '../story/rovoAtlassian';
+import { RovoAtlassian } from '../story/rovoAtlassian';
 import { rovoInspectables } from '../story/rovoInspect';
 
 /**
@@ -17,9 +17,10 @@ const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed')) || 3;
 const at = Number(params.get('at')) || 0;
 
-const stage = new Stage(document.getElementById('stage')!, { viewSize: 19 });
-stage.centerOn(STORY_CENTER);
+const stage = new Stage(document.getElementById('stage')!);
 const scene = new RovoAtlassian(stage, seed);
+// Framed on this seed's map, whichever way it's laid out.
+stage.frame(scene.map.center, scene.map.viewSize);
 void scene.start();
 if (at > 0) void stage.skip({ seconds: at });
 
