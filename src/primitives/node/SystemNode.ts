@@ -63,7 +63,10 @@ export class SystemNode extends Group {
     this.pad = new Pad({ width: NODE_FOOTPRINT / NODE_SCALE, depth: NODE_FOOTPRINT / NODE_SCALE, raise });
     this.pad.scale.setScalar(NODE_SCALE);
     if (this.permanent) {
-      this.gearworks = new Gearworks(NODE_FOOTPRINT / NODE_SCALE, 0.04, this.pad.top);
+      // The housing with gear windows stands in for the plain slab.
+      // It starts just above the pad's lit skirt (0.06), so the status edge still shows under it.
+      this.gearworks = new Gearworks(NODE_FOOTPRINT / NODE_SCALE, 0.06, this.pad.top);
+      this.pad.slab.visible = false;
       this.pad.add(this.gearworks);
     }
     this.add(this.pad);
