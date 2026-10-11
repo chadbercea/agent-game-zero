@@ -56,6 +56,8 @@ export class Pad extends Group {
   readonly glowMaterial: MeshBasicMaterial;
   /** Height of the slab's top, where the screen sits (before any scale). */
   readonly top: number;
+  /** The white slab itself (a permanent node swaps it for a housing with windows). */
+  readonly slab: Mesh;
   private readonly materials: Material[];
 
   constructor(options: PadOptions = {}) {
@@ -82,7 +84,8 @@ export class Pad extends Group {
     glow.renderOrder = -1;
     this.add(glow);
     this.add(at(new Mesh(g.skirt, this.skirtMaterial), 0.035));
-    this.add(at(solid(g.slab, shell), 0.16 + raise / 2));
+    this.slab = at(solid(g.slab, shell), 0.16 + raise / 2);
+    this.add(this.slab);
     this.add(at(solid(g.bezel, bezel), this.top + 0.002));
     this.add(at(new Mesh(g.screen, this.screenMaterial), this.top + 0.014));
   }
