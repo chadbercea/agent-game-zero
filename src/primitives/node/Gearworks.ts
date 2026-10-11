@@ -5,7 +5,6 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
-  Path,
   PlaneGeometry,
   ReplaceStencilOp,
   Shape,
@@ -25,8 +24,18 @@ const SPIN_DOWN = 1.4;
 const TOOTH = 0.05;
 /** Teeth per unit of radius: the same tooth size on every gear, so meshing gears turn at their real ratio. */
 const TEETH_PER_RADIUS = 34;
-/** Spokes on every gear. */
-const SPOKES = 5;
+/** Bolts round each gear's hub. */
+const BOLTS = 5;
+/** Gear grays: rim and teeth, then the recessed web (light gear, then its darker neighbor), and the raised hub. */
+const GEAR_TONES = {
+  rim: ['#e3e4e8', '#c9cbd0'],
+  web: ['#c4c6cc', '#aeb0b6'],
+  hub: '#eef0f2',
+};
+/** The gray behind the gears. */
+const WINDOW_GRAY = '#6a6c73';
+/** A little light from within, so the gears read lit behind the glass rather than flat. */
+const GLOW = 0x2a2b2e;
 
 /**
  * A gear train in a window: the first gear, then each next one meshing with
@@ -77,7 +86,9 @@ export class Gearworks extends Group {
   constructor(width: number, bottom: number, top: number) {
     super();
     const pane = new MeshStandardMaterial({
-      color: NEUTRAL.graphiteDark,
+      // A mid gray, lit a little like the gears, not black: the gaps between teeth read as shadow, not holes.
+      color: WINDOW_GRAY,
+      emissive: GLOW,
       roughness: 0.6,
       depthWrite: false,
       stencilWrite: true,
@@ -87,9 +98,18 @@ export class Gearworks extends Group {
     });
     // Inside the window: past the body's surface (no depth test), but only on the window's pixels (stencil).
     const inside = { depthTest: false, depthWrite: false, stencilWrite: true, stencilRef: WINDOW_STENCIL, stencilFunc: EqualStencilFunc };
-    const gear = new MeshStandardMaterial({ color: NEUTRAL.shellShade, roughness: 0.45, metalness: 0.3, flatShading: true, ...inside });
-    const hub = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.4, metalness: 0.4, ...inside });
-    this.materials = [pane, gear, hub];
+    // Solid gears in grays, lit a little from within so their faces read lit, not flat: rim and teeth, a
+    // recessed web, a raised hub, a dark axle and bolts. Neighbors take turns light and a shade darker, so
+    // their teeth show where they mesh.
+    const shade = (color: string) =>
+      new MeshStandardMaterial({ color, emissive: GLOW, roughness: 0.5, metalness: 0.25, ...inside });
+    const tones = [
+      { rim: shade(GEAR_TONES.rim[0]), web: shade(GEAR_TONES.web[0]) },
+      { rim: shade(GEAR_TONES.rim[1]), web: shade(GEAR_TONES.web[1]) },
+    ];
+    const hub = shade(GEAR_TONES.hub);
+    const axle = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.4, metalness: 0.4, ...inside });
+    this.materials = [pane, hub, axle, ...tones.flatMap((t) => [t.rim, t.web])];
 
     const high = (top - bottom) * 0.62;
     const wide = width * 0.66;
@@ -118,15 +138,29 @@ export class Gearworks extends Group {
           ratio *= -before / radius;
         }
         const teeth = Math.round(radius * TEETH_PER_RADIUS);
-        const mesh = new Mesh(gearGeometry(radius, teeth), gear);
+        const tone = tones[k % 2];
+        const mesh = new Mesh(gearGeometry(radius, teeth), tone.rim);
         mesh.position.set(x, y, 0.001);
         // Every other gear sits half a tooth round, so its teeth fall between its neighbor's.
         mesh.userData.phase = k % 2 ? Math.PI / teeth : 0;
-        mesh.renderOrder = 4;
-        const cap = new Mesh(new CircleGeometry(radius * 0.24, 16), hub);
-        cap.position.z = 0.001;
-        cap.renderOrder = 5;
-        mesh.add(cap);
+        // Each gear's layers draw in order, and a later gear over an earlier one.
+        const order = 4 + k * 4;
+        mesh.renderOrder = order;
+        const layer = (geometry: CircleGeometry, material: MeshStandardMaterial, n: number, x = 0, y = 0) => {
+          const part = new Mesh(geometry, material);
+          part.position.set(x, y, 0.001 * n);
+          part.renderOrder = order + n;
+          mesh.add(part);
+        };
+        const root = radius - TOOTH;
+        layer(new CircleGeometry(root * 0.78, 32), tone.web, 1);
+        layer(new CircleGeometry(radius * 0.3, 24), hub, 2);
+        layer(new CircleGeometry(radius * 0.09, 12), axle, 3);
+        // Bolts round the hub: they turn with the gear, so you see it turn.
+        for (let b = 0; b < BOLTS; b++) {
+          const a = (b / BOLTS) * Math.PI * 2;
+          layer(new CircleGeometry(radius * 0.045, 10), axle, 3, Math.cos(a) * radius * 0.52, Math.sin(a) * radius * 0.52);
+        }
         window.add(mesh);
         this.gears.push({ mesh, ratio });
       });
@@ -157,7 +191,7 @@ export class Gearworks extends Group {
   }
 }
 
-/** A flat spur gear (seen face on, through glass): `teeth` round a rim, spokes out from a bored hub. */
+/** A flat spur gear's solid outline (seen face on, through glass): `teeth` round a rim. Its web, hub and bolts are laid on top. */
 function gearGeometry(radius: number, teeth: number): ShapeGeometry {
   const root = radius - TOOTH;
   const shape = new Shape();
@@ -177,18 +211,5 @@ function gearGeometry(radius: number, teeth: number): ShapeGeometry {
     }
   }
   shape.closePath();
-  shape.holes.push(new Path().absarc(0, 0, radius * 0.1, 0, Math.PI * 2, true));
-  // Spokes: the rim joined to the hub by SPOKES arms, open between them.
-  const hub = radius * 0.3;
-  const rim = root * 0.8;
-  const arm = 0.21; // half an arm's width, as a share of the turn between spokes
-  for (let k = 0; k < SPOKES; k++) {
-    const a0 = ((k + arm) / SPOKES) * Math.PI * 2;
-    const a1 = ((k + 1 - arm) / SPOKES) * Math.PI * 2;
-    const hole = new Path();
-    hole.absarc(0, 0, rim, a0, a1, false);
-    hole.absarc(0, 0, hub, a1, a0, true);
-    shape.holes.push(hole);
-  }
   return new ShapeGeometry(shape, 8);
 }
