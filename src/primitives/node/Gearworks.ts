@@ -16,7 +16,7 @@ const WINDOW_HIGH = 0.74;
 const WALL = 0.08;
 /** How far inside the window the gears' front faces sit, and how thick the gears are. */
 const GEAR_IN = 0.035;
-const GEAR_THICK = 0.05;
+const GEAR_THICK = 0.15;
 /** Tooth depth; every gear shares it (and its tooth size), so any two mesh. */
 const TOOTH = 0.05;
 /** Teeth per unit of radius: the same tooth size on every gear. */
