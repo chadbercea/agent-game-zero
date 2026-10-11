@@ -9,15 +9,19 @@ import { rovoInspectables } from '../story/rovoInspect';
  * Sandbox: Rovo on the Atlassian Grid, the same scene as Storybook's
  * Story Narrative (docs/rovo-mental-model.md). Rovo works Jira; its copies
  * run each task across the Teamwork Graph and ship code to the portal. Runs
- * continuously on a seed (`?seed=` in the URL). No captions.
+ * continuously on a seed (`?seed=` in the URL); `?at=` opens the run that
+ * many seconds in. No captions.
  */
 
-const seed = Number(new URLSearchParams(location.search).get('seed')) || 3;
+const params = new URLSearchParams(location.search);
+const seed = Number(params.get('seed')) || 3;
+const at = Number(params.get('at')) || 0;
 
 const stage = new Stage(document.getElementById('stage')!, { viewSize: 19 });
 stage.centerOn(STORY_CENTER);
 const scene = new RovoAtlassian(stage, seed);
 void scene.start();
+if (at > 0) void stage.skip({ seconds: at });
 
 // Hover anything to highlight it; click it for its details on the right.
 const inspector = new Inspector(stage, rovoInspectables(scene));

@@ -3,7 +3,7 @@ import { specimenStage } from '../stage/specimen';
 import { Inspector } from '../stage/Inspector';
 import { FamilyTree } from './familyTree';
 import { STORY_CENTER } from './rovoAtlassian';
-import { RovoFeature } from './rovoFeature';
+import { FEATURE_BEATS, type FeatureBeat, RovoFeature } from './rovoFeature';
 import { rovoInspectables } from './rovoInspect';
 
 const meta: Meta = {
@@ -22,17 +22,22 @@ export default meta;
  * the portal; a copy announces it in Slack while another writes the release
  * notes and tells the user; then everyone goes home into Rovo and Jira goes
  * quiet. It ends there. No captions. Hover anything to highlight it; click it
- * for its details. Click Rovo or a copy for the drone family tree.
+ * for its details. Click Rovo or a copy for the drone family tree. `beat`
+ * opens the story at that beat: the run up to it plays out at once.
  */
-export const Feature: StoryObj<{ seed: number }> = {
+export const Feature: StoryObj<{ seed: number; beat: FeatureBeat }> = {
   name: 'Request to production',
-  argTypes: { seed: { control: { type: 'number', min: 1, step: 1 } } },
-  args: { seed: 4 },
+  argTypes: {
+    seed: { control: { type: 'number', min: 1, step: 1 } },
+    beat: { control: 'select', options: FEATURE_BEATS },
+  },
+  args: { seed: 4, beat: 'arriving' },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
     stage.centerOn(STORY_CENTER);
     const scene = new RovoFeature(stage, args.seed);
     void scene.start();
+    if (args.beat !== FEATURE_BEATS[0]) void stage.skip({ until: () => scene.beat === args.beat });
     const inspector = new Inspector(stage, rovoInspectables(scene), root);
     const family = new FamilyTree(stage, scene.rovo.drone, () => [...scene.copies.keys()]);
     stage.onTick(() => family.focus(inspector.selected?.kind === 'agent' || inspector.selected?.kind === 'sub-agent'));

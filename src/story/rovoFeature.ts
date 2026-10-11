@@ -12,8 +12,10 @@ export const FEATURE_CODERS = 3;
 /** Releases the feature ships in: every two merges fill the assembler's 2 × 2 × 2. */
 export const FEATURE_RELEASES = FEATURE_PARTS.length / 2;
 
+/** The story's beats, in order. */
+export const FEATURE_BEATS = ['arriving', 'asked', 'spec', 'build', 'ship', 'wrap-up', 'done'] as const;
 /** Where the story is. */
-export type FeatureBeat = 'arriving' | 'asked' | 'spec' | 'build' | 'ship' | 'wrap-up' | 'done';
+export type FeatureBeat = (typeof FEATURE_BEATS)[number];
 
 /** The scripted tasks, as Jira issues: each a request and the steps a copy runs (docs/rovo-mental-model.md). */
 const SPEC: Task = {
