@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { FACE_CAMERA, NODE_FOOTPRINT } from '../../core/grid';
 import { NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
 import { PAD_TOP, Pad } from '../pad/Pad';
+import { Gearworks } from './Gearworks';
 import { buildEmblem, SYSTEM_NAME, type SystemKind } from './emblems';
 
 /** Nodes are smaller than gates; a sub-agent floats over them. */
@@ -42,6 +43,8 @@ export class SystemNode extends Group {
   readonly kind: SystemKind;
   readonly pad: Pad;
   readonly permanent: boolean;
+  /** A permanent system's gear windows: the gears churn while it works. */
+  readonly gearworks?: Gearworks;
   /** Floating emblem; animators bob and turn it. */
   readonly emblem: Group;
   private _light: NodeLight = 'off';
@@ -59,6 +62,10 @@ export class SystemNode extends Group {
     const raise = this.permanent ? PERMANENT_RAISE : 0;
     this.pad = new Pad({ width: NODE_FOOTPRINT / NODE_SCALE, depth: NODE_FOOTPRINT / NODE_SCALE, raise });
     this.pad.scale.setScalar(NODE_SCALE);
+    if (this.permanent) {
+      this.gearworks = new Gearworks(NODE_FOOTPRINT / NODE_SCALE, 0.04, this.pad.top);
+      this.pad.add(this.gearworks);
+    }
     this.add(this.pad);
 
     const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.4, flatShading: true });
@@ -144,6 +151,7 @@ export class SystemNode extends Group {
   dispose(): void {
     this.removeFromParent();
     this.pad.dispose();
+    this.gearworks?.dispose();
     this.label?.element.remove();
     this.emblem.traverse((o) => {
       if (o instanceof Mesh) o.geometry.dispose();
@@ -155,5 +163,6 @@ export class SystemNode extends Group {
     const off = this._light === 'off';
     this.pad.setColor(off ? NEUTRAL.offLight : STATUS_COLOR[this._light as Status]);
     this.pad.glowMaterial.visible = !off;
+    if (this.gearworks) this.gearworks.working = !off;
   }
 }
