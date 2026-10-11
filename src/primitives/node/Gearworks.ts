@@ -1,4 +1,4 @@
-import { BoxGeometry, ExtrudeGeometry, Group, Mesh, MeshStandardMaterial, Path, Shape } from 'three';
+import { BoxGeometry, ExtrudeGeometry, Group, Mesh, MeshStandardMaterial, Shape } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { solid } from '../../core/mesh';
 import { NEUTRAL } from '../../core/palette';
@@ -182,7 +182,7 @@ function meshPhase(toward: number, beforeTeeth: number, beforePhase: number, tee
   return toward + Math.PI - (GAP_CENTER - off) * pitch;
 }
 
-/** A spur gear with depth: `teeth` round a rim, a small bore, bevelled so its faces and tooth sides catch the light. */
+/** A spur gear with depth: `teeth` round a rim, a plain solid face, bevelled so its faces and tooth sides catch the light. */
 function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
   const root = radius - TOOTH;
   const shape = new Shape();
@@ -202,7 +202,6 @@ function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
     }
   }
   shape.closePath();
-  shape.holes.push(new Path().absarc(0, 0, radius * 0.08, 0, Math.PI * 2, true));
   const bevel = 0.006;
   return new ExtrudeGeometry(shape, {
     depth: GEAR_THICK - 2 * bevel,
