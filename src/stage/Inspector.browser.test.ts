@@ -1,5 +1,5 @@
-import { Group, Object3D } from 'three';
-import { describe, expect, it } from 'vitest';
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D } from 'three';
+import { describe, expect, it, vi } from 'vitest';
 import { type Inspectable, Inspector } from './Inspector';
 import {
   agentCard,
@@ -22,6 +22,8 @@ function fakeStage() {
   const stage = {
     renderer: { domElement: canvas },
     add: () => {},
+    onTick: () => () => {},
+    onRendered: () => () => {},
     pick: () => (under ? { object: under } : undefined),
   } as unknown as Stage;
   const point = (o: Object3D | null) => {
@@ -105,6 +107,68 @@ describe('Inspector', () => {
     expect(inspector.hovered).toBeNull();
     expect(inspector.selected).toBeNull();
     inspector.dispose();
+  });
+});
+
+describe('Inspector lights the item itself', () => {
+  it('hover lifts and glows it for the frame only; selection adds an outline; Escape fades it all', () => {
+    const ticks: (() => void)[] = [];
+    const drawn: (() => void)[] = [];
+    const scene = new Group();
+    const added = scene.children;
+    const canvas = document.createElement('canvas');
+    let under: Object3D | null = null;
+    const stage = {
+      renderer: { domElement: canvas },
+      add: (o: Object3D) => scene.add(o),
+      pick: () => (under ? { object: under } : undefined),
+      onTick: (fn: () => void) => (ticks.push(fn), () => {}),
+      onRendered: (fn: () => void) => (drawn.push(fn), () => {}),
+    } as unknown as Stage;
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const frame = (ms: number) => {
+      now += ms;
+      for (const t of ticks) t();
+    };
+    const afterDraw = () => drawn.forEach((d) => d());
+
+    const material = new MeshStandardMaterial({ color: '#3a6df0', emissiveIntensity: 0 });
+    const object = new Group();
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), material);
+    object.add(mesh);
+    const box: Inspectable = { kind: 'node', object, card: () => document.createElement('div') };
+    const inspector = new Inspector(stage, () => [box]);
+
+    under = mesh;
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 1, clientY: 1 }));
+    expect(canvas.style.cursor).toBe('pointer');
+    frame(100);
+    expect(object.scale.x).toBeCloseTo(1.04);
+    expect(material.emissive.b).toBeGreaterThan(0);
+    afterDraw();
+    expect(object.scale.x).toBe(1);
+    expect(material.emissiveIntensity).toBe(0);
+    expect(added).toHaveLength(0);
+
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 1, clientY: 1 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 1, clientY: 1 }));
+    frame(100);
+    afterDraw();
+    expect(added).toHaveLength(1);
+    expect(added[0].visible).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    canvas.dispatchEvent(new PointerEvent('pointerleave'));
+    frame(100);
+    afterDraw();
+    const outline = added[0];
+    frame(100);
+    expect(outline.parent).toBeNull();
+    afterDraw();
+    expect(object.scale.x).toBe(1);
+    inspector.dispose();
+    vi.restoreAllMocks();
   });
 });
 

@@ -72,6 +72,7 @@ export class Stage implements DetailHost {
   private readonly labels = new CSS2DRenderer();
   private readonly timer = new Timer();
   private readonly ticks = new Set<TickFn>();
+  private readonly rendered = new Set<() => void>();
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new Raycaster();
   private readonly viewSize: number;
@@ -98,7 +99,7 @@ export class Stage implements DetailHost {
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     container.style.overflow = 'hidden';
 
-    this.renderer = new WebGLRenderer({ antialias: true });
+    this.renderer = new WebGLRenderer({ antialias: true, stencil: true }); // stencil: the Inspector's selection outline
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NeutralToneMapping;
@@ -163,6 +164,16 @@ export class Stage implements DetailHost {
     return () => this.ticks.delete(fn);
   }
 
+  /**
+   * Register a callback for just after each frame is drawn (after every
+   * tick), so a tick can change how things look for one frame and put them
+   * back. Returns an unsubscribe function.
+   */
+  onRendered(fn: () => void): () => void {
+    this.rendered.add(fn);
+    return () => this.rendered.delete(fn);
+  }
+
   add(...objects: Object3D[]): void {
     this.scene.add(...objects);
   }
@@ -207,6 +218,7 @@ export class Stage implements DetailHost {
       this.renderDetail();
     }
     this.labels.render(this.scene, this.camera);
+    for (const fn of this.rendered) fn();
   }
 
   /** Scene → veil (fades everything to 10%) → focused objects redrawn on top. */
@@ -255,6 +267,7 @@ export class Stage implements DetailHost {
     this.renderer.domElement.remove();
     this.labels.domElement.remove();
     this.ticks.clear();
+    this.rendered.clear();
   }
 
   private addLighting(): void {
