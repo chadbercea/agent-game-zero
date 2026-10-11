@@ -131,9 +131,9 @@ export class CodeLane {
 }
 
 /** The output, built the first time code merges: the line draws out of the repo, then the assembler, belt and portal appear. */
-export function buildOutput(stage: SceneHost): Promise<OutputLine> {
+export function buildOutput(stage: SceneHost, onShipped?: () => void): Promise<OutputLine> {
   const route: Curve<Vector3> = new LineCurve3(SCM_AT.clone().setX(SCM_AT.x + REPO_EDGE), ASSEMBLER_AT.clone().setX(ASSEMBLER_AT.x - 0.45));
-  return shipOutput(stage, { route, assembler: ASSEMBLER_AT, beltFrom: BELT_FROM, beltLength: BELT_LENGTH, beltSpeed: 2.2, portal: PORTAL_AT });
+  return shipOutput(stage, { route, assembler: ASSEMBLER_AT, beltFrom: BELT_FROM, beltLength: BELT_LENGTH, beltSpeed: 2.2, portal: PORTAL_AT, onShipped });
 }
 
 /** Grow a thing in at its place (or fold it away, `out`), easing with a little overshoot. */

@@ -1,6 +1,6 @@
 # Rovo mental model
 
-The reference for the **Rovo on the Atlassian Grid** story (`src/story/rovoAtlassian.ts`). Everything here comes from Chad (2026-10-09). If a visual isn't covered here, ask; don't invent one.
+The reference for the Rovo stories: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end) and **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production, built from the same pieces). Everything here comes from Chad (2026-10-09). If a visual isn't covered here, ask; don't invent one.
 
 ## Who
 
