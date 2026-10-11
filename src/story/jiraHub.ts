@@ -1,8 +1,9 @@
-import { type Curve, Group, MeshStandardMaterial, type Object3D, Vector3 } from 'three';
+import { type Curve, CylinderGeometry, Group, MeshStandardMaterial, type Object3D, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BEND_RADIUS, FACE_CAMERA } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
+import { seededRandom } from '../core/scatter';
 import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SystemKind } from '../primitives/node/emblems';
@@ -17,29 +18,82 @@ import { tween, wait } from './timeline';
 export const HUB_SCALE = 1.35;
 /** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
 export const PLATE = 3;
-/** A permanent plate's foundation: how far it reaches past the plate's width on each side, and how high it stands. */
-const FOUNDATION_OUT = 0.04;
-const FOUNDATION_HIGH = 0.025;
-/** How far the plate's top steps in from the foundation's edge, and how high it stands on it. */
-const STEP_IN = 0.2;
-const TOP_HIGH = 0.035;
+/** The plate's own height: a low white slab. */
+const PLATE_HIGH = 0.06;
+/**
+ * The corners a plate's cluster may stand in (x, z signs): the two side
+ * corners, which the camera sees clear of the node (the back one hides
+ * behind it, the front one under its label).
+ */
+export const CLUSTER_CORNERS: readonly [number, number][] = [
+  [1, -1],
+  [-1, 1],
+];
+/** A cluster piece: its footprint as a share of the room beside the node, and its height range (world units). */
+const PIECE_WIDE: [number, number] = [0.4, 0.6];
+const PIECE_HIGH: [number, number] = [0.22, 0.5];
 
 /**
- * A Teamwork Graph plate: the platform a Teamwork Graph app stands on (Jira,
- * Confluence, Bitbucket), a little wider than its node. What makes it read as
- * permanent is its shape, not a color: a stepped plinth, a broad foundation
- * with the plate stepping up and in from it, like something built to stay.
- * `size` is its width; the foundation reaches FOUNDATION_OUT past it.
+ * A Teamwork Graph plate: the low white slab a Teamwork Graph app stands on
+ * (Jira, Confluence, Code search, Bitbucket), a little wider than its node.
+ * In one corner, beside the node, stands a small cluster of one to three
+ * plain neutral pieces (blocks, a drum, a short stack). The cluster is
+ * picked from the app's name, so each app's plate is always its own and the
+ * set reads as one family, without saying what any piece means. That and the
+ * plate are what mark these apps as built to stay; no color does.
+ * `size` is the plate's width, `nodeWidth` the node standing on it;
+ * `corners` narrows where the cluster may stand.
  */
-export function graphPlate(size: number): Group {
+export function graphPlate(size: number, kind: SystemKind, nodeWidth: number, corners = CLUSTER_CORNERS): Group {
   const plate = new Group();
   const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
-  const footing = new MeshStandardMaterial({ color: NEUTRAL.shellShade, roughness: 0.55 });
-  const base = size + 2 * FOUNDATION_OUT;
-  const top = base - 2 * STEP_IN;
-  plate.add(solid(new RoundedBoxGeometry(base, FOUNDATION_HIGH, base, 2, 0.015), footing)).position.y = FOUNDATION_HIGH / 2;
-  plate.add(solid(new RoundedBoxGeometry(top, TOP_HIGH, top, 2, 0.025), shell)).position.y = FOUNDATION_HIGH + TOP_HIGH / 2;
+  const shade = new MeshStandardMaterial({ color: NEUTRAL.shellShade, roughness: 0.55 });
+  plate.add(solid(new RoundedBoxGeometry(size, PLATE_HIGH, size, 2, 0.03), shell)).position.y = PLATE_HIGH / 2;
+  plate.add(cluster(kind, (size - nodeWidth) / 2, size, corners, [shell, shade]));
   return plate;
+}
+
+/**
+ * One to three pieces in a corner of the plate, in the band of `room`
+ * between the node and the plate's edge: at the corner itself, then one
+ * step along each edge. Same app, same cluster.
+ */
+function cluster(kind: SystemKind, room: number, size: number, corners: readonly [number, number][], materials: MeshStandardMaterial[]): Group {
+  const random = seededRandom([...kind].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261));
+  const between = (r: [number, number]) => r[0] + random() * (r[1] - r[0]);
+  const group = new Group();
+  const [sx, sz] = corners[Math.floor(random() * corners.length)];
+  const corner = new Vector3(sx * (size / 2 - room / 2), PLATE_HIGH, sz * (size / 2 - room / 2));
+  const along = room * 0.62;
+  const spots = [corner, corner.clone().setX(corner.x - sx * along), corner.clone().setZ(corner.z - sz * along)];
+  const count = 1 + Math.floor(random() * 3);
+  for (let i = 0; i < count; i++) {
+    const wide = room * between(PIECE_WIDE);
+    // The first piece, at the corner, stands tallest; the rest stay low beside it.
+    const high = i === 0 ? between(PIECE_HIGH) : between([PIECE_HIGH[0] * 0.4, PIECE_HIGH[1] * 0.6]);
+    const material = materials[Math.floor(random() * materials.length)];
+    const shape = Math.floor(random() * 3);
+    const piece =
+      shape === 0
+        ? solid(new RoundedBoxGeometry(wide, high, wide, 2, Math.min(0.02, high / 3)), material)
+        : shape === 1
+          ? solid(new CylinderGeometry(wide / 2, wide / 2, high, 24), material)
+          : stack(wide, high, material);
+    piece.position.copy(spots[i]);
+    if (shape !== 2) piece.position.y += high / 2;
+    group.add(piece);
+  }
+  return group;
+}
+
+/** A short stack: a block with a smaller one on top. */
+function stack(wide: number, high: number, material: MeshStandardMaterial): Group {
+  const group = new Group();
+  const low = high * 0.55;
+  group.add(solid(new RoundedBoxGeometry(wide, low, wide, 2, Math.min(0.02, low / 3)), material)).position.y = low / 2;
+  const top = high - low;
+  group.add(solid(new RoundedBoxGeometry(wide * 0.6, top, wide * 0.6, 2, Math.min(0.015, top / 3)), material)).position.y = low + top / 2;
+  return group;
 }
 
 /** The task board holds this many open tasks at most. */
@@ -64,8 +118,8 @@ const SHOT_SECONDS = 0.6;
  * Jira as the quarterback (Story Narrative): the system of record for
  * everything that happens on the grid.
  *
- * - It stands a size up on a stepped plate of its own, a foundation with the
- *   plate stepping up from it (no screen, no lights: not a gate).
+ * - It stands a size up on a Teamwork Graph plate of its own, with its own
+ *   small cluster in one corner (no screen, no lights: not a gate).
  * - Its emblem moves out beside it as a kanban board big enough to read, white cards in To do,
  *   In progress and Done. A new task slides into To do (`addTask`); a
  *   sub-agent takes one (`takeTask`): the card moves to In progress and a
@@ -104,7 +158,8 @@ export class JiraHub {
     this.kanban.rotation.y = FACE_CAMERA;
     this.kanban.scale.setScalar(BOARD_SCALE);
     stage.add(this.kanban);
-    this.plate = graphPlate(PLATE);
+    // Its board floats over the front-left corner, so its cluster stands at the right.
+    this.plate = graphPlate(PLATE, 'jira', NODE_FOOTPRINT * HUB_SCALE, [[1, -1]]);
     this.plate.position.copy(node.position);
     stage.add(this.plate);
     this.untick = stage.onTick((dt) => {
