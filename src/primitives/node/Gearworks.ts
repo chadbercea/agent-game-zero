@@ -14,6 +14,10 @@ const WINDOW_WIDE = 0.66;
 const WINDOW_HIGH = 0.74;
 /** The housing's wall thickness (pad units). */
 const WALL = 0.08;
+/** How soft the housing's corners and edges are (pad units), in a couple of flat facets. */
+const SOFT = 0.03;
+/** The chamfer on each window's sides. */
+const JAMB = 0.02;
 /** How far inside the window the gears' front faces sit, and how thick the gears are. */
 const GEAR_IN = 0.035;
 const GEAR_THICK = 0.15;
@@ -21,8 +25,6 @@ const GEAR_THICK = 0.15;
 const TOOTH = 0.05;
 /** Teeth per unit of radius: the same tooth size on every gear. */
 const TEETH_PER_RADIUS = 34;
-/** How soft a gear's edges are: its bevel (pad units), in two flat steps. */
-const GEAR_BEVEL = 0.02;
 /** The one gray every gear is made of. */
 const GEAR_GRAY = NEUTRAL.shellShade;
 
@@ -72,32 +74,35 @@ export class Gearworks extends Group {
   /** `width` is the body's width; `bottom`/`top` its height range (all in the pad's units). */
   constructor(width: number, bottom: number, top: number) {
     super();
-    const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05 });
+    const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05, flatShading: true });
     const core = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.7, metalness: 0.1 });
-    const gear = new MeshStandardMaterial({ color: GEAR_GRAY, roughness: 0.4, metalness: 0.35, flatShading: true });
+    const gear = new MeshStandardMaterial({ color: GEAR_GRAY, roughness: 0.4, metalness: 0.35 });
     this.materials = [shell, core, gear];
 
-    // The housing: a base and a cap, solid back walls, and pillars either side of each front window.
+    // The housing: soft, low-poly. A lid and a base with rounded, faceted edges (their edges are each
+    // window's soft lintel and sill), and between them the walls: two pieces cut to the box's own rounded
+    // footprint, reaching up into the lid and down into the base, so corners run unbroken and no seam
+    // shows. The window sides are chamfered.
     const h = top - bottom;
     const high = h * WINDOW_HIGH;
     const sill = bottom + (h - high) / 2;
     const lintel = sill + high;
     const wide = width * WINDOW_WIDE;
     const half = width / 2;
-    const pillar = (width - wide) / 2;
-    const box = (w: number, hh: number, d: number, x: number, y: number, z: number, radius = 0.008) => {
-      const part = solid(new RoundedBoxGeometry(w, hh, d, 2, Math.min(radius, hh / 2 - 1e-3, w / 2 - 1e-3, d / 2 - 1e-3)), shell);
-      part.position.set(x, y, z);
+    const r = Math.min(SOFT, (sill - bottom) / 2 - 1e-3);
+    const slab = (y0: number, y1: number) => {
+      const part = solid(new RoundedBoxGeometry(width, y1 - y0, width, 2, r), shell);
+      part.position.y = (y0 + y1) / 2;
       this.add(part);
     };
-    // Flush edges throughout, so the parts read as one box with windows cut in it.
-    box(width, sill - bottom, width, 0, (bottom + sill) / 2, 0);
-    box(width, top - lintel, width, 0, (lintel + top) / 2, 0);
-    box(WALL, high, width, -half + WALL / 2, (sill + lintel) / 2, 0);
-    box(width, high, WALL, 0, (sill + lintel) / 2, -half + WALL / 2);
-    for (const side of [-1, 1]) {
-      box(WALL, high, pillar, half - WALL / 2, (sill + lintel) / 2, side * (wide / 2 + pillar / 2));
-      box(pillar, high, WALL, side * (wide / 2 + pillar / 2), (sill + lintel) / 2, half - WALL / 2);
+    slab(bottom, sill);
+    slab(lintel, top);
+    for (const outline of wallOutlines(half, wide / 2, WALL, r, JAMB)) {
+      const walls = new ExtrudeGeometry(outline, { depth: high + 2 * r, bevelEnabled: false, curveSegments: 2 });
+      // Extruded along +z; stand it up (shape x, z → world x, -z), from just inside the base to just inside the lid.
+      walls.rotateX(-Math.PI / 2);
+      walls.translate(0, sill - r, 0);
+      this.add(solid(walls, shell));
     }
     // A dark core behind the gears, so they stand out against it.
     const coreSize = width - WALL - GEAR_IN - GEAR_THICK - 0.04;
@@ -184,7 +189,7 @@ function meshPhase(toward: number, beforeTeeth: number, beforePhase: number, tee
   return toward + Math.PI - (GAP_CENTER - off) * pitch;
 }
 
-/** A low-poly spur gear with depth: `teeth` round a rim, a plain solid face, soft bevelled edges, flat-shaded so its faces and tooth sides catch the light. */
+/** A spur gear with depth: `teeth` round a rim, a plain solid face, bevelled so its faces and tooth sides catch the light. */
 function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
   const root = radius - TOOTH;
   const shape = new Shape();
@@ -204,15 +209,64 @@ function gearGeometry(radius: number, teeth: number): ExtrudeGeometry {
     }
   }
   shape.closePath();
-  // Soft, low-poly edges: a wide bevel in two flat steps round every edge and tooth corner, pulled
-  // in by its own size so the gear stays the size it meshes at.
+  const bevel = 0.006;
   return new ExtrudeGeometry(shape, {
-    depth: GEAR_THICK - 2 * GEAR_BEVEL,
+    depth: GEAR_THICK - 2 * bevel,
     bevelEnabled: true,
-    bevelThickness: GEAR_BEVEL,
-    bevelSize: GEAR_BEVEL,
-    bevelOffset: -GEAR_BEVEL,
-    bevelSegments: 2,
-    curveSegments: 4,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 1,
+    curveSegments: 8,
   });
+}
+
+/**
+ * The housing's walls in plan (x, and z as -y): the ring between the box's
+ * rounded footprint and its hollow, with the two front windows cut out. That
+ * leaves two pieces: the front corner between the windows, and the rest
+ * (both back walls and the outer side of each window). `half` is the box's
+ * half width, `opening` a window's half width, `wall` the thickness, `round`
+ * the footprint's corner radius, `jamb` the chamfer at each window side.
+ */
+function wallOutlines(half: number, opening: number, wall: number, round: number, jamb: number): Shape[] {
+  const inner = half - wall;
+  // Points are given as (x, z); a Shape stood up by rotateX(-π/2) maps its y to world -z.
+  const at = (shape: Shape, x: number, z: number, first = false) => (first ? shape.moveTo(x, -z) : shape.lineTo(x, -z));
+  const corner = (shape: Shape, cx: number, cz: number, from: number, to: number) => {
+    // A rounded corner in two flat facets (low poly).
+    for (let i = 1; i <= 2; i++) {
+      const a = from + ((to - from) * i) / 2;
+      at(shape, cx + Math.cos(a) * round, cz + Math.sin(a) * round);
+    }
+  };
+  const front = new Shape();
+  at(front, half, opening + jamb, true);
+  at(front, half, half - round);
+  corner(front, half - round, half - round, 0, Math.PI / 2);
+  at(front, opening + jamb, half);
+  at(front, opening, half - jamb);
+  at(front, opening, inner);
+  at(front, inner, inner);
+  at(front, inner, opening);
+  at(front, half - jamb, opening);
+  front.closePath();
+
+  const back = new Shape();
+  at(back, -opening - jamb, half, true);
+  at(back, -half + round, half);
+  corner(back, -half + round, half - round, Math.PI / 2, Math.PI);
+  at(back, -half, -half + round);
+  corner(back, -half + round, -half + round, Math.PI, Math.PI * 1.5);
+  at(back, half - round, -half);
+  corner(back, half - round, -half + round, Math.PI * 1.5, Math.PI * 2);
+  at(back, half, -opening - jamb);
+  at(back, half - jamb, -opening);
+  at(back, inner, -opening);
+  at(back, inner, -inner);
+  at(back, -inner, -inner);
+  at(back, -inner, inner);
+  at(back, -opening, inner);
+  at(back, -opening, half - jamb);
+  back.closePath();
+  return [front, back];
 }
