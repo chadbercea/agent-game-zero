@@ -54,7 +54,7 @@ Layering: **Primitive → Animation → Stage → Story.**
 
 ## Deploys
 
-Every push to `main` builds the sandbox and Storybook and publishes them to GitHub Pages (`.github/workflows/pages.yml`).
+Every push to `main` builds the sandbox and Storybook and publishes them to GitHub Pages (`.github/workflows/pages.yml`). A last job then checks the live site (`scripts/verify-live.mjs`): the published `version.json` names the pushed commit, and the sandbox and both Story Narrative stories load and run with no console errors. Run it by hand with `node scripts/verify-live.mjs [site url] [sha]`.
 
 ## Work tracking
 
