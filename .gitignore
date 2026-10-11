@@ -43,4 +43,5 @@ storybook-static
 
 # Vitest browser-mode failure artifacts
 __screenshots__/
+screenshots/
 .vitest-attachments/

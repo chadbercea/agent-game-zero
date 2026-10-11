@@ -5,36 +5,17 @@ Code Name: Zero. A Three.js game about agents, made to teach humans how agents w
 
 ## The story
 
-The sandbox plays the reworked story on one isometric grid with two systems: D3V1N's gate and its own third-party tools (Figma, GitHub, Notion), and the Atlassian gate with Rovo's Teamwork Graph (Jira, Confluence, Bitbucket, Code search). Each system is laid out by the grid building guide, but nothing is on the grid until an agent calls it: a gate pops up when its agent calls it, and each tool comes up on its own (its trace draws out over the faint grid, it rises, the line fades) when someone heads there, so the grid grows as the work reaches it. It reads without captions.
+Pre-alpha: one approved demo, **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`). The sandbox and Storybook's **Story Narrative** play the same scene. The reference is [`docs/rovo-mental-model.md`](docs/rovo-mental-model.md).
 
-1. **Opening:** a low-poly cloud drifts over and drops a Jira ticket, *DEMO-1 · Add dark mode*, in front of D3V1N's home. D3V1N floats in from off the grid.
-2. **Own system:** D3V1N takes the ticket, calls its gate, and checks access (yellow while checking, then green; red if the gate is off). It calls GitHub, which comes up alone, and one sub-agent rides the trace there and starts a branch.
-3. **The bridge:** Rovo arrives on its own, calls its gate, gets access, and calls Jira. A Rovo sub-agent builds the secure bridge between the two systems, a glass tunnel with a lock, and dissolves back into Rovo. The graph's lines draw in among the tools on the grid, through the tunnel's ends, and data streams through it: the super tunnel. From then on, every tool called up gets its graph lines too. Power comes through to D3V1N and it charges up.
-4. **Juiced crew:** D3V1N's first sub-agent keeps building at GitHub at twice the pace. D3V1N calls Bitbucket up, and two more ride the graph through the tunnel to it, and the gateway flashes green as each one passes. Their commits keep landing in GitHub.
-5. **Output:** an output line draws from GitHub to an assembler behind D3V1N's system. Every commit sends a little block down it, and eight fuse into a bigger block, which rides a conveyor belt through a portal.
-6. **Full system:** D3V1N's crew spreads across both systems, calling up Notion, Figma, Code search and Confluence one at a time (its own tools along its traces, Rovo's through the tunnel), Rovo's helpers come and go on its tools, and the camera pulls back. Crew size, placement and timing come from a seeded generator.
+Rovo authenticates at its gate and works from Jira. The Teamwork Graph core (Jira, Confluence, Bitbucket) comes up around it. Seeded Jira tasks (code, docs, reads, Jira updates, Slack, specs from Figma) keep landing on Jira's board, and Rovo hands each one to a copy of itself. A copy runs its task's steps one node at a time and reports to Jira. Third-party tools come up through connectors when called and go when the issue is done. Slack sits behind the glass gateway, always busy. Code runs its own lane: worktree, terminal, check in, CI, squash merge into Bitbucket, then cubes, assembler, belt and portal. No captions. Hover anything to highlight it; click it for its details; click Rovo or a copy for the drone family tree.
 
-Getting into a system follows the grid (a gate's trace, or the tunnel between systems), but once a sub-agent is inside a system it flies straight from tool to tool, off the grid. Work products still ride the graph's lines.
-
-When more than one agent works the same tool, the first works the tool itself and each one after it gets a **tertiary node** of its own (`src/story/tertiary.ts`): a smaller node of the same kind buds off the tool on a free spot nearby, joined by a short trace, and its work keeps flowing along the trace into the tool. When that agent's work ends, its tertiary goes away. The hierarchy is gate, then tools (secondary nodes), then tertiaries. Storybook: **Story Parts / Tertiary Nodes**, with a control for how many agents are on the tool.
-
-Every drone comes and goes through one roster (`src/story/roster.ts`), so they spawn and despawn in one defined sequence: the same order at the same story times every loop, for a given seed (`new StoryV2(stage, seed)`). D3V1N's crew goes out one after another, and Rovo's helpers start once the crew is out. Drones fade out rather than pop. On reset, everyone still out leaves newest first, and D3V1N leaves last. `story.roster.log` holds the run's sequence.
-
-From beat 2 on, the human in the loop: clouds drift by at seeded random times, each dropping an issue into Jira, Confluence or Notion, whichever are online.
-
-A work ledger simulates today's volume across the grid: every tool keeps busy with everyone else's work, and whoever is working in the scene finishes pieces at their own pace. **Hover anything** for its volume of work:
-- a tool, agent or sub-agent shows its own counts (done, in progress, queued), what's under way (DEMO-1 among the rest), its share of the whole, and who it works with
-- a gate shows its whole system, tool by tool
-
-The grand total sits in the top-left corner.
-
-The earlier two-act story (Act 1 isolated, denied at review, Act 2 connected) was removed in ILI-957 and ILI-958; it's in git history.
+Earlier stories (two acts, story v2, One Ticket A/B, Two Systems) were removed; they're in git history.
 
 ## Running
 
 ```sh
 npm install
-npm run dev         # Sandbox: the story (http://localhost:5173)
+npm run dev         # Sandbox: Rovo on the Atlassian Grid (http://localhost:5173)
 npm run storybook   # Specimens: every primitive and story step in isolation (http://localhost:6006)
 npm run typecheck   # tsc --noEmit
 npm run build       # typecheck + production build into dist/
@@ -42,18 +23,7 @@ npm run build       # typecheck + production build into dist/
 
 ### Sandbox controls
 
-The panel in the top right:
-
-| Control | What it does |
-|---|---|
-| Run story | Plays the story from the start |
-| Gate works | Turn it off to watch a gate deny access (the story stops there) |
-| Auto-run | Replays the story on a loop |
-| Full system runs for | Seconds the full system keeps running before an auto-run clears it |
-| Pause between runs | Seconds between auto-runs |
-| Reset | Sends everyone home and clears the stage |
-
-Hover over anything for its hover card. Hovering a gate or node also shows its system's lines, and clicking pins them. For debugging, `window.sandbox` exposes `stage`, `scene`, `story`, `run`, `reset` and `settings`.
+The panel in the top right has one control, **Seed**, which reloads the run with that seed (also `?seed=` in the URL). For debugging, `window.sandbox` exposes `stage`, `scene`, `inspector` and `family`.
 
 ## Tests
 
@@ -65,7 +35,7 @@ npm run test:unit                              # just the logic tests (Node, no 
 
 `npm test` runs two Vitest projects:
 
-- **unit:** `src/**/*.test.ts` in Node, through injected fakes, so no WebGL is needed. Covers the drone, arrival and signal-link animators; drone flight; grid scatter and shared runs; branches, conduits and graph edges; signal attachment; and the story's access check, crew routes, human loop, volume, ledger and system layout. **browser:** `src/**/*.browser.test.ts` in headless Chromium (DOM, no rendering): the story's drone sequence, what's on the grid per beat, gate cards and tertiary nodes.
+- **unit:** `src/**/*.test.ts` in Node, through injected fakes, so no WebGL is needed: animators, drone flight, scatter and shared runs, signal attachment, the access check and the Rovo task model. **browser:** `src/**/*.browser.test.ts` in headless Chromium (DOM, no rendering): the Rovo scene and its inspector.
 - **storybook:** every Storybook story renders in headless Chromium as a smoke test. It uses software WebGL (SwiftShader), so it works without a GPU. Story files run one at a time because software rendering is CPU-bound.
 
 `--with-deps` installs Chromium's system libraries and needs sudo. Without it, the browser can fail to launch with a missing `.so` such as `libnspr4.so`.
@@ -77,11 +47,11 @@ Layering: **Primitive → Animation → Stage → Story.**
 | Path | Role |
 |---|---|
 | `src/core/` | Palette, grid, shared textures and mesh helpers, seeded scatter, and shared runs (lines that bus together) |
-| `src/primitives/` | Geometry, materials and rig hooks only, with no motion. Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch (grid-routed access traces), Connection, SignalLink (the drone ↔ base conversation), GraphEdge, Conduit (glass tunnels with dash streams), Gateway (conduit + lock), Ticket (a request), Product (each system's work product, by shape), Cloud (where requests come from), Charge (an agent powered up), Assembler, Conveyor, Portal (the output line) |
-| `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, arrivals, packet flight, signal links, connection reveal |
-| `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering) plus spawning agents and drones and attaching signals |
-| `src/story/` | The story as chained steps on the stage clock. Volume of work (`ledger`, `volume`, `review`, `hoverCards`), the request (`request`), access and reveal (`accessCheck`, `revealMap`), work and routes (`fanOut`, `crew`, `TeamworkGraph`, `systemLayout`, `beam`), the beats (`cloudDrop`, `opening`, `humanLoop`, `shipOutput`, `fullSystem`, `tertiary`, `roster`), and the whole thing (`twoActs` builds the scene, `storyV2` plays it) |
-| `src/sandbox/` | Sandbox app: the stage, the totals, and the control panel |
+| `src/primitives/` | Geometry, materials and rig hooks only, with no motion: Drone, Pad, Gate, SystemNode (with tool emblems), Job, Packet, Branch, Connection, SignalLink, GraphEdge, Conduit, Gateway (conduit + lock), Ticket, Product, Terminal, Assembler, Conveyor, Portal |
+| `src/animation/` | Animators that drive primitive rigs from state: status motion, gate lights, drone flight and routes, packet flight, signal links, connection reveal |
+| `src/stage/` | The isometric `Stage` (camera, light, Runtime/Detail rendering), spawning drones, attaching signals, and the hover/click `Inspector` |
+| `src/story/` | The Rovo scene (`rovoAtlassian`) and its parts: systems (`rovoSystems`, `systemLayout`), Jira (`jiraHub`, `jiraBoard`), tasks (`rovoTasks`), code lane (`rovoCode`, `shipOutput`), Slack (`rovoSlack`), inspection (`rovoInspect`, `familyTree`), and shared steps (`accessCheck`, `beam`, `timeline`) |
+| `src/sandbox/` | Sandbox app: the Rovo scene, inspector, family tree and seed control |
 | `*.stories.ts` | Storybook specimens, next to what they show |
 
 ## Deploys
@@ -90,4 +60,4 @@ Every push to `main` builds the sandbox and Storybook and publishes them to GitH
 
 ## Work tracking
 
-Work is tracked in the Linear project [Agent Game Zero](https://linear.app/iliketobuild/project/agent-game-zero-463b920ee9fa) (team ILI). Each epic is a milestone in that project. Every change starts with an issue and gets its own branch named after the issue key. Commits carry the key (`ILI-123: …`), and each issue ends in a pull request.
+Work is tracked in the Linear project [Agent Game Zero](https://linear.app/iliketobuild/project/agent-game-zero-463b920ee9fa) (team ILI). Each epic is a milestone in that project. Changes land as one pull request each, merged when clean; commits carry the issue key when there is one.

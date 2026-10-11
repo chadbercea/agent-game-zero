@@ -13,6 +13,8 @@ const dirname =
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
   test: {
+    // Every screenshot and test attachment lands in one top-level folder (git-ignored).
+    attachmentsDir: 'screenshots/attachments',
     projects: [
       {
         // Plain logic (lineage model, packet routing). Runs in Node; no WebGL or DOM.
@@ -32,6 +34,7 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
+            screenshotDirectory: path.join(dirname, 'screenshots'),
             provider: playwright(),
             instances: [{ browser: 'chromium' }],
           },
@@ -52,6 +55,7 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
+            screenshotDirectory: path.join(dirname, 'screenshots'),
             // Software WebGL so stories render on machines without a GPU (CI, WSL).
             provider: playwright({
               launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
