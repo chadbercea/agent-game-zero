@@ -1,9 +1,5 @@
-import { type Curve, CylinderGeometry, Group, MeshStandardMaterial, type Object3D, Vector3 } from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { type Curve, type Object3D, Vector3 } from 'three';
 import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
-import { solid } from '../core/mesh';
-import { NEUTRAL } from '../core/palette';
-import { seededRandom } from '../core/scatter';
 import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SystemKind } from '../primitives/node/emblems';
@@ -16,90 +12,13 @@ import { tween, wait } from './timeline';
 
 /** Jira stands a size up from everything around it: it's the quarterback. */
 export const HUB_SCALE = 1.35;
-/** The hub's plate: a low platform a little wider than the node, so Jira stands on ground of its own. */
-export const PLATE = 3;
-/** The plate's own height: a low white slab. */
-const PLATE_HIGH = 0.06;
-/**
- * The corners a plate's cluster may stand in (x, z signs): the two side
- * corners, which the camera sees clear of the node (the back one hides
- * behind it, the front one under its label).
- */
-export const CLUSTER_CORNERS: readonly [number, number][] = [
-  [1, -1],
-  [-1, 1],
-];
-/** A cluster piece: its footprint as a share of the room beside the node, and its height range (world units). */
-const PIECE_WIDE: [number, number] = [0.4, 0.6];
-const PIECE_HIGH: [number, number] = [0.22, 0.5];
-
-/**
- * A Teamwork Graph plate: the low white slab a Teamwork Graph app stands on
- * (Jira, Confluence, Code search, Bitbucket), a little wider than its node.
- * In one corner, beside the node, stands a small cluster of one to three
- * plain neutral pieces (blocks, a drum, a short stack). The cluster is
- * picked from the app's name, so each app's plate is always its own and the
- * set reads as one family, without saying what any piece means. That and the
- * plate are what mark these apps as built to stay; no color does.
- * `size` is the plate's width, `nodeWidth` the node standing on it;
- * `corners` narrows where the cluster may stand.
- */
-export function graphPlate(size: number, kind: SystemKind, nodeWidth: number, corners = CLUSTER_CORNERS): Group {
-  const plate = new Group();
-  const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.5 });
-  const shade = new MeshStandardMaterial({ color: NEUTRAL.shellShade, roughness: 0.55 });
-  plate.add(solid(new RoundedBoxGeometry(size, PLATE_HIGH, size, 2, 0.03), shell)).position.y = PLATE_HIGH / 2;
-  plate.add(cluster(kind, (size - nodeWidth) / 2, size, corners, [shell, shade]));
-  return plate;
-}
-
-/**
- * One to three pieces in a corner of the plate, in the band of `room`
- * between the node and the plate's edge: at the corner itself, then one
- * step along each edge. Same app, same cluster.
- */
-function cluster(kind: SystemKind, room: number, size: number, corners: readonly [number, number][], materials: MeshStandardMaterial[]): Group {
-  const random = seededRandom([...kind].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261));
-  const between = (r: [number, number]) => r[0] + random() * (r[1] - r[0]);
-  const group = new Group();
-  const [sx, sz] = corners[Math.floor(random() * corners.length)];
-  const corner = new Vector3(sx * (size / 2 - room / 2), PLATE_HIGH, sz * (size / 2 - room / 2));
-  const along = room * 0.62;
-  const spots = [corner, corner.clone().setX(corner.x - sx * along), corner.clone().setZ(corner.z - sz * along)];
-  const count = 1 + Math.floor(random() * 3);
-  for (let i = 0; i < count; i++) {
-    const wide = room * between(PIECE_WIDE);
-    // The first piece, at the corner, stands tallest; the rest stay low beside it.
-    const high = i === 0 ? between(PIECE_HIGH) : between([PIECE_HIGH[0] * 0.4, PIECE_HIGH[1] * 0.6]);
-    const material = materials[Math.floor(random() * materials.length)];
-    const shape = Math.floor(random() * 3);
-    const piece =
-      shape === 0
-        ? solid(new RoundedBoxGeometry(wide, high, wide, 2, Math.min(0.02, high / 3)), material)
-        : shape === 1
-          ? solid(new CylinderGeometry(wide / 2, wide / 2, high, 24), material)
-          : stack(wide, high, material);
-    piece.position.copy(spots[i]);
-    if (shape !== 2) piece.position.y += high / 2;
-    group.add(piece);
-  }
-  return group;
-}
-
-/** A short stack: a block with a smaller one on top. */
-function stack(wide: number, high: number, material: MeshStandardMaterial): Group {
-  const group = new Group();
-  const low = high * 0.55;
-  group.add(solid(new RoundedBoxGeometry(wide, low, wide, 2, Math.min(0.02, low / 3)), material)).position.y = low / 2;
-  const top = high - low;
-  group.add(solid(new RoundedBoxGeometry(wide * 0.6, top, wide * 0.6, 2, Math.min(0.015, top / 3)), material)).position.y = low + top / 2;
-  return group;
-}
+/** Where lines meet Jira: the edge of its node (it stands a size up, and taller: a permanent system). */
+export const JIRA_EDGE = (NODE_FOOTPRINT * HUB_SCALE) / 2;
 
 /** The task board holds this many open tasks at most. */
 export const BOARD_MAX = COLUMN_MAX;
 /**
- * The kanban board floats over the plate's front-left corner, beside the node
+ * The kanban board floats off Jira's front-left corner, beside the node
  * (never over it, and clear of an agent hovering over Jira): how far out,
  * how high its center is, and how big it stands.
  */
@@ -118,8 +37,7 @@ const SHOT_SECONDS = 0.6;
  * Jira as the quarterback (Story Narrative): the system of record for
  * everything that happens on the grid.
  *
- * - It stands a size up on a Teamwork Graph plate of its own, with its own
- *   small cluster in one corner (no screen, no lights: not a gate).
+ * - It stands a size up, and taller: a permanent system (no plate, no color).
  * - Its emblem moves out beside it as a kanban board big enough to read, white cards in To do,
  *   In progress and Done. A new task slides into To do (`addTask`); a
  *   sub-agent takes one (`takeTask`): the card moves to In progress and a
@@ -131,7 +49,6 @@ const SHOT_SECONDS = 0.6;
  *   two-way with Jira; the board's card then moves to Done.
  */
 export class JiraHub {
-  readonly plate: Group;
   /** The kanban board, standing where Jira's emblem was. */
   readonly kanban = new KanbanBoard();
   readonly ties = new Map<string, GraphEdge>();
@@ -158,10 +75,6 @@ export class JiraHub {
     this.kanban.rotation.y = FACE_CAMERA;
     this.kanban.scale.setScalar(BOARD_SCALE);
     stage.add(this.kanban);
-    // Its board floats over the front-left corner, so its cluster stands at the right.
-    this.plate = graphPlate(PLATE, 'jira', NODE_FOOTPRINT * HUB_SCALE, [[1, -1]]);
-    this.plate.position.copy(node.position);
-    stage.add(this.plate);
     this.untick = stage.onTick((dt) => {
       this.kanban.update(dt);
       for (const t of this.carried.keys()) t.update(dt);
@@ -175,18 +88,15 @@ export class JiraHub {
    */
   hide(): void {
     this.node.visible = false;
-    this.plate.visible = false;
     this.kanban.visible = false;
   }
 
-  /** Jira and its plate grow in. */
+  /** Jira grows in. */
   async appear(): Promise<void> {
     this.node.visible = true;
-    this.plate.visible = true;
     await tween(this.stage, 0.5, (t) => {
       const k = Math.max(0.001, easeOutBack(t));
       this.node.scale.setScalar(HUB_SCALE * k);
-      this.plate.scale.setScalar(k);
     });
   }
 
@@ -300,7 +210,6 @@ export class JiraHub {
     this.kanban.dispose();
     for (const t of this.carried.keys()) t.dispose();
     for (const e of this.ties.values()) e.dispose();
-    this.plate.removeFromParent();
   }
 
   /** On the board, the task's card moves to Done, glowing green, stays a beat, then slides off. */
@@ -313,12 +222,12 @@ export class JiraHub {
   }
 
   /**
-   * Jira → a point along the grid, from the plate's edge, round whichever
+   * Jira → a point along the grid, from its node's edge, round whichever
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
   private alongRoute(along: readonly Vector3[], endClear: number, inward: boolean): Curve<Vector3> {
-    const trimmed = trimPolyline(along.map((p) => p.clone().setY(0)), PLATE / 2, endClear);
+    const trimmed = trimPolyline(along.map((p) => p.clone().setY(0)), JIRA_EDGE + 0.05, endClear);
     return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
   }
 
@@ -343,7 +252,7 @@ export class JiraHub {
     const ROOM = 0.95;
     const ok = clean.filter((l) => clear(l) >= ROOM);
     const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : clean.sort((a, b) => clear(b) - clear(a))[0];
-    const trimmed = trimPolyline(best, PLATE / 2, endClear);
+    const trimmed = trimPolyline(best, JIRA_EDGE + 0.05, endClear);
     return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
   }
 }

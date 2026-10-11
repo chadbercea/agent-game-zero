@@ -2,7 +2,7 @@ import { Group, type Material, Mesh, MeshStandardMaterial } from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { FACE_CAMERA, NODE_FOOTPRINT } from '../../core/grid';
 import { NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
-import { Pad } from '../pad/Pad';
+import { PAD_TOP, Pad } from '../pad/Pad';
 import { buildEmblem, SYSTEM_NAME, type SystemKind } from './emblems';
 
 /** Nodes are smaller than gates; a sub-agent floats over them. */
@@ -11,6 +11,14 @@ export const NODE_SCALE = 0.72;
 const DIM_OPACITY = 0.28;
 /** Height of the emblem's center, low enough to sit under a hovering sub-agent. */
 export const EMBLEM_HEIGHT = 0.62;
+/**
+ * A permanent system (a Teamwork Graph app that stays) stands taller: one
+ * deeper slab, this much more (pad units, before NODE_SCALE). Its shape says
+ * it's built to stay; no color, no plate.
+ */
+export const PERMANENT_RAISE = 0.3;
+/** Height of a permanent node's top (node units, before the node's own scale): where things set on it sit. */
+export const PERMANENT_TOP = (PAD_TOP + PERMANENT_RAISE) * NODE_SCALE;
 /** Emblems are modeled ~0.5 tall; shown a little larger so the system reads at map scale. */
 export const EMBLEM_SCALE = 1.5;
 
@@ -20,6 +28,8 @@ export type NodeLight = 'off' | Status;
 export interface SystemNodeOptions {
   kind: SystemKind;
   showLabel?: boolean;
+  /** A permanent system: stands taller (PERMANENT_RAISE). */
+  permanent?: boolean;
 }
 
 /**
@@ -30,7 +40,8 @@ export interface SystemNodeOptions {
  */
 export class SystemNode extends Group {
   readonly kind: SystemKind;
-  readonly pad = new Pad({ width: NODE_FOOTPRINT / NODE_SCALE, depth: NODE_FOOTPRINT / NODE_SCALE });
+  readonly pad: Pad;
+  readonly permanent: boolean;
   /** Floating emblem; animators bob and turn it. */
   readonly emblem: Group;
   private _light: NodeLight = 'off';
@@ -44,6 +55,9 @@ export class SystemNode extends Group {
     super();
     this.kind = options.kind;
     this.name = `node:${options.kind}`;
+    this.permanent = options.permanent ?? false;
+    const raise = this.permanent ? PERMANENT_RAISE : 0;
+    this.pad = new Pad({ width: NODE_FOOTPRINT / NODE_SCALE, depth: NODE_FOOTPRINT / NODE_SCALE, raise });
     this.pad.scale.setScalar(NODE_SCALE);
     this.add(this.pad);
 
@@ -51,7 +65,7 @@ export class SystemNode extends Group {
     const graphite = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.45, metalness: 0.2, flatShading: true });
     this.materials = [shell, graphite];
     this.emblem = buildEmblem(options.kind, { shell, graphite });
-    this.emblem.position.y = EMBLEM_HEIGHT;
+    this.emblem.position.y = EMBLEM_HEIGHT + raise * NODE_SCALE;
     this.emblem.scale.setScalar(EMBLEM_SCALE);
     this.emblem.rotation.y = FACE_CAMERA;
     this.add(this.emblem);
