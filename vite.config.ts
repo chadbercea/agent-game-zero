@@ -10,7 +10,7 @@ export default defineConfig({
     // three.js core alone is ~584 KB minified (≈145 KB gzip) and can't be split
     // further without forking it. It now lives in its own long-cacheable vendor
     // chunk, so the limit is raised just above it instead of warning every build.
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 650,
     rolldownOptions: {
       output: {
         codeSplitting: {
