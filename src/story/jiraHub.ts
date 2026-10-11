@@ -18,11 +18,12 @@ export const JIRA_EDGE = (NODE_FOOTPRINT * HUB_SCALE) / 2;
 /** The task board holds this many open tasks at most. */
 export const BOARD_MAX = COLUMN_MAX;
 /**
- * The kanban board floats off Jira's front-left corner, beside the node
- * (never over it, and clear of an agent hovering over Jira): how far out,
- * how high its center is, and how big it stands.
+ * The kanban board floats out in front of Jira, to the left (toward the
+ * camera, so the taller block never hides it; clear of an agent hovering
+ * over Jira and of Rovo's way in on the right): how far out, how high its
+ * center is, and how big it stands.
  */
-const BOARD_OUT = new Vector3(-0.95, 0, 0.95);
+const BOARD_OUT = new Vector3(-0.45, 0, 1.6);
 const BOARD_AT = 0.85;
 const BOARD_SCALE = 0.8;
 /** Seconds a finished card stays in Done before it slides off the board. */
