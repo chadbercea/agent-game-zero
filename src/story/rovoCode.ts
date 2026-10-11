@@ -8,7 +8,7 @@ import { SystemNode } from '../primitives/node/SystemNode';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
-import { TWG_PLATE } from './rovoSystems';
+import { TWG_EDGE } from './rovoSystems';
 import { type OutputLine, shipOutput } from './shipOutput';
 import { tween } from './timeline';
 
@@ -25,7 +25,7 @@ export const SCM_AT = new Vector3(7, 0, -5);
 export const LANE_Z = [-5, -3, -7] as const;
 const TERMINAL_X = 4;
 const WORKTREE_X = 1.5;
-/** Where the outer lanes turn to join the middle one, just before the repo's plate. */
+/** Where the outer lanes turn to join the middle one, just before the repo. */
 const MERGE_X = 5.3;
 export const ASSEMBLER_AT = new Vector3(9.5, 0, -5);
 const BELT_FROM = new Vector3(10.4, 0, -5);
@@ -34,8 +34,8 @@ export const PORTAL_AT = new Vector3(13.2, 0, -5);
 /** The tie from Jira comes into the repo from this side, leaving the others to the lanes and the output. */
 export const SCM_TIE_SIDE = new Vector3(0, 0, 1);
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
-/** The repo stands on a Teamwork Graph plate: lines meet it at the plate's edge. */
-const REPO_EDGE = TWG_PLATE / 2 + 0.05;
+/** The repo is a Teamwork Graph core app, a size up: lines meet it at its edge. */
+const REPO_EDGE = TWG_EDGE + 0.05;
 const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
 const CHECK_IN_SPEED = 6;
 

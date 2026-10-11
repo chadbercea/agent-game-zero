@@ -9,7 +9,7 @@ import { shoot } from './beam';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
-import { graphPlate, type JiraHub } from './jiraHub';
+import { type JiraHub } from './jiraHub';
 import { isTwg } from './rovoTasks';
 import { tween } from './timeline';
 
@@ -25,8 +25,6 @@ export interface PlacedSystem {
   readonly connector?: Group;
   /** What's been written back to it, newest last (a few stay on view). */
   readonly writeBacks: Product[];
-  /** The Teamwork Graph's core apps stand on a plate of their own, a size up (see `establish`). */
-  readonly plate?: Group;
   /** A system that hangs off another (Code search off Bitbucket): its Graph Line into that one, instead of a tie to Jira. */
   readonly link?: { to: SystemKind; edge: GraphEdge };
   users: number;
@@ -34,9 +32,10 @@ export interface PlacedSystem {
 
 /** Write-backs shown at a system at most; past that the oldest go. */
 export const WRITE_BACKS_SHOWN = 3;
-/** The Teamwork Graph's core apps (beside Jira): their plate's width, and how much bigger they stand than other systems. */
-export const TWG_PLATE = 2.2;
+/** The Teamwork Graph's core apps (beside Jira) stand this much bigger than other systems. */
 export const TWG_SCALE = 1.2;
+/** Where lines meet a Teamwork Graph core app: the edge of its node. */
+export const TWG_EDGE = (NODE_FOOTPRINT * TWG_SCALE) / 2;
 
 /**
  * The systems on Rovo's grid. Jira is there from the start (the hub). Any
@@ -115,29 +114,25 @@ export class SystemsOnGrid {
 
   /**
    * A core Teamwork Graph app comes up with Jira, prominent and for good: its
-   * Graph Line draws out from Jira, then it stands up at the line's end on a
-   * plate of its own, a size up. Calls to it from then on find it there.
+   * Graph Line draws out from Jira, then it stands up at the line's end, a
+   * size up and taller (a permanent system). Calls to it from then on find it there.
    */
   async establish(kind: SystemKind): Promise<PlacedSystem> {
     const at = this.places[kind];
     if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
     const tie = `system:${kind}:${++this.ups}`;
-    await this.hub.tie(tie, at, this.arrive[kind], TWG_PLATE / 2 + 0.05, false, this.routes[kind]);
-    const plate = graphPlate(TWG_PLATE, kind, NODE_FOOTPRINT * TWG_SCALE);
-    plate.position.copy(at);
-    plate.scale.setScalar(0.001);
-    const node = new SystemNode({ kind });
+    await this.hub.tie(tie, at, this.arrive[kind], TWG_EDGE + 0.05, false, this.routes[kind]);
+    const node = new SystemNode({ kind, permanent: true });
     node.position.copy(at);
     node.scale.setScalar(0.001);
     node.labelOpacity = 0;
-    this.stage.add(plate, node);
+    this.stage.add(node);
     await tween(this.stage, 0.5, (t) => {
       const k = Math.max(0.001, easeOutBack(t));
-      plate.scale.setScalar(k);
       node.scale.setScalar(TWG_SCALE * k);
       node.labelOpacity = t;
     });
-    const up: PlacedSystem = { kind, node, permanent: true, tie, plate, writeBacks: [], users: 0 };
+    const up: PlacedSystem = { kind, node, permanent: true, tie, writeBacks: [], users: 0 };
     this.placed.set(kind, up);
     return up;
   }
@@ -166,7 +161,8 @@ export class SystemsOnGrid {
       const at = this.places[kind];
       if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
       // It comes up for the copy that called it, right under it; then it reaches out to Jira.
-      const node = new SystemNode({ kind });
+      const permanent = isTwg(kind);
+      const node = new SystemNode({ kind, permanent });
       node.position.copy(at);
       node.scale.setScalar(0.001);
       node.labelOpacity = 0;
@@ -176,15 +172,14 @@ export class SystemsOnGrid {
         node.labelOpacity = t;
       });
       const tie = `system:${kind}:${++this.ups}`;
-      const permanent = isTwg(kind);
       // A third-party tool plugs into the Teamwork Graph through a connector first.
       const connector = permanent ? undefined : this.plug(at);
       if (connector) await tween(this.stage, 0.25, (t) => connector.scale.setScalar(Math.max(0.001, easeOutBack(t))));
       const parent = this.via[kind] ? this.placed.get(this.via[kind]!) : undefined;
       let link: PlacedSystem['link'];
       if (parent) {
-        // It hangs off its parent: its line reaches straight into the parent's plate (or node).
-        const edgeOf = (parent.plate ? TWG_PLATE / 2 : NODE_FOOTPRINT / 2) + 0.05;
+        // It hangs off its parent: its line reaches straight into the parent's edge.
+        const edgeOf = (NODE_FOOTPRINT * parent.node.scale.x) / 2 + 0.05;
         const toward = parent.node.position.clone().sub(at).normalize();
         const edge = new GraphEdge(
           new LineCurve3(at.clone().addScaledVector(toward, NODE_FOOTPRINT / 2 + 0.1), parent.node.position.clone().addScaledVector(toward, -edgeOf)),

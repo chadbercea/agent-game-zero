@@ -22,13 +22,13 @@ export const FLOOR_GLOW_OPACITY = 0.42;
 
 const shared = new Map<string, ReturnType<typeof buildGeometry>>();
 
-function buildGeometry(width: number, depth: number) {
+function buildGeometry(width: number, depth: number, raise: number) {
   const floorGlow = new PlaneGeometry(3.4, 3.4);
   floorGlow.rotateX(-Math.PI / 2);
   const screen = new PlaneGeometry(SCREEN_WIDTH, SCREEN_DEPTH);
   screen.rotateX(-Math.PI / 2);
   return {
-    slab: new RoundedBoxGeometry(width, 0.24, depth, 3, 0.07),
+    slab: new RoundedBoxGeometry(width, 0.24 + raise, depth, 3, 0.07),
     skirt: new RoundedBoxGeometry(width - 0.04, 0.05, depth - 0.04, 2, 0.024),
     bezel: new BoxGeometry(0.62, 0.02, 0.44),
     screen,
@@ -46,19 +46,24 @@ export interface PadOptions {
   width?: number;
   /** Footprint along local Z (before any scale). */
   depth?: number;
+  /** How much deeper the slab is (before any scale): the screen rides up on top. 0 = a plain pad. */
+  raise?: number;
 }
 
 export class Pad extends Group {
   readonly screenMaterial: MeshStandardMaterial;
   readonly skirtMaterial: MeshStandardMaterial;
   readonly glowMaterial: MeshBasicMaterial;
+  /** Height of the slab's top, where the screen sits (before any scale). */
+  readonly top: number;
   private readonly materials: Material[];
 
   constructor(options: PadOptions = {}) {
     super();
-    const { width = 1.5, depth = 1.1 } = options;
-    const key = `${width}x${depth}`;
-    const g = shared.get(key) ?? shared.set(key, buildGeometry(width, depth)).get(key)!;
+    const { width = 1.5, depth = 1.1, raise = 0 } = options;
+    const key = `${width}x${depth}x${raise}`;
+    const g = shared.get(key) ?? shared.set(key, buildGeometry(width, depth, raise)).get(key)!;
+    this.top = PAD_TOP + raise;
     const shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.38, metalness: 0.05 });
     const bezel = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.4, metalness: 0.2 });
     this.screenMaterial = new MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
@@ -77,9 +82,9 @@ export class Pad extends Group {
     glow.renderOrder = -1;
     this.add(glow);
     this.add(at(new Mesh(g.skirt, this.skirtMaterial), 0.035));
-    this.add(at(solid(g.slab, shell), 0.16));
-    this.add(at(solid(g.bezel, bezel), PAD_TOP + 0.002));
-    this.add(at(new Mesh(g.screen, this.screenMaterial), PAD_TOP + 0.014));
+    this.add(at(solid(g.slab, shell), 0.16 + raise / 2));
+    this.add(at(solid(g.bezel, bezel), this.top + 0.002));
+    this.add(at(new Mesh(g.screen, this.screenMaterial), this.top + 0.014));
   }
 
   /** Light the screen, edge and floor glow in `color`; `null` turns them off (dark screen, no glow). */

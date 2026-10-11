@@ -52,7 +52,7 @@ describe('Rovo and Jira, the quarterback', () => {
       const scene = new RovoAtlassian(testStage().stage, seed);
       const spots = MINI_SYSTEMS.map((k) => scene.places[k] as Vector3);
       for (const [i, p] of spots.entries()) {
-        // On the grid, clear of Jira's plate, and a cluster around Jira, not a sprawl.
+        // On the grid, clear of Jira, and a cluster around Jira, not a sprawl.
         expect(p.x * 2).toBe(Math.round(p.x * 2));
         expect(p.distanceTo(JIRA_AT)).toBeGreaterThanOrEqual(3);
         expect(p.distanceTo(JIRA_AT)).toBeLessThan(12);
@@ -85,7 +85,7 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(scene.rovo.drone.position.distanceTo(ROVO_START)).toBe(0);
     expect(scene.gate.visible).toBe(false);
     expect(scene.jira.visible).toBe(false);
-    expect(scene.hub.plate.visible).toBe(false);
+    expect(scene.jira.permanent).toBe(true);
     expect(scene.hub.kanban.visible).toBe(false);
     expect(scene.accessLine.drawn).toBe(0);
     expect(scene.hub.board).toHaveLength(0);
@@ -223,7 +223,7 @@ describe('Rovo and Jira, the quarterback', () => {
         const underCopy = copies().some((c) => Math.hypot(c.position.x - o.position.x, c.position.z - o.position.z) < 0.3);
         const atLine = root.children.some((e) => {
           const curve = e instanceof GraphEdge && e.drawn > 0.99 ? e.path : e instanceof Branch && e.drawn > 0.99 ? e.curve : null;
-          // A line meets a node at its edge, or at its plate's edge (the Teamwork Graph's core apps stand on plates).
+          // A line meets a node at its edge.
           const near = (p: Vector3) => p.distanceTo(o.position.clone().setY(0)) < 1.25;
           return !!curve && (near(curve.getPoint(1)) || near(curve.getPoint(0)));
         });
@@ -239,10 +239,10 @@ describe('Rovo and Jira, the quarterback', () => {
     // Once everything's done, only the Teamwork Graph apps are still standing.
     const standing = [...scene.systems.placed.keys()];
     for (const kind of standing) expect(['confluence', 'codesearch', 'bitbucket']).toContain(kind);
-    // The Teamwork Graph's core stands with Jira, prominent: Confluence and Bitbucket, on plates, a size up.
+    // The Teamwork Graph's core stands with Jira, prominent: Confluence and Bitbucket, permanent (taller), a size up.
     for (const kind of ['confluence', 'bitbucket'] as const) {
       const up = scene.systems.placed.get(kind);
-      expect(up?.plate).toBeDefined();
+      expect(up?.node.permanent).toBe(true);
       expect(up?.node.scale.x).toBeGreaterThan(1.1);
     }
     expect(scene.scm).toBe('bitbucket');

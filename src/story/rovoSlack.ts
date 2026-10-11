@@ -32,7 +32,7 @@ export class SlackHub {
   readonly gateway = new Gateway(SLACK_RUN);
   /** Slack → the gateway's far end. */
   readonly toGateway: GraphEdge;
-  /** The gateway's near end → Jira's plate. */
+  /** The gateway's near end → Jira's edge. */
   readonly toJira: GraphEdge;
   /** Slack is up and chattering. */
   up = false;

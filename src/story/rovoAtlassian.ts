@@ -13,8 +13,7 @@ import type { Drone } from '../primitives/drone/Drone';
 import { Job as JobAnimation } from '../primitives/job/Job';
 import { RepoTrunk } from '../primitives/job/RepoTrunk';
 import { hasJob, type ScmKind, type SystemKind } from '../primitives/node/emblems';
-import { NODE_SCALE, SystemNode } from '../primitives/node/SystemNode';
-import { PAD_TOP } from '../primitives/pad/Pad';
+import { PERMANENT_TOP, SystemNode } from '../primitives/node/SystemNode';
 import type { Ticket } from '../primitives/ticket/Ticket';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import { attachSignal } from '../stage/attachSignal';
@@ -22,7 +21,7 @@ import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
-import { JiraHub, PLATE } from './jiraHub';
+import { JIRA_EDGE, JiraHub } from './jiraHub';
 import { makeTask, type Step, TASK_TITLE, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { ASSEMBLER_AT, buildOutput, CodeLane, LANE_Z, PORTAL_AT, SCM_AT, SCM_TIE_SIDE } from './rovoCode';
@@ -41,13 +40,13 @@ export const USER_TERMINAL_AT = new Vector3(-1, 0, 6);
 export const ROVO_START = new Vector3(3.5, 0, 3.5);
 /** Jira, the quarterback, a short hop left of the gate, level with it on screen: never behind Rovo as it hovers on the gate. */
 export const JIRA_AT = new Vector3(-3, 0, 3);
-/** Code search hangs off Bitbucket (it indexes the repositories): close beside it, its line into Bitbucket's plate. */
+/** Code search hangs off Bitbucket (it indexes the repositories): close beside it, its line into Bitbucket. */
 export const CODESEARCH_AT = new Vector3(SCM_AT.x, 0, SCM_AT.z - 3);
 /** The code side's systems stand at the repo's place (see rovoCode). */
 const CODE_PLACES: Partial<Record<SystemKind, Vector3>> = { github: SCM_AT, bitbucket: SCM_AT, gitlab: SCM_AT, codesearch: CODESEARCH_AT };
 /** The mini systems: laid out around Jira from the seed by the house layout rules (systemLayout). */
 export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'gdocs', 'notion'];
-/** How close a mini system may stand to Jira: clear of Jira's plate and of a plate of its own. */
+/** How close a mini system may stand to Jira: well clear of it (it stands a size up), with room for the lines between. */
 const MINI_NEAR = 3.5;
 /** How far an MCP terminal stands from Figma, along the grid. */
 const MCP_OUT = 2.5;
@@ -218,7 +217,7 @@ export class RovoAtlassian {
     this.lock.shown = 0;
     this.lock.shut = 0;
     stage.add(this.lock);
-    this.jira = new SystemNode({ kind: 'jira' });
+    this.jira = new SystemNode({ kind: 'jira', permanent: true });
     this.jira.position.copy(JIRA_AT);
     stage.add(this.jira);
     this.hub = new JiraHub(
@@ -236,7 +235,7 @@ export class RovoAtlassian {
       ],
       this.random,
     );
-    this.slack = new SlackHub(stage, new Vector3(JIRA_AT.x, 0, JIRA_AT.z - PLATE / 2 - 0.05), this.random);
+    this.slack = new SlackHub(stage, new Vector3(JIRA_AT.x, 0, JIRA_AT.z - JIRA_EDGE - 0.05), this.random);
     // The mini systems around Jira, laid out from the seed by the house rules: aimed at their partners, the seed
     // swinging each within its cone, each in the closest spot that fits, with its own shortest line to Jira.
     const fixed = keepClear();
@@ -266,7 +265,7 @@ export class RovoAtlassian {
     // The repo's trunk stands on the SCM node's slab, at its right-hand corner, and is only there while the SCM is:
     // a third-party SCM goes when its tasks are done and takes its trunk with it (it keeps its commits for next time).
     const repo = SCM_AT;
-    this.trunk.position.set(repo.x + 0.3 * TWG_SCALE, PAD_TOP * NODE_SCALE * TWG_SCALE, repo.z - 0.3 * TWG_SCALE);
+    this.trunk.position.set(repo.x + 0.3 * TWG_SCALE, PERMANENT_TOP * TWG_SCALE, repo.z - 0.3 * TWG_SCALE);
     stage.add(this.trunk);
     stage.onTick((dt) => {
       const up = this.systems.placed.get(this.scm);
@@ -279,10 +278,10 @@ export class RovoAtlassian {
         this.output.line.drawn += (target - this.output.line.drawn) * Math.min(1, dt * 3);
       }
     });
-    // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira's plate.
+    // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira.
     const corner = new Vector3(ROVO_GATE.x, 0, JIRA_AT.z);
     this.accessLine = new Branch(
-      roundedPath(trimPolyline([ROVO_GATE.clone(), corner, JIRA_AT.clone()], GATE_FOOTPRINT / 2 + 0.05, PLATE / 2 + 0.05), BEND_RADIUS),
+      roundedPath(trimPolyline([ROVO_GATE.clone(), corner, JIRA_AT.clone()], GATE_FOOTPRINT / 2 + 0.05, JIRA_EDGE + 0.05), BEND_RADIUS),
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);
