@@ -166,9 +166,14 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     // A checkout of the repo: a folder, its tab up, with a small branch mark on it.
     place(solid(new RoundedBoxGeometry(0.42, 0.28, 0.08, 2, 0.03), m.shell), 0, -0.02);
     place(solid(new RoundedBoxGeometry(0.16, 0.07, 0.08, 2, 0.02), m.shell), -0.11, 0.14);
+    // The branch mark: the code glyph's trunk, two commits and a fork curving off to a third, small, on the folder's face.
+    const commit = new SphereGeometry(0.035, 10, 8);
     place(solid(new CylinderGeometry(0.018, 0.018, 0.16, 6), m.graphite), -0.04, -0.02, 0.045);
-    place(solid(new SphereGeometry(0.035, 10, 8), m.graphite), -0.04, 0.07, 0.045);
-    place(solid(new SphereGeometry(0.035, 10, 8), m.graphite), 0.06, 0.03, 0.045);
+    place(solid(commit, m.graphite), -0.04, 0.07, 0.045);
+    place(solid(commit, m.graphite), -0.04, -0.11, 0.045);
+    const fork = new QuadraticBezierCurve3(new Vector3(-0.04, -0.06, 0.045), new Vector3(0.06, -0.04, 0.045), new Vector3(0.06, 0.03, 0.045));
+    place(solid(new TubeGeometry(fork, 10, 0.016, 6), m.graphite), 0, 0);
+    place(solid(commit, m.graphite), 0.06, 0.03, 0.045);
   } else if (kind === 'slack') {
     // Comms: a speech bubble with three lines of chat in it.
     place(solid(new RoundedBoxGeometry(0.42, 0.3, 0.06, 2, 0.06), m.shell), 0, 0.04);
