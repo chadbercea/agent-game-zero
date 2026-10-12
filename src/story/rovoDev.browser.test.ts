@@ -69,9 +69,10 @@ describe('Rovo Dev', () => {
       expect(scene.reviews).toBe(issues + asked);
       expect(scene.ciRetries).toBe(day.flakyCI ? 1 : 0);
       expect(scene.shipped).toBe(issues);
-      // The docs stayed current; Slack only when the dice said so.
+      // The developer heard about the bug in Slack, and the fix was posted there; the docs stayed current.
+      expect(scene.tasks.filter((t) => t.task.type === 'slack' && t.done === 1)).toHaveLength(2);
+      expect(day.issues[0].kind).toBe('bug');
       expect(scene.systems.placed.get('confluence')?.writeBacks.length).toBeGreaterThanOrEqual(1);
-      expect(scene.slack.messages > 0).toBe(day.slack);
       // Every task a DEV issue, done; everyone home; Jira quiet.
       expect(scene.tasks.every((t) => /^DEV-\d+$/.test(t.key) && t.done === t.task.steps.length)).toBe(true);
       expect(scene.hub.done).toBe(scene.tasks.length);

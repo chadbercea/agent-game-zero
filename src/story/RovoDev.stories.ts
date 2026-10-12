@@ -13,17 +13,18 @@ export default meta;
 
 /**
  * A developer's day, told as the developer's jobs to be done, built from the
- * same pieces as the other stories (docs/rovo-mental-model.md). The day
- * starts in the developer's terminal, and Rovo is started from it; Rovo goes
- * through its gate into Jira, the terminal ties in and asks what's on the
- * plate; clouds (the team) float over the board and drop the day's issues. Understand:
+ * same pieces as the other stories (docs/rovo-mental-model.md). Clouds (the
+ * team) file the day's tickets, which wait where Jira's board will be; Rovo
+ * authenticates and Jira comes up and takes them in; a copy tells the
+ * developer in Slack about a user-facing bug; the developer's terminal comes
+ * up, ties into Jira and kicks off the work, the bug first. Understand:
  * a copy per issue reads what it needs (Code search for a bug, Confluence and
  * Figma for a feature, the repo for a chore) and tells the developer. Write
  * the change: each copy codes its issue in its own lane. Get it reviewed: a
  * reviewing copy reads each diff at its lane's terminal, sometimes sending it
  * back once. Get it green and shipped: CI (red once, sometimes), merge, a
  * release each through the portal. Keep the docs current: release notes in
- * Confluence and back to the developer, sometimes a post in Slack. Then
+ * Confluence and back to the developer, and the fix posted in Slack. Then
  * everyone goes home into Rovo. No captions. Hover anything to highlight it;
  * click it for its details. Click Rovo or a copy for the drone family tree.
  * `seed` rolls the day (`rollDevDay`); `beat` opens the story at that beat.
@@ -34,7 +35,7 @@ export const DevDay: StoryObj<{ seed: number; beat: DevBeat }> = {
     seed: { control: { type: 'number', min: 1, step: 1 } },
     beat: { control: 'select', options: DEV_BEATS },
   },
-  args: { seed: 5, beat: 'terminal' },
+  args: { seed: 5, beat: 'filed' },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
     const scene = new RovoDev(stage, args.seed);
