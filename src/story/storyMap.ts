@@ -93,7 +93,7 @@ export interface MapLink {
 }
 
 export interface ProductionPlace {
-  /** The glass tunnel releases cross into production through: its run, and its ends (in from the belt, out toward the server). */
+  /** The glass tunnel releases cross into production through: its run, and its ends (in from the assembler, out toward the server). */
   tunnel: SharedRun;
   tunnelIn: Vector3;
   tunnelOut: Vector3;
@@ -113,7 +113,7 @@ export interface ProductionPlace {
 export interface StoryMapOptions {
   /** The mini systems this story uses, laid out round Jira. */
   mini: readonly SystemKind[];
-  /** Lay out production: the tunnel past the belt, the production server, its services. */
+  /** Lay out production: the tunnel past the assembler, the production server, its services. */
   production?: boolean;
 }
 
@@ -137,13 +137,13 @@ const TIE_TRIES = 1;
 
 /**
  * Production in the code side's frame (u downstream, v across): past the
- * belt, the glass tunnel; past that, the production server; then its
+ * assembler (no belt), the glass tunnel; past that, the production server; then its
  * services in three tiers (the front, APIs, data).
  */
 const PRODUCTION = {
-  tunnelU: [13, 15],
-  serverU: 17,
-  tierU: [20, 23, 26],
+  tunnelU: [10.5, 12.5],
+  serverU: 14.5,
+  tierU: [17.5, 20.5, 23.5],
   slotV: [-1.5, -5, -8.5],
   frontV: -5,
 } as const;

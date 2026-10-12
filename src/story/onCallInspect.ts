@@ -23,7 +23,7 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
       out.push({
         kind: 'gateway',
         object: production.tunnel,
-        card: () => gatewayCard({ sides: ['Release belt', 'Production server'], secured: production.tunnel.lockDrop >= 1, flowing: production.tunnel.conduit.streams > 0, crossings: production.delivered }),
+        card: () => gatewayCard({ sides: ['Assembler', 'Production server'], secured: production.tunnel.lockDrop >= 1, flowing: production.tunnel.conduit.streams > 0, crossings: production.delivered }),
       });
     }
     if (shown(production.server)) {
