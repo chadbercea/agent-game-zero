@@ -43,7 +43,7 @@ export interface Replica {
 
 /**
  * Production (Rovo on Call; docs/rovo-mental-model.md): where the code side's
- * releases go. Past the belt, a secure glass tunnel crosses into production;
+ * releases go. Past the assembler, a secure glass tunnel crosses into production;
  * past it stands the production server the releases are shipped to, and it
  * serves the rest of the business: a web front, the APIs behind it, the data
  * behind those, each a system node whose light is its health (green healthy,
@@ -52,7 +52,7 @@ export interface Replica {
  *
  * It comes up line first, node after (`comeUp`): the tunnel, its line to the
  * server, the server, its line to the front, then tier by tier. A release
- * from the belt goes through the tunnel (it flashes, its lock sways), into
+ * from the assembler goes through the tunnel (it flashes, its lock sways), into
  * the server, and on along the lines to its service (`deliver`). Fixes happen
  * at a service: replicas grow in beside it (line first), or its feature flag lowers.
  */
@@ -171,7 +171,7 @@ export class Production {
   }
 
   /**
-   * A release off the end of the belt (`release`, or a fresh one if none):
+   * A release from the assembler (`release`, or a fresh one if none):
    * it goes into the glass tunnel (the tunnel flashes, its lock sways),
    * through it, along the line into the production server, out along its
    * line to the front, and on along the lines to service `i`, and goes in.
@@ -208,7 +208,7 @@ export class Production {
       block.scale.setScalar(Math.max(0.001, 1 - t));
     });
     block.removeFromParent();
-    // A release off the belt shares its shape with the assembler's; only its material is its own.
+    // A release from the assembler shares its shape with the assembler's; only its material is its own.
     if (!release) block.geometry.dispose();
     (block.material as MeshStandardMaterial).dispose();
     this.delivered++;

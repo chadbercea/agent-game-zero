@@ -30,9 +30,9 @@ export interface OutputPlace {
   beltSpeed?: number;
   portal: Vector3;
   /**
-   * Where a release goes at the end of the belt instead of a portal (Rovo on
-   * Call: into the glass tunnel to the production server). The output then
-   * has no portal of its own; this takes the release and is done with it.
+   * Where a release goes straight from the assembler instead of the belt and
+   * portal (Rovo on Call: into the glass tunnel to the production server).
+   * The output then has no belt or portal; this takes the release and is done with it.
    */
   handOff?: (release: Mesh) => Promise<void>;
   /** A bigger block just went through the portal (e.g. to bring it out the exit side: ExitLine). */
@@ -43,8 +43,9 @@ export interface OutputPlace {
 export interface OutputLine {
   line: Branch;
   assembler: Assembler;
-  conveyor: Conveyor;
-  /** Where releases go through (none when they're handed off at the belt's end). */
+  /** The belt (none when releases are handed off at the assembler). */
+  conveyor?: Conveyor;
+  /** Where releases go through (none when they're handed off at the assembler). */
   portal?: Portal;
   /** A commit just landed in GitHub: send a little block down the line (if there's room; returns whether it went). */
   commit: () => boolean;
@@ -78,7 +79,7 @@ export async function shipOutput(
   conveyor.rotation.y = heading;
   if (output.beltSpeed) conveyor.speed = output.beltSpeed;
   const portal = output.handOff ? undefined : new Portal();
-  const parts = portal ? [assembler, conveyor, portal] : [assembler, conveyor];
+  const parts = portal ? [assembler, conveyor, portal] : [assembler];
   if (portal) {
     portal.position.copy(output.portal);
     portal.rotation.y = heading;
@@ -136,12 +137,16 @@ export async function shipOutput(
   const untickShip = stage.onTick(() => {
     if (!running || !assembler.ready) return;
     const block = assembler.take();
-    if (block) void ship(stage, block, conveyor, portal ?? output.handOff!, shipping).then(() => output.onShipped?.());
+    if (!block) return;
+    // Handed off: the release goes straight on from the assembler (into the glass tunnel).
+    const handOff = output.handOff;
+    if (handOff) void handOff(block).then(() => output.onShipped?.());
+    else void ship(stage, block, conveyor, portal!, shipping).then(() => output.onShipped?.());
   });
   return {
     line,
     assembler,
-    conveyor,
+    conveyor: portal ? conveyor : undefined,
     portal,
     commit,
     stop: () => {
@@ -155,7 +160,7 @@ export async function shipOutput(
 }
 
 /** A bigger block drops onto the belt, rides it to the end, and goes through the portal (or is handed off there). */
-async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: Portal | ((release: Mesh) => Promise<void>), shipping: Mesh[]): Promise<void> {
+async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: Portal, shipping: Mesh[]): Promise<void> {
   stage.add(block);
   shipping.push(block);
   const half = BIG_BLOCK / 2;
@@ -171,11 +176,6 @@ async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: P
     conveyor.pointAt(0.03 + t * 0.94, at);
     block.position.set(at.x, BELT_TOP + half, at.z);
   });
-  if (!(portal instanceof Portal)) {
-    shipping.splice(shipping.indexOf(block), 1);
-    await portal(block);
-    return;
-  }
   // Into the portal: it slides into the middle of the ring, shrinks away, and the portal flashes.
   const start = block.position.clone();
   const into = portal.position.clone().setY(PORTAL_CENTER_Y);

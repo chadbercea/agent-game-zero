@@ -236,7 +236,7 @@ export class RovoOnCall extends RovoAtlassian {
 
   /**
    * The output, when a fix first needs it: the line, the assembler and the
-   * belt. Off the end of the belt each release goes through the glass tunnel
+   * assembler (no belt). Each release goes from the assembler through the glass tunnel
    * to the production server, and on to the failing service.
    */
   protected override buildOutputLine(): Promise<OutputLine> {
