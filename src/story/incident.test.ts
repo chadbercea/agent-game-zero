@@ -31,11 +31,9 @@ describe('rollIncident: the seed decides the incident', () => {
 
   it('the dice hold together: the fix fits the cause, the crew fits the severity, the finding lead is on the crew', () => {
     const fixes = new Set<Mitigation>();
-    const sources = new Set<string>();
     for (const seed of SEEDS) {
       const inc = rollIncident(seed);
       fixes.add(inc.mitigation);
-      sources.add(inc.source);
       expect(inc.leads).toHaveLength(4 - inc.sev);
       expect(inc.leads).toContain(FINDS[inc.cause]);
       expect(inc.find).toBe(FINDS[inc.cause]);
@@ -62,6 +60,5 @@ describe('rollIncident: the seed decides the incident', () => {
       expect(new Set(inc.degraded)).toEqual(upstream);
     }
     expect(fixes).toEqual(new Set(['rollback', 'hotfix', 'failover', 'scale-out', 'flag-off']));
-    expect(sources).toEqual(new Set(['datadog', 'grafana', 'jsm']));
   });
 });

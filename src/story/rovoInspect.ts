@@ -194,11 +194,13 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
         object: output.assembler,
         card: () => nodeCard({ name: 'Assembler', system: 'Deploy', light: output.assembler.count > 0 ? 'working' : 'off', makes: 'A release (eight merges in one)', linked: ['Bitbucket', 'Portal'] }),
       });
-      out.push({
-        kind: 'node',
-        object: output.portal,
-        card: () => nodeCard({ name: 'Portal', system: 'Deploy', light: 'working', makes: 'Shipped: out to production', linked: ['Assembler'] }),
-      });
+      if (output.portal) {
+        out.push({
+          kind: 'node',
+          object: output.portal,
+          card: () => nodeCard({ name: 'Portal', system: 'Deploy', light: 'working', makes: 'Shipped: out to production', linked: ['Assembler'] }),
+        });
+      }
     }
     return out;
   };

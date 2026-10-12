@@ -1,6 +1,6 @@
 import { NEUTRAL } from '../core/palette';
 import { type Inspectable, lineHit } from '../stage/Inspector';
-import { lineCard, nodeCard } from '../stage/inspectCards';
+import { gatewayCard, lineCard, nodeCard } from '../stage/inspectCards';
 import type { Mesh } from 'three';
 import type { RovoOnCall } from './rovoOnCall';
 import { rovoInspectables } from './rovoInspect';
@@ -18,6 +18,30 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
     const out = grid();
     const names = incident.services.map((s) => s.name);
     const shown = (o: { visible: boolean; scale: { x: number } }) => o.visible && o.scale.x > 0.05;
+    // The glass tunnel into production, and the production server past it.
+    if (production.tunnel.visible && production.tunnel.built > 0.5) {
+      out.push({
+        kind: 'gateway',
+        object: production.tunnel,
+        card: () => gatewayCard({ sides: ['Release belt', 'Production server'], secured: production.tunnel.lockDrop >= 1, flowing: production.tunnel.conduit.streams > 0, crossings: production.delivered }),
+      });
+    }
+    if (shown(production.server)) {
+      out.push({
+        kind: 'node',
+        object: production.server,
+        card: () => nodeCard({ name: 'Production server', system: 'Production', light: production.server.light, makes: 'Releases, served to the business', linked: [names[0]] }),
+      });
+    }
+    for (const [line, from, to, carries] of [
+      [production.intoServer, 'Glass tunnel', 'Production server', 'Releases'],
+      [production.toFront, 'Production server', names[0], 'Requests, and releases on their way in'],
+    ] as const) {
+      if (line.drawn < 0.01) continue;
+      let hit = hits.get(line);
+      if (!hit) hits.set(line, (hit = lineHit(line.curve)));
+      out.push({ kind: 'line', object: line, hit, card: () => lineCard({ type: 'Deploy', from, to, color: NEUTRAL.packet, drawn: line.drawn, carries }) });
+    }
     production.nodes.forEach((node, i) => {
       if (!shown(node)) return;
       const s = incident.services[i];

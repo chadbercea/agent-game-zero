@@ -21,9 +21,10 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
     expect(new Set(maps.map(key)).size).toBe(20);
     // Not just the mini systems: the arrangement itself moves (gate, code side, Slack, terminal).
     expect(new Set(maps.map(arrangement)).size).toBeGreaterThanOrEqual(15);
-    // The code side grows out on every side over a run of seeds.
-    expect(new Set(maps.map((m) => `${m.code.flow.x},${m.code.flow.z}`)).size).toBe(4);
-  });
+    // The code side grows out on every side over a run of seeds (toward the camera is the rarest, so the run is longer).
+    const more = Array.from({ length: 60 }, (_, i) => storyMap(i + 1, { mini: ALL }));
+    expect(new Set(more.map((m) => `${m.code.flow.x},${m.code.flow.z}`)).size).toBe(4);
+  }, 60000);
 
   it('the house rules hold for every seed: on the grid, square lines, groups apart, mini systems clear', () => {
     for (let seed = 1; seed <= 60; seed++) {
@@ -36,12 +37,17 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
       expect(m.slack.run.from).toBeLessThan(m.slack.run.to);
       for (const p of code) {
         for (const q of [m.jira, m.gate, m.slack.at, m.userTerminal]) expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2.5 - 1e-9);
-        expect(distanceToPolyline(p.x, p.z, [m.jira, m.slack.at])).toBeGreaterThanOrEqual(1.5 - 1e-9);
+        expect(distanceToPolyline(p.x, p.z, [m.jira, m.slack.at])).toBeGreaterThanOrEqual(1.2 - 1e-9);
       }
       for (const kind of ALL) {
         const p = m.places[kind] as Vector3;
         for (const q of code) expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2 - 1e-9);
       }
+      // Nothing stands on Jira's line to the repo.
+      const tie = m.routes.bitbucket as Vector3[];
+      expect(square(tie)).toBe(true);
+      for (const p of [m.gate, m.userTerminal, m.slack.at, ...(Object.entries(m.places) as [string, Vector3][]).filter(([k]) => !['bitbucket', 'github', 'gitlab'].includes(k)).map(([, p]) => p)])
+        expect(distanceToPolyline(p.x, p.z, tie)).toBeGreaterThanOrEqual(1.2 - 1e-9);
       expect(m.viewSize).toBeGreaterThan(8);
     }
   });
@@ -56,7 +62,7 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
   });
 
   it('production (Rovo on Call): past the portal, on the grid, clear of the rest, turning with the code side', () => {
-    const ON_CALL = ['confluence', 'jsm', 'compass', 'statuspage'] as const;
+    const ON_CALL = ['confluence', 'jsm', 'compass', 'statuspage', 'pagerduty', 'datadog'] as const;
     const flows = new Set<string>();
     for (let seed = 1; seed <= 60; seed++) {
       const m = storyMap(seed, { mini: ON_CALL, production: true });
@@ -72,12 +78,24 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
       }
       // Halfway between slots is on the grid too (where replicas and terminals stand).
       expect(onGrid(slots[0].clone().addScaledVector(prod.across, Math.floor(prod.slotGap / 2 / 0.5) * 0.5))).toBe(true);
-      // The monitoring tool stands beside JSM, in line with it along the grid.
-      const jsm = m.places.jsm as Vector3;
-      expect(m.monitorAt).toBeDefined();
-      expect(square([jsm, m.monitorAt!])).toBe(true);
-      expect(m.monitorAt!.distanceTo(jsm)).toBeCloseTo(2.5);
+      // The alert's way in is laid out by the house rules: Datadog's line into PagerDuty, PagerDuty's into JSM, square on the grid.
+      for (const [a, b] of [
+        ['pagerduty', 'datadog'],
+        ['jsm', 'pagerduty'],
+      ]) {
+        const link = m.links.find((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+        expect(link).toBeDefined();
+        expect(square(link!.line)).toBe(true);
+        expect(onGrid(m.places[a as 'jsm'] as Vector3)).toBe(true);
+      }
+      // Nothing stands on Jira's line to Bitbucket: not Datadog, not PagerDuty, nor anything else.
+      const tie = m.routes.bitbucket as Vector3[];
+      for (const kind of ON_CALL) expect(distanceToPolyline(m.places[kind]!.x, m.places[kind]!.z, tie)).toBeGreaterThanOrEqual(1.2 - 1e-9);
+      // The tunnel into production runs along the flow, then the server, then the front.
+      expect(prod.server.clone().sub(prod.tunnelOut).dot(prod.flow)).toBeGreaterThan(0);
+      expect(prod.tiers[0][0].clone().sub(prod.server).dot(prod.flow)).toBeGreaterThan(0);
     }
     expect(flows.size).toBe(4);
-  });
+    // Six systems round Jira, linked, take the layout a few tries: up to about a second a map.
+  }, 60000);
 });

@@ -51,6 +51,8 @@ export interface RadialOptions {
   clearance?: number;
   /** Other things on the floor (other gates, home) nodes and lines keep clear of. */
   avoid?: readonly Vector3[];
+  /** Lines already on the floor that nodes keep `spacing` from (lines may cross them). */
+  keepOff?: readonly Vector3[][];
 }
 
 export interface RadialMap {
@@ -137,6 +139,7 @@ export class GatePlacer {
   private readonly spacing: number;
   private readonly clearance: number;
   private readonly avoid: readonly Vector3[];
+  private readonly keepOff: readonly Vector3[][];
 
   constructor(origin: Vector3, options: Omit<RadialOptions, 'seed'> = {}) {
     this.center = snapToGrid(origin);
@@ -144,6 +147,7 @@ export class GatePlacer {
     this.spacing = options.spacing ?? 2;
     this.clearance = options.clearance ?? 1;
     this.avoid = options.avoid ?? [];
+    this.keepOff = options.keepOff ?? [];
   }
 
   place(rays: readonly number[], extra: (spot: Vector3, route: Vector3[]) => boolean = () => true): Vector3 {
@@ -184,6 +188,7 @@ export class GatePlacer {
     if (spots.some((s) => distanceToPolyline(s.x, s.z, route) < clearance)) return false;
     if (routes.some((r) => distanceToPolyline(spot.x, spot.z, r) < clearance)) return false;
     if (!routes.every((r) => apart(route, r))) return false;
+    if (this.keepOff.some((l) => distanceToPolyline(spot.x, spot.z, l) < spacing)) return false;
     return this.avoid.every((a) => a.distanceTo(spot) >= spacing && distanceToPolyline(a.x, a.z, route) >= clearance);
   }
 

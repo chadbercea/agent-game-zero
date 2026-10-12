@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { seededRandom } from '../core/scatter';
-import type { SharedRun } from '../core/sharedRuns';
-import { distanceToPolyline } from '../primitives/branch/gridPath';
+import { type SharedRun, sharedRuns } from '../core/sharedRuns';
+import { distanceToPolyline, trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
 import { layoutSystems, TEAMWORK_LINKS } from './systemLayout';
 
@@ -41,8 +41,8 @@ export interface StoryMap {
   routes: Partial<Record<SystemKind, readonly Vector3[]>>;
   /** Where a copy reading Figma through MCP builds its terminal (if Figma is on the map). */
   mcpAt?: Vector3;
-  /** Where a monitoring tool stands, beside Jira Service Management (if JSM is on the map). */
-  monitorAt?: Vector3;
+  /** Laid-out lines between linked mini systems (systemLayout's links: Datadog to PagerDuty to JSM), node center to node center. */
+  links: MapLink[];
   /** Production, past the portal (if the story asked for it). */
   production?: ProductionPlace;
   /** Everything fixed on the map that lines and systems keep clear of. */
@@ -85,9 +85,20 @@ export interface CodeSide {
   tieSide: Vector3;
 }
 
+/** A line the layout drew between two linked systems. */
+export interface MapLink {
+  a: SystemKind;
+  b: SystemKind;
+  line: Vector3[];
+}
+
 export interface ProductionPlace {
-  /** Where things come out of the portal, on its far side. */
-  exit: Vector3;
+  /** The glass tunnel releases cross into production through: its run, and its ends (in from the belt, out toward the server). */
+  tunnel: SharedRun;
+  tunnelIn: Vector3;
+  tunnelOut: Vector3;
+  /** The production server releases are shipped to: it runs the services. */
+  server: Vector3;
   /** Service slots by tier: [the front], [APIs], [data], each tier across the flow. */
   tiers: Vector3[][];
   /** The code side's directions: downstream, and across. */
@@ -102,7 +113,7 @@ export interface ProductionPlace {
 export interface StoryMapOptions {
   /** The mini systems this story uses, laid out round Jira. */
   mini: readonly SystemKind[];
-  /** Lay out production past the portal. */
+  /** Lay out production: the tunnel past the belt, the production server, its services. */
   production?: boolean;
 }
 
@@ -115,11 +126,24 @@ const MINI_NEAR = 3.5;
 const MINI_SPREAD = 2;
 /** How far an MCP terminal stands from Figma. */
 const MCP_OUT = 2.5;
+/** How far Jira's line to the repo keeps from anything standing: a clear node's width past its edge. */
+const TIE_ROOM = 1.6;
+/** The least it may keep: clear of a node's edge. */
+const TIE_MIN = 1.2;
+/** Every line sets off from Jira: near it, lines may run together. */
+const JIRA_FAN = 2;
+/** Ways for Jira's line to the repo tried before the mini systems are laid out freely. */
+const TIE_TRIES = 1;
 
-/** Production in the code side's frame (u downstream, v across): three tiers past the portal. */
+/**
+ * Production in the code side's frame (u downstream, v across): past the
+ * belt, the glass tunnel; past that, the production server; then its
+ * services in three tiers (the front, APIs, data).
+ */
 const PRODUCTION = {
-  exitU: 13.75,
-  tierU: [16, 19, 22],
+  tunnelU: [13, 15],
+  serverU: 17,
+  tierU: [20, 23, 26],
   slotV: [-1.5, -5, -8.5],
   frontV: -5,
 } as const;
@@ -233,8 +257,17 @@ function arrange(
   let production: ProductionPlace | undefined;
   if (options.production) {
     const [front, apis, data] = PRODUCTION.tierU;
+    const tunnelIn = at(PRODUCTION.tunnelU[0], PRODUCTION.frontV);
+    const tunnelOut = at(PRODUCTION.tunnelU[1], PRODUCTION.frontV);
+    const alongX = flow.x !== 0;
+    const [s0, s1] = alongX ? [tunnelIn.x, tunnelOut.x] : [tunnelIn.z, tunnelOut.z];
+    const acrossAt = alongX ? tunnelIn.z : tunnelIn.x;
+    const server = at(PRODUCTION.serverU, PRODUCTION.frontV);
     production = {
-      exit: at(PRODUCTION.exitU, PRODUCTION.frontV),
+      tunnel: { along: alongX ? 'x' : 'z', from: Math.min(s0, s1), to: Math.max(s0, s1), low: acrossAt, high: acrossAt },
+      tunnelIn,
+      tunnelOut,
+      server,
       tiers: [[at(front, PRODUCTION.frontV)], PRODUCTION.slotV.map((v) => at(apis, v)), PRODUCTION.slotV.map((v) => at(data, v))],
       flow,
       across,
@@ -245,6 +278,7 @@ function arrange(
     const [v0, , v2] = PRODUCTION.slotV;
     const edge = production.slotGap / 2;
     for (const u of PRODUCTION.tierU) for (const v of [v0 - edge, ...PRODUCTION.slotV, v2 + edge]) codeParts.push(at(u, v));
+    codeParts.push(tunnelIn, tunnelOut, server);
     codeLines.push([code.portal, at(front, PRODUCTION.frontV)], [at(front, v0 - edge), at(data, v0 - edge)], [at(front, v2 + edge), at(data, v2 + edge)]);
   }
 
@@ -297,25 +331,54 @@ function arrange(
       const n = Math.max(1, Math.round(a.distanceTo(b) / 1.5));
       return Array.from({ length: n + 1 }, (_, k) => a.clone().lerp(b, k / n));
     });
-  const keepClear = [gate, accessCorner, userTerminal, slackAt, ...along(slackLine).slice(2), ...codeParts, ...codeLines.flatMap(along)];
+  const keepClear = [
+    gate,
+    accessCorner,
+    userTerminal,
+    slackAt,
+    ...along(slackLine).slice(2),
+    ...codeParts,
+    ...codeLines.flatMap(along),
+  ];
+
+  /** Everything standing that Jira's line to the repo keeps clear of, with `more` (the mini systems, once placed). */
+  const standingFor = (more: Vector3[]) =>
+    [gate, accessCorner, userTerminal, slackAt, slackEnd, jiraEnd, ...codeParts, ...more].filter((p) => p.distanceTo(code.scm) > 1e-6);
+  let repoTie: Vector3[] | null = null;
 
   // The mini systems round Jira, laid out last.
   const places: Partial<Record<SystemKind, Vector3>> = { github: code.scm, bitbucket: code.scm, gitlab: code.scm, codesearch: code.codesearch };
   const routes: Partial<Record<SystemKind, readonly Vector3[]>> = {};
   let mcpAt: Vector3 | undefined;
+  const links: MapLink[] = [];
   if (options.mini.length) {
+    // First they're laid out round Jira's line to the repo (routed now, with nothing else in the way), keeping clear of it;
+    // if they can't fit that way, they're laid out freely and the line is routed round them after.
+    const near = MINI_NEAR + random() * MINI_SPREAD;
+    const lay = (keepOff: Vector3[][]) => {
+      try {
+        return layoutSystems([{ gate: jira, kinds: options.mini, avoid: keepClear, near, keepOff }], TEAMWORK_LINKS, seed * 31 + 7);
+      } catch {
+        return undefined;
+      }
+    };
+    // Nodes keep off it; their own lines may cross it. A few ways for it are tried, shortest first.
     let layout;
-    try {
-      const near = MINI_NEAR + random() * MINI_SPREAD;
-      layout = layoutSystems([{ gate: jira, kinds: options.mini, avoid: keepClear, near }], TEAMWORK_LINKS, seed * 31 + 7);
-    } catch {
-      return null;
+    for (const tie of tieRoutes(jira, code.scm, code.tieSide, standingFor([]), [accessLine, slackLine]).slice(0, TIE_TRIES)) {
+      layout = lay([trimPolyline(tie, JIRA_FAN, 0)]);
+      if (layout) {
+        repoTie = tie;
+        break;
+      }
     }
+    layout ??= lay([]);
+    if (!layout) return null;
     const [mini] = layout.maps;
     options.mini.forEach((kind, i) => {
       places[kind] = mini.spots[i];
       routes[kind] = mini.routes[i];
     });
+    for (const [link, line] of layout.lines) links.push({ a: link.a, b: link.b, line });
     if (options.mini.includes('figma')) {
       const figma = places.figma as Vector3;
       const others = [...keepClear, jira, ...mini.spots];
@@ -324,16 +387,16 @@ function arrange(
       mcpAt = GRID_DIRS.map((w) => figma.clone().addScaledVector(w, MCP_OUT)).sort((a, b) => room(b) - room(a))[0];
     }
   }
-  // A monitoring tool stands beside JSM, its line straight into JSM along the grid, wherever there's most room.
-  let monitorAt: Vector3 | undefined;
-  if (places.jsm) {
-    const jsm = places.jsm;
-    const others = [...keepClear, jira, ...(Object.values(places) as Vector3[]).filter((p) => p !== jsm)];
-    const lines = Object.values(routes) as Vector3[][];
-    const room = (spot: Vector3) => Math.min(...others.map((o) => o.distanceTo(spot)), ...lines.map((l) => distanceToPolyline(spot.x, spot.z, l) * 2));
-    monitorAt = GRID_DIRS.map((w) => jsm.clone().addScaledVector(w, MCP_OUT)).sort((a, b) => room(b) - room(a))[0];
-    if (room(monitorAt) < LINE_ROOM) return null;
+
+  // Jira's Graph Line to the repo (Bitbucket), if the mini systems didn't lay out round it: routed now, clear of
+  // everything standing, so no system sits on it. If there's no clear way, the arrangement is passed over.
+  if (!repoTie) {
+    const otherLines = [accessLine, slackLine, ...(Object.values(routes) as Vector3[][])];
+    const standing = standingFor([...(Object.values(places) as Vector3[]), ...(mcpAt ? [mcpAt] : [])]);
+    repoTie = tieRoute(jira, code.scm, code.tieSide, standing, otherLines);
   }
+  if (!repoTie) return null;
+  routes.bitbucket = repoTie;
 
   const everything = [
     ...taken,
@@ -341,10 +404,50 @@ function arrange(
     rovoStart,
     ...Object.values(places),
     ...(mcpAt ? [mcpAt] : []),
-    ...(monitorAt ? [monitorAt] : []),
   ] as Vector3[];
   const { center, viewSize } = frame(everything);
-  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, monitorAt, production, keepClear, center, viewSize };
+  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, links, production, keepClear, center, viewSize };
+}
+
+/**
+ * Jira → the repo along the grid, coming into the repo from its tie side:
+ * round one corner, or a three-leg detour, whichever is shortest while
+ * well clear of `others` (TIE_ROOM, or at least TIE_MIN) and, if it can,
+ * not running alongside another of `lines` (crossing is fine); null if
+ * there's no way clear of `others`.
+ */
+function tieRoute(jira: Vector3, repo: Vector3, tieSide: Vector3, others: Vector3[], lines: Vector3[][]): Vector3[] | null {
+  return tieRoutes(jira, repo, tieSide, others, lines)[0] ?? null;
+}
+
+/** Every way for Jira's line to the repo, best first (see tieRoute). */
+function tieRoutes(jira: Vector3, repo: Vector3, tieSide: Vector3, others: Vector3[], lines: Vector3[][]): Vector3[][] {
+  const approach = repo.clone().addScaledVector(tieSide, 2);
+  const options: Vector3[][] = [
+    [jira.clone(), new Vector3(approach.x, 0, jira.z), approach, repo.clone()],
+    [jira.clone(), new Vector3(jira.x, 0, approach.z), approach, repo.clone()],
+  ];
+  for (let k = -6; k <= 6; k += 0.5) {
+    const midX = Math.round((jira.x + approach.x) / 2 + k);
+    const midZ = Math.round((jira.z + approach.z) / 2 + k);
+    options.push([jira.clone(), new Vector3(midX, 0, jira.z), new Vector3(midX, 0, approach.z), approach, repo.clone()]);
+    options.push([jira.clone(), new Vector3(jira.x, 0, midZ), new Vector3(approach.x, 0, midZ), approach, repo.clone()]);
+  }
+  const all = options.map((l) => l.filter((p, i) => i === 0 || p.distanceTo(l[i - 1]) > 1e-6));
+  // Its last leg comes straight in from the tie side (never doubling back over the repo).
+  const fair = all.filter((l) => {
+    const before = l[l.length - 3];
+    return !before || before.clone().sub(approach).dot(tieSide) >= -1e-6;
+  });
+  const clear = (line: Vector3[]) => Math.min(Infinity, ...others.map((p) => distanceToPolyline(p.x, p.z, line)));
+  const length = (line: Vector3[]) => line.reduce((sum, p, i) => sum + (i ? p.distanceTo(line[i - 1]) : 0), 0);
+  const away = (line: Vector3[]) => (line[0].distanceTo(jira) < 1e-6 ? trimPolyline(line, JIRA_FAN, 0) : line);
+  const alongside = (line: Vector3[]) => lines.some((other) => sharedRuns([away(line), away(other)]).length > 0);
+  // Best: roomy and on its own; then roomy; then at least clear of every node.
+  const roomy = fair.filter((l) => clear(l) >= TIE_ROOM);
+  const tiers = [roomy.filter((l) => !alongside(l)), roomy, fair.filter((l) => clear(l) >= TIE_MIN)];
+  const pick = tiers.find((t) => t.length);
+  return pick ? pick.sort((a, b) => length(a) - length(b)) : [];
 }
 
 /**

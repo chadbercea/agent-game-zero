@@ -209,7 +209,7 @@ export class RovoAtlassian {
     this.places = map.places;
     this.mcpAt = map.mcpAt;
     const tie = map.code.tieSide;
-    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: tie, bitbucket: tie, gitlab: tie }, map.routes, { codesearch: 'bitbucket', ...options.via });
+    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: tie, bitbucket: tie, gitlab: tie }, map.routes, { codesearch: 'bitbucket', ...options.via }, viaRoutes(map, options.via ?? {}));
     let clock = 0;
     stage.onTick((dt) => {
       clock += dt;
@@ -724,6 +724,18 @@ export class RovoAtlassian {
   protected between([lo, hi]: [number, number]): number {
     return lo + this.random() * (hi - lo);
   }
+}
+
+/** Each linked system's laid-out line into the system it hangs off, oriented from it. */
+function viaRoutes(map: StoryMap, via: Partial<Record<SystemKind, SystemKind>>): Partial<Record<SystemKind, Vector3[]>> {
+  const out: Partial<Record<SystemKind, Vector3[]>> = {};
+  for (const [kind, parent] of Object.entries(via) as [SystemKind, SystemKind][]) {
+    const link = map.links.find((l) => (l.a === kind && l.b === parent) || (l.a === parent && l.b === kind));
+    const at = map.places[kind];
+    if (!link || !at) continue;
+    out[kind] = link.line[0].distanceTo(at) < 1e-6 ? link.line : [...link.line].reverse();
+  }
+  return out;
 }
 
 function easeOutBack(t: number): number {

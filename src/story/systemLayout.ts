@@ -36,6 +36,8 @@ export const TEAMWORK_LINKS: readonly TeamworkLink[] = [
   { a: 'github', b: 'codesearch', why: 'GitHub repositories indexed alongside Bitbucket', connector: true },
   { a: 'jira', b: 'figma', why: 'Designs attached to issues', connector: true },
   { a: 'confluence', b: 'notion', why: 'Docs feed one knowledge layer', connector: true },
+  { a: 'jsm', b: 'pagerduty', why: 'Pages open and resolve incidents in JSM', connector: true },
+  { a: 'pagerduty', b: 'datadog', why: 'Monitoring alerts become pages', connector: true },
 ];
 
 /** One gate's system: where its gate is, which systems sit behind it, and what its nodes keep clear of. */
@@ -45,6 +47,8 @@ export interface GateSystemPlan {
   avoid?: readonly Vector3[];
   /** Closest a node may sit to the center (default: clears a gate's pad). Bigger for a hub on a plate. */
   near?: number;
+  /** Lines already on the floor no node may stand near (its own lines may cross them). */
+  keepOff?: readonly Vector3[][];
 }
 
 export interface SystemsLayout {
@@ -160,7 +164,7 @@ function layoutOnce(
   gateway?: SharedRun,
 ): SystemsLayout {
   const random = seededRandom(seed);
-  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid, near: plan.near }));
+  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid, near: plan.near, keepOff: plan.keepOff }));
   const gates = placers.map((p) => p.center);
   const home = new Map<SystemKind, number>();
   plans.forEach((plan, g) => plan.kinds.forEach((kind) => home.set(kind, g)));
