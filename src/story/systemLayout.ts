@@ -36,8 +36,6 @@ export const TEAMWORK_LINKS: readonly TeamworkLink[] = [
   { a: 'github', b: 'codesearch', why: 'GitHub repositories indexed alongside Bitbucket', connector: true },
   { a: 'jira', b: 'figma', why: 'Designs attached to issues', connector: true },
   { a: 'confluence', b: 'notion', why: 'Docs feed one knowledge layer', connector: true },
-  { a: 'jsm', b: 'pagerduty', why: 'Pages open and resolve incidents in JSM', connector: true },
-  { a: 'pagerduty', b: 'datadog', why: 'Monitoring alerts become pages', connector: true },
 ];
 
 /** One gate's system: where its gate is, which systems sit behind it, and what its nodes keep clear of. */

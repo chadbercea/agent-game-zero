@@ -45,6 +45,8 @@ export interface StoryMap {
   links: MapLink[];
   /** Production, past the portal (if the story asked for it). */
   production?: ProductionPlace;
+  /** PagerDuty's way to people (if PagerDuty is on the map): the on-call person's phone, and its lines to it and to Slack. */
+  paging?: PagingPlace;
   /** Everything fixed on the map that lines and systems keep clear of. */
   keepClear: Vector3[];
   /** What the camera frames: the map's middle, and how tall a view it needs. */
@@ -92,6 +94,14 @@ export interface MapLink {
   line: Vector3[];
 }
 
+export interface PagingPlace {
+  /** The on-call person's phone, registered with PagerDuty: straight off it along the grid. */
+  phone: Vector3;
+  /** PagerDuty → the phone, and PagerDuty → Slack, along the grid, node center to node center. */
+  toPhone: Vector3[];
+  toSlack: Vector3[];
+}
+
 export interface ProductionPlace {
   /** The glass tunnel releases cross into production through: its run, and its ends (in from the assembler, out toward the server). */
   tunnel: SharedRun;
@@ -113,6 +123,8 @@ export interface ProductionPlace {
 export interface StoryMapOptions {
   /** The mini systems this story uses, laid out round Jira. */
   mini: readonly SystemKind[];
+  /** Lay out PagerDuty, Datadog beside it and the on-call person's phone, with PagerDuty's lines to Jira and Slack. */
+  paging?: boolean;
   /** Lay out production: the tunnel past the assembler, the production server, its services. */
   production?: boolean;
 }
@@ -134,6 +146,8 @@ const TIE_MIN = 1.2;
 const JIRA_FAN = 2;
 /** Ways for Jira's line to the repo tried before the mini systems are laid out freely. */
 const TIE_TRIES = 1;
+/** How far Datadog and the on-call person's phone stand off PagerDuty. */
+const PHONE_OUT = 2.5;
 
 /**
  * Production in the code side's frame (u downstream, v across): past the
@@ -398,15 +412,32 @@ function arrange(
   if (!repoTie) return null;
   routes.bitbucket = repoTie;
 
+  // PagerDuty alerts people where they are: in Jira, in Slack, and on the on-call person's phone. It's placed
+  // where its lines to Jira and to Slack are shortest while clear of everything, with Datadog (whose alerts it
+  // takes) and the phone each standing straight off it along the grid.
+  let paging: PagingPlace | undefined;
+  if (options.paging) {
+    const lines = [accessLine, slackLine, ...(Object.values(routes) as Vector3[][])];
+    const standing = standingFor([...(Object.values(places) as Vector3[]), ...(mcpAt ? [mcpAt] : [])]);
+    const found = placePaging(jira, slackAt, standing, lines, TIE_ROOM) ?? placePaging(jira, slackAt, standing, lines, TIE_MIN);
+    if (!found) return null;
+    places.pagerduty = found.pager;
+    places.datadog = found.datadog;
+    routes.pagerduty = found.toJira;
+    links.push({ a: 'datadog', b: 'pagerduty', line: [found.datadog, found.pager] });
+    paging = { phone: found.phone, toPhone: [found.pager, found.phone], toSlack: found.toSlack };
+  }
+
   const everything = [
     ...taken,
     userTerminal,
     rovoStart,
     ...Object.values(places),
     ...(mcpAt ? [mcpAt] : []),
+    ...(paging ? [paging.phone, ...paging.toSlack, ...(routes.pagerduty ?? [])] : []),
   ] as Vector3[];
   const { center, viewSize } = frame(everything);
-  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, links, production, keepClear, center, viewSize };
+  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, links, production, paging, keepClear, center, viewSize };
 }
 
 /**
@@ -448,6 +479,89 @@ function tieRoutes(jira: Vector3, repo: Vector3, tieSide: Vector3, others: Vecto
   const tiers = [roomy.filter((l) => !alongside(l)), roomy, fair.filter((l) => clear(l) >= TIE_MIN)];
   const pick = tiers.find((t) => t.length);
   return pick ? pick.sort((a, b) => length(a) - length(b)) : [];
+}
+
+/**
+ * Where PagerDuty stands: the spot (on the grid, 3.5–9 from Jira) whose lines
+ * to Jira and to Slack are shortest while keeping `room` from everything
+ * standing and never running alongside another line, with two free sides
+ * where Datadog and the phone stand, PHONE_OUT straight off it. Null if none.
+ */
+function placePaging(
+  jira: Vector3,
+  slack: Vector3,
+  standing: Vector3[],
+  lines: Vector3[][],
+  room: number,
+): { pager: Vector3; datadog: Vector3; phone: Vector3; toJira: Vector3[]; toSlack: Vector3[] } | null {
+  const spots: Vector3[] = [];
+  for (let x = -9; x <= 9; x += 0.5) {
+    for (let z = -9; z <= 9; z += 0.5) {
+      const spot = new Vector3(x + jira.x, 0, z + jira.z);
+      const r = spot.distanceTo(jira);
+      if (r < MINI_NEAR || r > 9) continue;
+      if (standing.some((p) => p.distanceTo(spot) < ROOM)) continue;
+      if (lines.some((l) => distanceToPolyline(spot.x, spot.z, l) < LINE_ROOM)) continue;
+      spots.push(spot);
+    }
+  }
+  // Shortest lines first: grid distance to Jira and to Slack.
+  const grid = (a: Vector3, b: Vector3) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+  spots.sort((a, b) => grid(a, jira) + grid(a, slack) - (grid(b, jira) + grid(b, slack)));
+  const clearOf = (line: Vector3[], others: Vector3[]) =>
+    Math.min(Infinity, ...others.filter((p) => p.distanceTo(line[0]) > 1e-6 && p.distanceTo(line[line.length - 1]) > 1e-6).map((p) => distanceToPolyline(p.x, p.z, line)));
+  const middle = (line: Vector3[]) => trimPolyline(line, 1, 1);
+  const alone = (line: Vector3[], others: Vector3[][]) => others.every((o) => sharedRuns([middle(line), o]).length === 0);
+  for (const pager of spots.slice(0, 120)) {
+    const toJira = gridWays(jira, pager, standing, lines).find((l) => clearOf(l, standing) >= room && alone(l, lines));
+    if (!toJira) continue;
+    const toSlack = gridWays(pager, slack, standing, [...lines, toJira]).find((l) => clearOf(l, standing) >= room && alone(l, [...lines, toJira]));
+    if (!toSlack) continue;
+    // The sides its own lines leave by are taken; Datadog and the phone stand straight off two of the others.
+    const leaving = [toJira[toJira.length - 2], toSlack[1]].map((p) => p.clone().sub(pager).normalize());
+    const mine = [toJira, toSlack];
+    const sides = GRID_DIRS.filter((d) => leaving.every((l) => l.dot(d) < 0.99))
+      .map((d) => pager.clone().addScaledVector(d, PHONE_OUT))
+      .filter(
+        (p) =>
+          standing.every((q) => q.distanceTo(p) >= ROOM) &&
+          [...lines, ...mine].every((l) => distanceToPolyline(p.x, p.z, l) >= LINE_ROOM) &&
+          clearOf([pager, p], standing) >= room,
+      );
+    if (sides.length < 2) continue;
+    return { pager, datadog: sides[0], phone: sides[1], toJira, toSlack };
+  }
+  return null;
+}
+
+/**
+ * Between two things along the grid: round one corner, or a three-leg detour,
+ * best first: well clear of `others` (TIE_ROOM, or at least TIE_MIN) and, if
+ * it can, not running alongside one of `lines`; failing that, the clearest.
+ */
+export function gridWays(from: Vector3, to: Vector3, others: Vector3[], lines: Vector3[][]): Vector3[][] {
+  const options: Vector3[][] = [
+    [from.clone(), new Vector3(to.x, 0, from.z), to.clone()],
+    [from.clone(), new Vector3(from.x, 0, to.z), to.clone()],
+  ];
+  for (let k = -6; k <= 6; k += 0.5) {
+    const midX = Math.round((from.x + to.x) / 2 + k);
+    const midZ = Math.round((from.z + to.z) / 2 + k);
+    options.push([from.clone(), new Vector3(midX, 0, from.z), new Vector3(midX, 0, to.z), to.clone()]);
+    options.push([from.clone(), new Vector3(from.x, 0, midZ), new Vector3(to.x, 0, midZ), to.clone()]);
+  }
+  const all = options.map((l) => l.filter((p, i) => i === 0 || p.distanceTo(l[i - 1]) > 1e-6));
+  const near = others.filter((p) => p.distanceTo(from) > 1e-6 && p.distanceTo(to) > 1e-6);
+  const clear = (line: Vector3[]) => Math.min(Infinity, ...near.map((p) => distanceToPolyline(p.x, p.z, line)));
+  const length = (line: Vector3[]) => line.reduce((sum, p, i) => sum + (i ? p.distanceTo(line[i - 1]) : 0), 0);
+  // Its own ends may meet other lines (they set off from the same things); in between it keeps to itself.
+  const middle = (line: Vector3[]) => trimPolyline(line, 1, 1);
+  const alongside = (line: Vector3[]) => lines.some((other) => sharedRuns([middle(line), other]).length > 0);
+  const roomy = all.filter((l) => clear(l) >= TIE_ROOM);
+  const tiers = [roomy.filter((l) => !alongside(l)), roomy, all.filter((l) => clear(l) >= TIE_MIN)];
+  const pick = tiers.find((t) => t.length);
+  // Failing all of that, the clearest way there is.
+  return pick ? pick.sort((a, b) => length(a) - length(b)) : all.sort((a, b) => clear(b) - clear(a));
 }
 
 /**

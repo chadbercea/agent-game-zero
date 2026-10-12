@@ -81,9 +81,13 @@ describe('Rovo on Call', () => {
       if (fix === 'scale-out') expect(seen.mostReplicas).toBeGreaterThanOrEqual(Math.min(2, incident.replicas));
       expect(production.replicas).toHaveLength(fix === 'failover' ? 1 : 0);
       expect(Boolean(production.flag)).toBe(fix === 'flag-off');
-      // Comms: Slack ran all along; the human was paged when the severity called for it.
+      // PagerDuty alerted people where they are: Slack and the phone, at the page and again at resolve; the person acked on the phone.
+      expect(scene.pages).toBe(4);
+      expect(scene.acks).toBe(1);
+      expect(scene.phone.visible).toBe(true);
+      // Comms: Slack ran all along.
       expect(scene.commsMessages).toBeGreaterThanOrEqual(4);
-      expect(scene.userReports).toBe(incident.paged ? 1 : 0);
+      expect(scene.userReports).toBe(0);
       // The postmortem stayed in Confluence; the incident card went to Done; follow-ups wait in To do.
       expect(scene.systems.placed.get('confluence')?.writeBacks.length).toBeGreaterThanOrEqual(1);
       expect(scene.hub.board).toHaveLength(incident.followUps);

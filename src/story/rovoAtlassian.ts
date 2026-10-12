@@ -38,6 +38,8 @@ export interface RovoStoryOptions {
   mini?: readonly SystemKind[];
   /** Lay out production past the portal (storyMap). */
   production?: boolean;
+  /** Lay out PagerDuty, Datadog and the on-call person's phone (storyMap). */
+  paging?: boolean;
   /** Systems that hang off another system rather than Jira, beyond Code search off Bitbucket. */
   via?: Partial<Record<SystemKind, SystemKind>>;
 }
@@ -174,7 +176,7 @@ export class RovoAtlassian {
     options: RovoStoryOptions = {},
   ) {
     this.random = seededRandom(seed);
-    const map = (this.map = storyMap(seed, { mini: options.mini ?? MINI_SYSTEMS, production: options.production }));
+    const map = (this.map = storyMap(seed, { mini: options.mini ?? MINI_SYSTEMS, production: options.production, paging: options.paging }));
     this.codeCrew = 1 + Math.floor(this.random() * 3);
     this.loopCrew = 1 + Math.floor(this.random() * Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew));
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.

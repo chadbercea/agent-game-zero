@@ -9,13 +9,19 @@ import { type Copy, RovoAtlassian, SUB_SPEED } from './rovoAtlassian';
 import { buildOutput } from './rovoCode';
 import type { Step, Task } from './rovoTasks';
 import type { OutputLine } from './shipOutput';
-import { fly, until, wait } from './timeline';
+import { fly, tween, until, wait } from './timeline';
+import { shoot } from './beam';
+import { Branch } from '../primitives/branch/Branch';
+import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { Phone } from '../primitives/phone/Phone';
+import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
+import { NEUTRAL } from '../core/palette';
 
 /** The story's beats, in order. */
 export const ON_CALL_BEATS = ['arriving', 'detect', 'declare', 'triage', 'mitigate', 'verify', 'resolve', 'learn', 'follow-up', 'done'] as const;
 export type OnCallBeat = (typeof ON_CALL_BEATS)[number];
 /** The systems round Jira this story calls on: the runbook's Confluence, and the incident apps. */
-export const ON_CALL_MINI = ['confluence', 'jsm', 'compass', 'statuspage', 'pagerduty', 'datadog'] as const;
+export const ON_CALL_MINI = ['confluence', 'jsm', 'compass', 'statuspage'] as const;
 
 /** Seconds between incident updates in Slack, by severity: often at SEV1, rarely at SEV3. */
 const COMMS_BEAT: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 4, 3: 7 };
@@ -103,15 +109,33 @@ export class RovoOnCall extends RovoAtlassian {
   commsMessages = 0;
   /** The incident card, while Rovo holds it. */
   incidentCard?: Ticket;
+  /** The on-call person's phone, registered with PagerDuty, and PagerDuty's lines to it and to Slack. */
+  readonly phone = new Phone();
+  readonly toPhone: Branch;
+  readonly toSlack: Branch;
+  /** Alerts PagerDuty sent to people (Slack, the phone), and acks back from the phone. */
+  pages = 0;
+  acks = 0;
   private readonly comms: CommsJob[] = [];
   private commsOpen = false;
   private statusUp = false;
 
   constructor(stage: SceneHost, seed = 5) {
-    // The alert's way in, laid out by the house rules: Datadog's line into PagerDuty, PagerDuty's into JSM.
-    super(stage, seed, { mini: ON_CALL_MINI, production: true, via: { pagerduty: 'jsm', datadog: 'pagerduty' } });
+    // The alert's way in, laid out by the house rules: Datadog's line into PagerDuty; PagerDuty's own line into Jira.
+    super(stage, seed, { mini: ON_CALL_MINI, production: true, paging: true, via: { datadog: 'pagerduty' } });
     this.incident = rollIncident(seed);
     this.production = new Production(stage, this.map.production!, this.incident);
+    const paging = this.map.paging!;
+    const line = (points: Vector3[], endClear: number) =>
+      new Branch(roundedPath(trimPolyline(points.map((p) => p.clone()), NODE_FOOTPRINT / 2 + 0.1, endClear), BEND_RADIUS), NEUTRAL.packet);
+    this.toPhone = line(paging.toPhone, 0.35);
+    this.toSlack = line(paging.toSlack, NODE_FOOTPRINT / 2 + 0.1);
+    for (const l of [this.toPhone, this.toSlack]) l.drawn = 0;
+    this.phone.position.copy(paging.phone);
+    this.phone.scale.setScalar(0.001);
+    this.phone.visible = false;
+    stage.add(this.toPhone, this.toSlack, this.phone);
+    stage.onTick((dt) => this.phone.update(dt));
     // One release per fix: a single deploy fills the assembler.
     this.deployCubes = 8;
     this.flakyCI = this.incident.flakyCI;
@@ -139,16 +163,29 @@ export class RovoOnCall extends RovoAtlassian {
       production.health(i, 'waiting');
     }
     await wait(stage, 0.8);
-    // The page: JSM comes up off Jira, PagerDuty plugs into JSM, Datadog into PagerDuty. The alert rides
-    // Datadog → PagerDuty → JSM → Jira, and a red card lands on the board.
+    // The page. JSM comes up off Jira. PagerDuty comes up and plugs into Jira; Datadog plugs into PagerDuty.
+    // PagerDuty reaches out to where people are: its line draws to Slack (which comes up at its end) and to
+    // the on-call person's phone (which stands up at its end).
     const jsm = await this.systems.establish('jsm');
     const pagerduty = await this.systems.call('pagerduty');
     const datadog = await this.systems.call('datadog');
+    await this.connectPaging();
+    // The alert: Datadog → PagerDuty, and PagerDuty alerts everyone at once: Jira (a red card lands on the
+    // board), Slack, and the phone, which buzzes until the person acks; the ack rides back to PagerDuty.
     for (const up of [datadog, pagerduty]) up.node.light = 'working';
-    await this.systems.report('datadog');
-    for (const up of [datadog, pagerduty]) up.node.light = 'off';
+    await shoot(stage, datadog.link!.edge.path, 5);
     await hub.showBoard();
-    await hub.addTask(true);
+    await Promise.all([
+      hub.report(pagerduty.tie).then(() => hub.addTask(true)),
+      this.page('slack'),
+      this.page('phone'),
+    ]);
+    datadog.node.light = 'off';
+    await wait(stage, 1.2);
+    this.phone.ack();
+    await shoot(stage, reversed(this.toPhone.curve), 6);
+    this.acks++;
+    pagerduty.node.light = 'off';
 
     // Declare: Rovo moves to JSM and takes the incident.
     this.beat = 'declare';
@@ -199,9 +236,16 @@ export class RovoOnCall extends RovoAtlassian {
     }
     this.say('slack');
     if (this.statusUp) this.say('final-status');
-    // The alert's done: Datadog goes, then PagerDuty (each line draws back, then the node folds).
+    // PagerDuty tells Slack and the phone it's resolved; then Datadog goes, PagerDuty's lines to Slack and the
+    // phone draw back, and PagerDuty goes (each line draws back, then the node folds). The phone is the person's: it stays.
     void (async () => {
+      await Promise.all([this.page('slack'), this.page('phone')]);
+      this.phone.rest();
       await this.systems.release('datadog');
+      await tween(stage, 0.5, (t) => {
+        this.toSlack.drawn = Math.max(0.001, 1 - t);
+        this.toPhone.drawn = Math.max(0.001, 1 - t);
+      });
       await this.systems.release('pagerduty');
     })();
     atJsm.detach();
@@ -232,6 +276,29 @@ export class RovoOnCall extends RovoAtlassian {
     this.jira.light = 'off';
     this.beat = 'done';
     this.finished = true;
+  }
+
+  /** PagerDuty's lines out to people draw in: to Slack, which comes up at its end, and to the phone, which stands up at its end. */
+  private async connectPaging(): Promise<void> {
+    const { stage } = this;
+    await tween(stage, 0.7, (t) => (this.toSlack.drawn = t));
+    await this.slack.bringUp();
+    await tween(stage, 0.5, (t) => (this.toPhone.drawn = t));
+    this.phone.visible = true;
+    await tween(stage, 0.4, (t) => this.phone.scale.setScalar(Math.max(0.001, t)));
+  }
+
+  /** PagerDuty sends to Slack (a message) or to the phone (it buzzes). */
+  private async page(to: 'slack' | 'phone'): Promise<void> {
+    if (to === 'slack') {
+      await shoot(this.stage, this.toSlack.curve, 6, undefined, 'pagerduty');
+      this.slack.gateway.grant();
+      this.pages++;
+      return;
+    }
+    await shoot(this.stage, this.toPhone.curve, 6, undefined, 'pagerduty');
+    if (!this.phone.acked) this.phone.page();
+    this.pages++;
   }
 
   /**
@@ -464,21 +531,6 @@ export class RovoOnCall extends RovoAtlassian {
     // The incident channel opens.
     await atSlack();
     await send();
-    if (incident.paged) {
-      // The human on call is paged: through PagerDuty, to the user's terminal, where they ack.
-      leaveSlack();
-      await this.visit(copy, { system: 'pagerduty', action: 'send' });
-      await this.goTo(copy, this.map.userTerminal);
-      const terminal = await this.userTerminal();
-      this.working.set(drone, terminal);
-      terminal.state = 'tail';
-      await wait(stage, this.between(WORK));
-      terminal.pass();
-      await wait(stage, 0.5);
-      terminal.state = 'admin';
-      this.userReports++;
-      await atSlack();
-    }
     if (incident.sev <= 2) await post(false);
 
     let since = 0;

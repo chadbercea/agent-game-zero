@@ -43,8 +43,6 @@ describe('rollIncident: the seed decides the incident', () => {
       if (inc.cause === 'deploy') expect(['rollback', 'hotfix']).toContain(inc.mitigation);
       if (inc.mitigation === 'scale-out') expect(inc.replicas).toBeGreaterThanOrEqual(1);
       if (inc.flakyCI) expect(inc.mitigation).toBe('hotfix');
-      if (inc.sev === 1) expect(inc.paged).toBe(true);
-      if (inc.sev === 3) expect(inc.paged).toBe(false);
       expect(inc.followUps).toBeGreaterThanOrEqual(1);
       expect(inc.followUps).toBeLessThanOrEqual(Math.min(4, 5 - inc.sev));
       // Blast radius: exactly the services that call the culprit, directly or not.

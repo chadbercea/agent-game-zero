@@ -11,7 +11,7 @@ import type { ServiceKind } from '../primitives/node/emblems';
  * | Production | a web front; 2–3 APIs behind it; 2–3 data stores behind those (5–7 services) |
  * | What broke | bad deploy 40% · dependency down 25% · traffic spike 20% · bad config 15% |
  * | Mitigation | bad deploy: rollback 70% or hotfix 30% · dependency: failover · spike: scale out 1–3 replicas · config: flag off |
- * | Severity | SEV3 45% · SEV2 35% · SEV1 20% (crew 1–3 triage copies; Statuspage at SEV1–2; the human paged at SEV1, half of SEV2) |
+ * | Severity | SEV3 45% · SEV2 35% · SEV1 20% (crew 1–3 triage copies; Statuspage at SEV1–2). PagerDuty pages the on-call person every time. |
  * | Blast radius | everything that depends on the failing service, along the lines |
  * | Detours | wrong first lead 30% · flaky CI on a hotfix 20% |
  * | Follow-ups | 1–4 cards left in To do, more at higher severity |
@@ -30,8 +30,6 @@ export interface Incident {
   /** The triage copies' leads, one per copy (1–3); `find` is the one that finds it. */
   leads: Lead[];
   find: Lead;
-  /** A human is paged on the user's terminal. */
-  paged: boolean;
   /** The copy that finds it first reads a runbook that doesn't apply, then turns to Code search. */
   wrongLead: boolean;
   /** CI tails red once on the hotfix, then passes on the retry. */
@@ -154,9 +152,8 @@ export function rollIncident(seed: number): Incident {
   // Crew by severity: one copy at SEV3, up to three at SEV1. The lead that finds it is always among them.
   const find = FINDS[cause];
   const leads = [find, ...shuffled(LEADS.filter((l) => l !== find))].slice(0, 4 - sev);
-  const paged = sev === 1 || (sev === 2 && random() < 0.5);
   const wrongLead = random() < 0.3;
   const flakyCI = random() < 0.2 && mitigation === 'hotfix';
   const followUps = Math.min(4, 1 + Math.floor(random() * (5 - sev)));
-  return { services, cause, culprit, degraded, mitigation, replicas, sev, leads: shuffled(leads), find, paged, wrongLead, flakyCI, followUps };
+  return { services, cause, culprit, degraded, mitigation, replicas, sev, leads: shuffled(leads), find, wrongLead, flakyCI, followUps };
 }
