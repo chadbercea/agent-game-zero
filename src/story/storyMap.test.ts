@@ -63,9 +63,10 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
 
   it('production (Rovo on Call): past the portal, on the grid, clear of the rest, turning with the code side', () => {
     const ON_CALL = ['confluence', 'jsm', 'compass', 'statuspage', 'pagerduty', 'datadog'] as const;
+    const MINI = ['confluence', 'jsm', 'compass', 'statuspage'] as const;
     const flows = new Set<string>();
     for (let seed = 1; seed <= 60; seed++) {
-      const m = storyMap(seed, { mini: ON_CALL, production: true });
+      const m = storyMap(seed, { mini: MINI, production: true, paging: true });
       const prod = m.production!;
       flows.add(`${prod.flow.x},${prod.flow.z}`);
       const slots = prod.tiers.flat();
@@ -78,16 +79,18 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
       }
       // Halfway between slots is on the grid too (where replicas and terminals stand).
       expect(onGrid(slots[0].clone().addScaledVector(prod.across, Math.floor(prod.slotGap / 2 / 0.5) * 0.5))).toBe(true);
-      // The alert's way in is laid out by the house rules: Datadog's line into PagerDuty, PagerDuty's into JSM, square on the grid.
-      for (const [a, b] of [
-        ['pagerduty', 'datadog'],
-        ['jsm', 'pagerduty'],
-      ]) {
-        const link = m.links.find((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a));
-        expect(link).toBeDefined();
-        expect(square(link!.line)).toBe(true);
-        expect(onGrid(m.places[a as 'jsm'] as Vector3)).toBe(true);
+      // PagerDuty's lines: to Jira, to Slack, to the phone; Datadog's into PagerDuty. Square on the grid, and nothing stands on them.
+      const paging = m.paging!;
+      const pd = m.places.pagerduty!;
+      const lines = [m.routes.pagerduty as Vector3[], paging.toSlack, paging.toPhone, m.links.find((l) => l.a === 'datadog')!.line];
+      const standing = [m.gate, m.jira, m.userTerminal, m.slack.at, paging.phone, ...(Object.values(m.places) as Vector3[])];
+      for (const line of lines) {
+        expect(square(line)).toBe(true);
+        const [a, b] = [line[0], line[line.length - 1]];
+        for (const p of standing) if (p.distanceTo(a) > 1e-6 && p.distanceTo(b) > 1e-6 && p.distanceTo(m.code.scm) > 1e-6) expect(distanceToPolyline(p.x, p.z, line)).toBeGreaterThanOrEqual(1.2 - 1e-9);
       }
+      expect(onGrid(pd)).toBe(true);
+      expect(paging.toSlack[paging.toSlack.length - 1].distanceTo(m.slack.at)).toBeLessThan(1e-6);
       // Nothing stands on Jira's line to Bitbucket: not Datadog, not PagerDuty, nor anything else.
       const tie = m.routes.bitbucket as Vector3[];
       for (const kind of ON_CALL) expect(distanceToPolyline(m.places[kind]!.x, m.places[kind]!.z, tie)).toBeGreaterThanOrEqual(1.2 - 1e-9);

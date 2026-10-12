@@ -24,7 +24,7 @@ The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`s
 - **Bitbucket is the repo:** all the code activity is around it.
 - **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through a connector and **despawn when their Jira issue is done**. Work written to a tool stays there (write-back).
 - **Incident apps** (Rovo on Call): **Jira Service Management** (JSM, the service desk) and **Compass** (the service catalog, which shows the blast radius) are on the Teamwork Graph and stay once up. **Statuspage** comes up on call (Atlassian, so no connector) for SEV1–2 and folds when the incident is resolved.
-- **The alert's way in** (Rovo on Call): **Datadog** (monitoring) and **PagerDuty** (paging) are third-party. They come up when the alert fires, Datadog's line into PagerDuty and PagerDuty's into JSM, laid out by the house rules like every system round Jira. The alert rides Datadog → PagerDuty → JSM → Jira. The human is paged through PagerDuty. Both go when the incident is resolved.
+- **PagerDuty alerts people** (Rovo on Call). It's third-party, laid out where its lines are shortest and clear: its own line to **Jira**, a line to **Slack**, and a line to the on-call person's **phone** (their registered device), with **Datadog** straight off it. The alert rides Datadog → PagerDuty, then PagerDuty alerts everyone at once: Jira (the red card), Slack, and the phone, which buzzes until the person acks; the ack rides back. Every incident pages. At resolve PagerDuty tells Slack and the phone; then Datadog and PagerDuty go. The phone stays (it's the person's).
 - **Jira's line to Bitbucket** is laid out with the map, and no system stands on or right beside it.
 - **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway. It catches comms and sends comms.
 - **The user's terminal** is where copies report back to the human.
@@ -56,6 +56,7 @@ What things mean on screen. Use these; don't add meanings.
 | Replica beside a service | More of that service: a failover standby, or extra capacity for a spike. |
 | Flag on a service | A feature flag: raised is on, lowered is off. |
 | Red flash on a terminal | CI failed; it's retried. |
+| Phone buzzing, red screen | The on-call person is paged; green when they ack. |
 | Tall housing with gear windows | A permanent (Teamwork Graph) system. Gears turn while it works. |
 | Small plug on a node | A third-party connector into the Teamwork Graph. |
 | Glass gateway with a lock | A secure crossing (Slack). |
