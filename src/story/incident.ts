@@ -1,5 +1,5 @@
 import { seededRandom } from '../core/scatter';
-import type { MonitorKind, ServiceKind } from '../primitives/node/emblems';
+import type { ServiceKind } from '../primitives/node/emblems';
 
 /**
  * What the seed decides in Rovo on Call (docs/rovo-mental-model.md): the
@@ -13,7 +13,6 @@ import type { MonitorKind, ServiceKind } from '../primitives/node/emblems';
  * | Mitigation | bad deploy: rollback 70% or hotfix 30% · dependency: failover · spike: scale out 1–3 replicas · config: flag off |
  * | Severity | SEV3 45% · SEV2 35% · SEV1 20% (crew 1–3 triage copies; Statuspage at SEV1–2; the human paged at SEV1, half of SEV2) |
  * | Blast radius | everything that depends on the failing service, along the lines |
- * | Alert from | Datadog 45% · Grafana 30% · JSM itself 25% |
  * | Detours | wrong first lead 30% · flaky CI on a hotfix 20% |
  * | Follow-ups | 1–4 cards left in To do, more at higher severity |
  */
@@ -33,8 +32,6 @@ export interface Incident {
   find: Lead;
   /** A human is paged on the user's terminal. */
   paged: boolean;
-  /** Where the alert comes from: a monitoring tool, or JSM itself. */
-  source: MonitorKind | 'jsm';
   /** The copy that finds it first reads a runbook that doesn't apply, then turns to Code search. */
   wrongLead: boolean;
   /** CI tails red once on the hotfix, then passes on the retry. */
@@ -158,13 +155,8 @@ export function rollIncident(seed: number): Incident {
   const find = FINDS[cause];
   const leads = [find, ...shuffled(LEADS.filter((l) => l !== find))].slice(0, 4 - sev);
   const paged = sev === 1 || (sev === 2 && random() < 0.5);
-  const source = weighted<MonitorKind | 'jsm'>([
-    ['datadog', 45],
-    ['grafana', 30],
-    ['jsm', 25],
-  ]);
   const wrongLead = random() < 0.3;
   const flakyCI = random() < 0.2 && mitigation === 'hotfix';
   const followUps = Math.min(4, 1 + Math.floor(random() * (5 - sev)));
-  return { services, cause, culprit, degraded, mitigation, replicas, sev, leads: shuffled(leads), find, paged, source, wrongLead, flakyCI, followUps };
+  return { services, cause, culprit, degraded, mitigation, replicas, sev, leads: shuffled(leads), find, paged, wrongLead, flakyCI, followUps };
 }

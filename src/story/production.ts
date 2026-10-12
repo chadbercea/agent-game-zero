@@ -7,12 +7,12 @@ import { Branch } from '../primitives/branch/Branch';
 import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { Flag } from '../primitives/flag/Flag';
 import { SystemNode } from '../primitives/node/SystemNode';
-import { Portal } from '../primitives/portal/Portal';
+import { Gateway } from '../primitives/gateway/Gateway';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import type { Incident } from './incident';
-import type { CodeSide, ProductionPlace } from './storyMap';
+import type { ProductionPlace } from './storyMap';
 import { tween, wait } from './timeline';
 
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
@@ -42,42 +42,53 @@ export interface Replica {
 }
 
 /**
- * Production, past the portal (Rovo on Call; docs/rovo-mental-model.md).
- * Where the code side's releases go. The portal opens onto a small cluster of
- * services: a web front, the APIs behind it, the data behind those, each a
- * system node whose light is its health (green healthy, yellow degraded, red
- * down), joined by gray lines along the grid from caller to callee.
+ * Production (Rovo on Call; docs/rovo-mental-model.md): where the code side's
+ * releases go. Past the belt, a secure glass tunnel crosses into production;
+ * past it stands the production server the releases are shipped to, and it
+ * serves the rest of the business: a web front, the APIs behind it, the data
+ * behind those, each a system node whose light is its health (green healthy,
+ * yellow degraded, red down), joined by gray lines along the grid from caller
+ * to callee.
  *
- * It comes up line first, node after, tier by tier (`comeUp`). A release that
- * comes through the portal rides out along the lines to its service
- * (`deliver`). Fixes happen at a service: replicas grow in beside it (line
- * first), or its feature flag lowers.
+ * It comes up line first, node after (`comeUp`): the tunnel, its line to the
+ * server, the server, its line to the front, then tier by tier. A release
+ * from the belt goes through the tunnel (it flashes, its lock sways), into
+ * the server, and on along the lines to its service (`deliver`). Fixes happen
+ * at a service: replicas grow in beside it (line first), or its feature flag lowers.
  */
 export class Production {
-  readonly portal = new Portal();
+  /** The secure glass tunnel into production. */
+  readonly tunnel: Gateway;
+  /** The production server releases are shipped to. */
+  readonly server: SystemNode;
   readonly nodes: SystemNode[];
-  /** Portal → the front. */
-  readonly exitLine: Branch;
+  /** Tunnel → the server, and the server → the front. */
+  readonly intoServer: Branch;
+  readonly toFront: Branch;
   readonly dependencies: Dependency[] = [];
   readonly replicas: Replica[] = [];
   /** A feature flag on a service, once one is turned off there. */
   flag?: { at: number; flag: Flag };
   /** Releases delivered to a service so far. */
   delivered = 0;
-  private readonly exitPoints: Vector3[];
+  /** Lines no replica or terminal may stand on: tunnel to server to front. */
+  private readonly feedPoints: Vector3[];
   private readonly untick: () => void;
 
   constructor(
     private readonly stage: SceneHost,
     readonly place: ProductionPlace,
-    code: CodeSide,
     readonly incident: Incident,
   ) {
     const { flow, tierGap } = place;
-    this.portal.position.copy(code.portal);
-    this.portal.rotation.y = Math.atan2(-flow.z, flow.x);
-    this.portal.scale.setScalar(0.001);
-    stage.add(this.portal);
+    this.tunnel = new Gateway(place.tunnel);
+    this.tunnel.visible = false;
+    this.server = new SystemNode({ kind: 'server' });
+    this.server.position.copy(place.server);
+    this.server.scale.setScalar(0.001);
+    this.server.labelOpacity = 0;
+    this.server.light = 'working';
+    stage.add(this.tunnel, this.server);
 
     this.nodes = incident.services.map((s) => {
       const node = new SystemNode({ kind: s.kind, name: s.name });
@@ -89,10 +100,11 @@ export class Production {
       return node;
     });
     const front = this.nodes[0].position;
-    this.exitPoints = [place.exit.clone(), front.clone()];
-    this.exitLine = new Branch(new LineCurve3(place.exit.clone(), front.clone().addScaledVector(flow, -HALF_NODE)), NEUTRAL.packet);
-    this.exitLine.drawn = 0;
-    stage.add(this.exitLine);
+    this.feedPoints = [place.tunnelOut.clone(), place.server.clone(), front.clone()];
+    this.intoServer = new Branch(new LineCurve3(place.tunnelOut.clone(), place.server.clone().addScaledVector(flow, -HALF_NODE)), NEUTRAL.packet);
+    this.toFront = new Branch(new LineCurve3(place.server.clone().addScaledVector(flow, HALF_NODE), front.clone().addScaledVector(flow, -HALF_NODE)), NEUTRAL.packet);
+    for (const line of [this.intoServer, this.toFront]) line.drawn = 0;
+    stage.add(this.intoServer, this.toFront);
 
     // Caller → callee, along the grid: out of the caller downstream, across at the halfway line, on into the callee.
     incident.services.forEach((s, from) => {
@@ -108,15 +120,25 @@ export class Production {
         this.dependencies.push({ from, to, line, points });
       }
     });
-    this.untick = stage.onTick((dt) => this.portal.update(dt));
+    this.untick = stage.onTick((dt) => {
+      if (this.tunnel.visible) this.tunnel.update(dt);
+    });
   }
 
-  /** Production comes up: the portal opens, the line draws out of it to the front, then tier by tier, each line and then the service at its end. */
+  /**
+   * Production comes up: the glass tunnel builds and locks; its line draws to
+   * the server, which stands up; the server's line draws to the front; then
+   * tier by tier, each line and then the service at its end.
+   */
   async comeUp(): Promise<void> {
-    const { stage, portal } = this;
-    await tween(stage, 0.45, (t) => portal.scale.setScalar(Math.max(0.001, easeOutBack(t))));
-    await tween(stage, 0.8, (t) => (portal.open = t));
-    await tween(stage, 0.5, (t) => (this.exitLine.drawn = t));
+    const { stage, tunnel } = this;
+    tunnel.visible = true;
+    await tween(stage, 0.5, (t) => (tunnel.built = t));
+    await tween(stage, 0.4, (t) => (tunnel.lockDrop = t));
+    await tween(stage, 0.5, (t) => (this.intoServer.drawn = t));
+    await this.grow(this.server);
+    tunnel.conduit.streams = 1;
+    await tween(stage, 0.5, (t) => (this.toFront.drawn = t));
     await this.grow(this.nodes[0]);
     for (const tier of [1, 2]) {
       const into = this.dependencies.filter((d) => this.incident.services[d.to].tier === tier);
@@ -149,20 +171,26 @@ export class Production {
   }
 
   /**
-   * A release came through the portal: it rides out along the line to the
-   * front, and on along the lines to service `i`, and goes in. The service flashes.
+   * A release off the end of the belt (`release`, or a fresh one if none):
+   * it goes into the glass tunnel (the tunnel flashes, its lock sways),
+   * through it, along the line into the production server, out along its
+   * line to the front, and on along the lines to service `i`, and goes in.
    */
-  async deliver(i: number): Promise<void> {
-    const block = new Mesh(new RoundedBoxGeometry(BIG_BLOCK, BIG_BLOCK, BIG_BLOCK, 3, 0.05), new MeshStandardMaterial({ color: NEUTRAL.packet, roughness: 0.4, flatShading: true }));
+  async deliver(i: number, release?: Mesh): Promise<void> {
+    const block =
+      release ?? new Mesh(new RoundedBoxGeometry(BIG_BLOCK, BIG_BLOCK, BIG_BLOCK, 3, 0.05), new MeshStandardMaterial({ color: NEUTRAL.packet, roughness: 0.4, flatShading: true }));
     block.castShadow = true;
     this.stage.add(block);
+    if (!release) block.position.copy(this.place.tunnelIn).setY(BIG_BLOCK / 2 + 0.05);
+    const [inEnd, outEnd] = [this.place.tunnelIn, this.place.tunnelOut];
+    this.tunnel.grant();
     const path = this.pathTo(i);
-    const legs: Curve<Vector3>[] = [this.exitLine.curve];
+    const legs: Curve<Vector3>[] = [new LineCurve3(inEnd.clone(), outEnd.clone()), this.intoServer.curve, this.toFront.curve];
     path.slice(1).forEach((to, k) => legs.push(this.dependency(path[k], to).line.curve));
     const at = new Vector3();
     for (const [n, leg] of legs.entries()) {
-      // It passes through each service on the way, onto the next line.
-      if (n > 0) {
+      // It passes through the server, and each service on the way, onto the next line.
+      if (n > 0 || block.position.distanceTo(inEnd) > 0.05) {
         const from = block.position.clone();
         leg.getPointAt(0, at);
         await tween(this.stage, 0.18, (t) => block.position.lerpVectors(from, at.clone().setY(BIG_BLOCK / 2 + 0.05), t));
@@ -180,7 +208,8 @@ export class Production {
       block.scale.setScalar(Math.max(0.001, 1 - t));
     });
     block.removeFromParent();
-    block.geometry.dispose();
+    // A release off the belt shares its shape with the assembler's; only its material is its own.
+    if (!release) block.geometry.dispose();
     (block.material as MeshStandardMaterial).dispose();
     this.delivered++;
   }
@@ -208,7 +237,7 @@ export class Production {
     const service = this.incident.services[i];
     const at = this.nodes[i].position;
     const others = [...this.nodes.map((n) => n.position), ...this.replicas.map((r) => r.node.position), ...taken];
-    const lines = [this.exitPoints, ...this.dependencies.map((d) => d.points)];
+    const lines = [this.feedPoints, ...this.dependencies.map((d) => d.points)];
     const slots = tiers[service.tier];
     const inBlock = (p: Vector3) => {
       const v = (q: Vector3) => q.dot(across);
@@ -317,7 +346,7 @@ export class Production {
 
   /** Every node standing in production, for keeping lines and spots clear. */
   positions(): Vector3[] {
-    return [this.portal.position, ...this.nodes.map((n) => n.position), ...this.replicas.map((r) => r.node.position)];
+    return [this.server.position, ...this.nodes.map((n) => n.position), ...this.replicas.map((r) => r.node.position)];
   }
 
   dispose(): void {
@@ -329,8 +358,10 @@ export class Production {
       r.line.dispose();
     }
     this.flag?.flag.dispose();
-    this.exitLine.dispose();
-    this.portal.dispose();
+    this.intoServer.dispose();
+    this.toFront.dispose();
+    this.server.dispose();
+    this.tunnel.dispose();
   }
 
   private dependency(from: number, to: number): Dependency {

@@ -33,8 +33,10 @@ export type WorkspaceKind = 'worktree';
 export type IncidentKind = 'jsm' | 'compass' | 'statuspage';
 /** Third-party monitoring: where an alert can come from. */
 export type MonitorKind = 'datadog' | 'grafana';
-/** Production services, past the portal: what the code ships to. Their light is their health. */
-export type ServiceKind = 'web' | 'api' | 'db' | 'cache' | 'queue';
+/** Third-party paging: an alert becomes a page to the human on call. */
+export type PagingKind = 'pagerduty';
+/** Production: the server releases are shipped to, and the services it runs. Their light is their health. */
+export type ServiceKind = 'server' | 'web' | 'api' | 'db' | 'cache' | 'queue';
 /** The systems a gate can lead to. */
 export type SystemKind =
   | JobKind
@@ -46,6 +48,7 @@ export type SystemKind =
   | WorkspaceKind
   | IncidentKind
   | MonitorKind
+  | PagingKind
   | ServiceKind;
 
 /** Act 1 systems (outside Atlassian). */
@@ -60,7 +63,8 @@ export const COMMS_KINDS: readonly CommsKind[] = ['slack'];
 export const WORKSPACE_KINDS: readonly WorkspaceKind[] = ['worktree'];
 export const INCIDENT_KINDS: readonly IncidentKind[] = ['jsm', 'compass', 'statuspage'];
 export const MONITOR_KINDS: readonly MonitorKind[] = ['datadog', 'grafana'];
-export const SERVICE_KINDS: readonly ServiceKind[] = ['web', 'api', 'db', 'cache', 'queue'];
+export const PAGING_KINDS: readonly PagingKind[] = ['pagerduty'];
+export const SERVICE_KINDS: readonly ServiceKind[] = ['server', 'web', 'api', 'db', 'cache', 'queue'];
 export const SYSTEM_KINDS: readonly SystemKind[] = [
   ...JOB_KINDS,
   ...ATLASSIAN_KINDS,
@@ -71,6 +75,7 @@ export const SYSTEM_KINDS: readonly SystemKind[] = [
   ...WORKSPACE_KINDS,
   ...INCIDENT_KINDS,
   ...MONITOR_KINDS,
+  ...PAGING_KINDS,
   ...SERVICE_KINDS,
 ];
 export function isService(kind: SystemKind): kind is ServiceKind {
@@ -106,6 +111,8 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   statuspage: 'Statuspage',
   datadog: 'Datadog',
   grafana: 'Grafana',
+  pagerduty: 'PagerDuty',
+  server: 'Production server',
   web: 'Web',
   api: 'API',
   db: 'Database',
@@ -283,6 +290,20 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
     const needle = place(solid(new BoxGeometry(0.15, 0.024, 0.014), m.shell), 0.05, -0.02, 0.01);
     needle.rotation.z = 0.7;
     place(solid(new SphereGeometry(0.03, 8, 6), m.shell), 0, -0.07, 0.01);
+  } else if (kind === 'pagerduty') {
+    // Paging: a pager, a screen across its face and a button under it, a clip on its back.
+    place(solid(new RoundedBoxGeometry(0.38, 0.28, 0.1, 2, 0.05), m.shell), 0, 0);
+    place(solid(new BoxGeometry(0.26, 0.09, 0.012), m.graphite), -0.02, 0.04, 0.052);
+    place(solid(new CylinderGeometry(0.03, 0.03, 0.02, 10), m.graphite), 0.12, -0.08, 0.052).rotation.x = Math.PI / 2;
+    place(solid(new BoxGeometry(0.14, 0.04, 0.03), m.graphite), 0, 0.15, -0.03);
+  } else if (kind === 'server') {
+    // A production server: a rack of three units, each with a row of lights and a vent.
+    for (let i = 0; i < 3; i++) {
+      const y = -0.13 + i * 0.13;
+      place(solid(new RoundedBoxGeometry(0.4, 0.11, 0.2, 2, 0.02), m.shell), 0, y);
+      place(solid(new BoxGeometry(0.16, 0.025, 0.012), m.graphite), 0.08, y, 0.102);
+      for (let k = 0; k < 2; k++) place(solid(new SphereGeometry(0.016, 8, 6), m.graphite), -0.14 + k * 0.05, y, 0.1);
+    }
   } else if (kind === 'web') {
     // A web front: a browser window, its bar along the top, blocks of page below.
     place(solid(new RoundedBoxGeometry(0.44, 0.32, 0.04, 2, 0.03), m.shell), 0, 0);

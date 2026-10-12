@@ -35,8 +35,9 @@ Every beat must be shown with these. If a beat needs something not on this list,
 | Write code and ship it | a code `Task` with a lane index 0–2: worktree, diff, check-in, CI, squash merge, deploy cubes | `code()`, `CodeLane`, `shipOutput` |
 | Tell the user | `reportToUser: true` on a task | `userTerminal()` |
 | A third-party tool | `systems.call(kind)` brings it up; `systems.release(kind)` lets it go | `SystemsOnGrid` |
-| A system that hangs off another | `via` in the story options (the monitor into JSM, like Code search off Bitbucket) | `SystemsOnGrid` |
-| Production past the portal | `production: true` in the story options lays it out; `Production`: `comeUp()`, `health()`, `deliver()`, `addReplica()`, `flagOff()`, `trace()`, `logsTerminal()` | `production.ts` |
+| A system that hangs off another | `via` in the story options (Datadog into PagerDuty into JSM, like Code search off Bitbucket); add the pair to `TEAMWORK_LINKS` so the layout places them and routes their line | `SystemsOnGrid`, `systemLayout.ts` |
+| Production | `production: true` in the story options lays it out (glass tunnel, production server, services); `Production`: `comeUp()`, `health()`, `deliver()`, `addReplica()`, `flagOff()`, `trace()`, `logsTerminal()` | `production.ts` |
+| Releases off the belt somewhere other than a portal | `buildOutput(stage, code, onShipped, handOff)` | `rovoCode.ts` |
 | A release built only when needed | `buildOutputLine()` (a story can send it on, e.g. into production) | `RovoAtlassian` |
 | CI fails once, then passes | `flakyCI = true` before a code task | `RovoAtlassian` |
 | Wait for something | `wait`, `tween`, `fly`, `until` on the stage clock | `timeline.ts` |

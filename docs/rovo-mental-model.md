@@ -24,7 +24,8 @@ The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`s
 - **Bitbucket is the repo:** all the code activity is around it.
 - **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through a connector and **despawn when their Jira issue is done**. Work written to a tool stays there (write-back).
 - **Incident apps** (Rovo on Call): **Jira Service Management** (JSM, the service desk) and **Compass** (the service catalog, which shows the blast radius) are on the Teamwork Graph and stay once up. **Statuspage** comes up on call (Atlassian, so no connector) for SEV1–2 and folds when the incident is resolved.
-- **Monitoring tools** (Datadog, Grafana) are third-party: one comes up beside JSM when it raises an alert, its line straight into JSM, and goes when the incident is resolved.
+- **The alert's way in** (Rovo on Call): **Datadog** (monitoring) and **PagerDuty** (paging) are third-party. They come up when the alert fires, Datadog's line into PagerDuty and PagerDuty's into JSM, laid out by the house rules like every system round Jira. The alert rides Datadog → PagerDuty → JSM → Jira. The human is paged through PagerDuty. Both go when the incident is resolved.
+- **Jira's line to Bitbucket** is laid out with the map, and no system stands on or right beside it.
 - **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway. It catches comms and sends comms.
 - **The user's terminal** is where copies report back to the human.
 
@@ -35,7 +36,7 @@ Linear, like real life: the Jira issue calls for code → a coding copy → gene
 - **SCMs** (GitHub, Bitbucket, GitLab) share the branch emblem and job; the job ends in a squash merge.
 - **Output:** each merge sends small, fast cubes down the output line into the assembler. Every 2 × 2 × 2 set fuses into a release, which rides a short, fast belt through the portal.
 - **Terminal:** flat on the grid, lines plugging into its back. States: admin, live tail logs (pass turns it green), code gen (a diff view, also used for code review).
-- **Production** is past the portal (Rovo on Call): a web front, the APIs behind it and the data behind those, each a node whose light is its health, joined by gray lines from caller to callee. A release that goes through the portal rides out along those lines to its service. Fixes happen at a service: replicas grow in beside it (line first), or its feature flag lowers.
+- **Production** (Rovo on Call): past the belt, releases cross a **secure glass tunnel** to the **production server**, which serves the rest of the business: a web front, the APIs behind it and the data behind those, each a node whose light is its health, joined by gray lines from caller to callee. A release rides belt → tunnel → server → along those lines to its service. (In the other stories the belt still ends in the portal.) Fixes happen at a service: replicas grow in beside it (line first), or its feature flag lowers.
 - **Coding lanes** (worktree → terminal → repo) go to Bitbucket first and spawn out from there (ILI-1004). They fold back up when the work is done.
 
 ## Visual vocabulary
@@ -58,7 +59,8 @@ What things mean on screen. Use these; don't add meanings.
 | Tall housing with gear windows | A permanent (Teamwork Graph) system. Gears turn while it works. |
 | Small plug on a node | A third-party connector into the Teamwork Graph. |
 | Glass gateway with a lock | A secure crossing (Slack). |
-| Cubes, assembler, belt, portal | Code merged, released and shipped to production. The release rides on past the portal to its service when production is on the map. |
+| Cubes, assembler, belt, portal | Code merged, released and shipped to production. |
+| Glass tunnel to the production server | Releases crossing securely into production (Rovo on Call), in place of the portal. |
 
 ## Rules on screen
 

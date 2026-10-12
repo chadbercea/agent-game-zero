@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { STATUSES } from '../../core/palette';
-import { INCIDENT_KINDS, MONITOR_KINDS, SERVICE_KINDS, SYSTEM_KINDS, type SystemKind } from './emblems';
+import { INCIDENT_KINDS, MONITOR_KINDS, PAGING_KINDS, SERVICE_KINDS, SYSTEM_KINDS, type SystemKind } from './emblems';
 import { type NodeLight, SystemNode } from './SystemNode';
 
 const meta: Meta = {
@@ -14,13 +14,13 @@ export default meta;
  * Every system's emblem, in two rows. Back: the tools on Rovo's grid (Figma,
  * GitHub, Notion; Code search, Confluence, Jira, Bitbucket; Linear, Google
  * Docs, GitLab, Slack, the worktree). Front: Rovo on Call's (JSM, Compass,
- * Statuspage; Datadog, Grafana; the production services: web, API,
- * database, cache, queue). Monochrome; told apart by shape.
+ * Statuspage; Datadog, Grafana, PagerDuty; production: the server, then
+ * the services: web, API, database, cache, queue). Monochrome; told apart by shape.
  */
 export const Emblems: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 10, focusY: 0.6 });
-    const onCall = [...INCIDENT_KINDS, ...MONITOR_KINDS, ...SERVICE_KINDS] as readonly SystemKind[];
+    const onCall = [...INCIDENT_KINDS, ...MONITOR_KINDS, ...PAGING_KINDS, ...SERVICE_KINDS] as readonly SystemKind[];
     const rows = [SYSTEM_KINDS.filter((k) => !onCall.includes(k)), onCall];
     rows.forEach((kinds, r) => {
       // Rows step toward the camera, along the floor.

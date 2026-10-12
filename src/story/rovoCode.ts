@@ -1,11 +1,10 @@
-import { type Curve, LineCurve3, Vector3 } from 'three';
+import { type Curve, LineCurve3, type Mesh, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
 import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import type { ScmKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
-import type { Portal } from '../primitives/portal/Portal';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
@@ -117,7 +116,7 @@ export class CodeLane {
 }
 
 /** The output, built the first time code merges: the line draws out of the repo, then the assembler, belt and portal appear. */
-export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => void, existingPortal?: Portal): Promise<OutputLine> {
+export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => void, handOff?: (release: Mesh) => Promise<void>): Promise<OutputLine> {
   const route: Curve<Vector3> = new LineCurve3(
     code.scm.clone().addScaledVector(code.flow, REPO_EDGE),
     code.assembler.clone().addScaledVector(code.flow, -0.45),
@@ -130,7 +129,7 @@ export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => 
     beltDirection: code.flow,
     beltSpeed: 2.2,
     portal: code.portal,
-    existingPortal,
+    handOff,
     onShipped,
   });
 }

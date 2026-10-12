@@ -29,8 +29,12 @@ export interface OutputPlace {
   /** How fast the belt runs, world units per second (the Conveyor's own pace if left out). */
   beltSpeed?: number;
   portal: Vector3;
-  /** A portal already standing there, open (production's): the output uses it rather than bringing up its own. */
-  existingPortal?: Portal;
+  /**
+   * Where a release goes at the end of the belt instead of a portal (Rovo on
+   * Call: into the glass tunnel to the production server). The output then
+   * has no portal of its own; this takes the release and is done with it.
+   */
+  handOff?: (release: Mesh) => Promise<void>;
   /** A bigger block just went through the portal (e.g. to bring it out the exit side: ExitLine). */
   onShipped?: () => void;
 }
@@ -40,7 +44,8 @@ export interface OutputLine {
   line: Branch;
   assembler: Assembler;
   conveyor: Conveyor;
-  portal: Portal;
+  /** Where releases go through (none when they're handed off at the belt's end). */
+  portal?: Portal;
   /** A commit just landed in GitHub: send a little block down the line (if there's room; returns whether it went). */
   commit: () => boolean;
   stop: () => void;
@@ -72,10 +77,9 @@ export async function shipOutput(
   const heading = output.beltDirection ? Math.atan2(-output.beltDirection.z, output.beltDirection.x) : 0;
   conveyor.rotation.y = heading;
   if (output.beltSpeed) conveyor.speed = output.beltSpeed;
-  const ownPortal = !output.existingPortal;
-  const portal = output.existingPortal ?? new Portal();
-  const parts = ownPortal ? [assembler, conveyor, portal] : [assembler, conveyor];
-  if (ownPortal) {
+  const portal = output.handOff ? undefined : new Portal();
+  const parts = portal ? [assembler, conveyor, portal] : [assembler, conveyor];
+  if (portal) {
     portal.position.copy(output.portal);
     portal.rotation.y = heading;
   }
@@ -84,7 +88,7 @@ export async function shipOutput(
   const untickParts = stage.onTick((dt) => {
     assembler.update(dt);
     conveyor.update(dt);
-    if (ownPortal) portal.update(dt);
+    portal?.update(dt);
   });
 
   // The line draws out from GitHub; the assembler, the belt and the portal pop in; the portal opens.
@@ -96,7 +100,7 @@ export async function shipOutput(
       await tween(stage, 0.45, (t) => part.scale.setScalar(Math.max(0.001, t + Math.sin(t * Math.PI) * 0.15)));
     }),
   );
-  if (ownPortal) await tween(stage, 0.8, (t) => (portal.open = t));
+  if (portal) await tween(stage, 0.8, (t) => (portal.open = t));
 
   // Shipping: little blocks down the line, bigger blocks along the belt and through the portal.
   onStep('shipping');
@@ -132,7 +136,7 @@ export async function shipOutput(
   const untickShip = stage.onTick(() => {
     if (!running || !assembler.ready) return;
     const block = assembler.take();
-    if (block) void ship(stage, block, conveyor, portal, shipping).then(() => output.onShipped?.());
+    if (block) void ship(stage, block, conveyor, portal ?? output.handOff!, shipping).then(() => output.onShipped?.());
   });
   return {
     line,
@@ -150,8 +154,8 @@ export async function shipOutput(
   };
 }
 
-/** A bigger block drops onto the belt, rides it to the end, and goes through the portal. */
-async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: Portal, shipping: Mesh[]): Promise<void> {
+/** A bigger block drops onto the belt, rides it to the end, and goes through the portal (or is handed off there). */
+async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: Portal | ((release: Mesh) => Promise<void>), shipping: Mesh[]): Promise<void> {
   stage.add(block);
   shipping.push(block);
   const half = BIG_BLOCK / 2;
@@ -167,6 +171,11 @@ async function ship(stage: SceneHost, block: Mesh, conveyor: Conveyor, portal: P
     conveyor.pointAt(0.03 + t * 0.94, at);
     block.position.set(at.x, BELT_TOP + half, at.z);
   });
+  if (!(portal instanceof Portal)) {
+    shipping.splice(shipping.indexOf(block), 1);
+    await portal(block);
+    return;
+  }
   // Into the portal: it slides into the middle of the ring, shrinks away, and the portal flashes.
   const start = block.position.clone();
   const into = portal.position.clone().setY(PORTAL_CENTER_Y);

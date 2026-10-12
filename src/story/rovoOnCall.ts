@@ -15,7 +15,7 @@ import { fly, until, wait } from './timeline';
 export const ON_CALL_BEATS = ['arriving', 'detect', 'declare', 'triage', 'mitigate', 'verify', 'resolve', 'learn', 'follow-up', 'done'] as const;
 export type OnCallBeat = (typeof ON_CALL_BEATS)[number];
 /** The systems round Jira this story calls on: the runbook's Confluence, and the incident apps. */
-export const ON_CALL_MINI = ['confluence', 'jsm', 'compass', 'statuspage'] as const;
+export const ON_CALL_MINI = ['confluence', 'jsm', 'compass', 'statuspage', 'pagerduty', 'datadog'] as const;
 
 /** Seconds between incident updates in Slack, by severity: often at SEV1, rarely at SEV3. */
 const COMMS_BEAT: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 4, 3: 7 };
@@ -108,11 +108,10 @@ export class RovoOnCall extends RovoAtlassian {
   private statusUp = false;
 
   constructor(stage: SceneHost, seed = 5) {
-    super(stage, seed, { mini: ON_CALL_MINI, production: true, via: { datadog: 'jsm', grafana: 'jsm' } });
+    // The alert's way in, laid out by the house rules: Datadog's line into PagerDuty, PagerDuty's into JSM.
+    super(stage, seed, { mini: ON_CALL_MINI, production: true, via: { pagerduty: 'jsm', datadog: 'pagerduty' } });
     this.incident = rollIncident(seed);
-    // The monitoring tool stands beside JSM, its line straight into it.
-    if (this.map.monitorAt) this.places.datadog = this.places.grafana = this.map.monitorAt;
-    this.production = new Production(stage, this.map.production!, this.map.code, this.incident);
+    this.production = new Production(stage, this.map.production!, this.incident);
     // One release per fix: a single deploy fills the assembler.
     this.deployCubes = 8;
     this.flakyCI = this.incident.flakyCI;
@@ -140,18 +139,14 @@ export class RovoOnCall extends RovoAtlassian {
       production.health(i, 'waiting');
     }
     await wait(stage, 0.8);
-    // The page: JSM comes up off Jira; the alert rides in, and a red card lands on the board.
+    // The page: JSM comes up off Jira, PagerDuty plugs into JSM, Datadog into PagerDuty. The alert rides
+    // Datadog → PagerDuty → JSM → Jira, and a red card lands on the board.
     const jsm = await this.systems.establish('jsm');
-    if (incident.source !== 'jsm') {
-      const monitor = await this.systems.call(incident.source);
-      monitor.node.light = 'working';
-      await this.systems.report(incident.source);
-      monitor.node.light = 'off';
-    } else {
-      jsm.node.light = 'working';
-      await this.systems.report('jsm');
-      jsm.node.light = 'off';
-    }
+    const pagerduty = await this.systems.call('pagerduty');
+    const datadog = await this.systems.call('datadog');
+    for (const up of [datadog, pagerduty]) up.node.light = 'working';
+    await this.systems.report('datadog');
+    for (const up of [datadog, pagerduty]) up.node.light = 'off';
     await hub.showBoard();
     await hub.addTask(true);
 
@@ -204,7 +199,11 @@ export class RovoOnCall extends RovoAtlassian {
     }
     this.say('slack');
     if (this.statusUp) this.say('final-status');
-    if (incident.source !== 'jsm') void this.systems.release(incident.source);
+    // The alert's done: Datadog goes, then PagerDuty (each line draws back, then the node folds).
+    void (async () => {
+      await this.systems.release('datadog');
+      await this.systems.release('pagerduty');
+    })();
     atJsm.detach();
     jsm.node.light = 'off';
     await fly(stage, DroneFlight.to(rovo, this.map.jira, { speed: 3 }));
@@ -235,16 +234,17 @@ export class RovoOnCall extends RovoAtlassian {
     this.finished = true;
   }
 
-  /** The output, when a fix first needs it: the line, the assembler and the belt, into production's portal; every release goes on to the failing service. */
+  /**
+   * The output, when a fix first needs it: the line, the assembler and the
+   * belt. Off the end of the belt each release goes through the glass tunnel
+   * to the production server, and on to the failing service.
+   */
   protected override buildOutputLine(): Promise<OutputLine> {
     this.building ??= buildOutput(
       this.stage,
       this.map.code,
-      () => {
-        this.shipped++;
-        void this.production.deliver(this.incident.culprit);
-      },
-      this.production.portal,
+      () => this.shipped++,
+      (release) => this.production.deliver(this.incident.culprit, release),
     ).then((output) => (this.output = output));
     return this.building;
   }
@@ -292,9 +292,10 @@ export class RovoOnCall extends RovoAtlassian {
     await this.goTo(copy, at);
     const system = await this.systems.call(step.system);
     await this.work(copy.sub.drone, system.node, step);
+    // A read brings what it found home; a write stays where it was written; a send (a page) just goes on its way.
     if (step.action === 'read') void this.systems.report(step.system, step.system);
     else {
-      this.systems.writeBack(step.system);
+      if (step.action !== 'send') this.systems.writeBack(step.system);
       void this.systems.report(step.system);
     }
     void this.systems.release(step.system);
@@ -464,8 +465,9 @@ export class RovoOnCall extends RovoAtlassian {
     await atSlack();
     await send();
     if (incident.paged) {
-      // The human on call is paged on the user's terminal, and acks.
+      // The human on call is paged: through PagerDuty, to the user's terminal, where they ack.
       leaveSlack();
+      await this.visit(copy, { system: 'pagerduty', action: 'send' });
       await this.goTo(copy, this.map.userTerminal);
       const terminal = await this.userTerminal();
       this.working.set(drone, terminal);

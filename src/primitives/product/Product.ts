@@ -33,6 +33,8 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   statuspage: 'Status update',
   datadog: 'Alert',
   grafana: 'Alert',
+  pagerduty: 'Page',
+  server: 'Release',
   web: 'Requests',
   api: 'Requests',
   db: 'Queries',

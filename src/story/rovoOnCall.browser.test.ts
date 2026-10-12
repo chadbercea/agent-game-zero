@@ -30,12 +30,13 @@ async function runIncident(seed: number) {
   const { stage, run } = testStage();
   const scene = new RovoOnCall(stage, seed);
   const beats: OnCallBeat[] = [];
-  const seen = { statuspage: false, monitor: false, mostCopies: 0, red: false, mostReplicas: 0, lanes: 0 };
+  const seen = { statuspage: false, datadog: false, pagerduty: false, mostCopies: 0, red: false, mostReplicas: 0, lanes: 0 };
   void scene.start();
   await run(600, () => {
     if (beats[beats.length - 1] !== scene.beat) beats.push(scene.beat);
     seen.statuspage ||= scene.systems.placed.has('statuspage');
-    seen.monitor ||= scene.incident.source !== 'jsm' && scene.systems.placed.has(scene.incident.source);
+    seen.datadog ||= scene.systems.placed.has('datadog');
+    seen.pagerduty ||= scene.systems.placed.has('pagerduty');
     seen.mostCopies = Math.max(seen.mostCopies, scene.copies.size);
     seen.red ||= scene.production.nodes[scene.incident.culprit].light === 'stopped';
     seen.mostReplicas = Math.max(seen.mostReplicas, scene.production.replicas.length);
@@ -65,10 +66,10 @@ describe('Rovo on Call', () => {
       // The failing service went red; at the end everything in service is green again.
       expect(seen.red).toBe(true);
       production.nodes.forEach((node, i) => expect(node.light).toBe(fix === 'failover' && i === incident.culprit ? 'off' : 'working'));
-      // JSM and Compass stay (Teamwork Graph); the monitoring tool came and went; Statuspage only at SEV1–2, and gone after.
+      // JSM stays (Teamwork Graph); Datadog and PagerDuty came for the alert and went when it was resolved; Statuspage only at SEV1–2, and gone after.
       expect(scene.systems.placed.get('jsm')?.permanent).toBe(true);
-      expect(seen.monitor).toBe(incident.source !== 'jsm');
-      expect(scene.systems.placed.has('datadog') || scene.systems.placed.has('grafana')).toBe(false);
+      expect([seen.datadog, seen.pagerduty]).toEqual([true, true]);
+      expect(scene.systems.placed.has('datadog') || scene.systems.placed.has('pagerduty')).toBe(false);
       expect(seen.statuspage).toBe(incident.sev <= 2);
       expect(scene.systems.placed.has('statuspage')).toBe(false);
       expect(scene.statusUpdates).toBe(incident.sev <= 2 ? 3 : 0);
@@ -93,7 +94,7 @@ describe('Rovo on Call', () => {
   }
 
   it('a flaky CI run on a hotfix tails red once, then passes on the retry', async () => {
-    const { scene } = await runIncident(65);
+    const { scene } = await runIncident(42);
     expect(scene.incident.flakyCI).toBe(true);
     expect(scene.finished).toBe(true);
     expect(scene.ciRetries).toBe(1);

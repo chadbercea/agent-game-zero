@@ -1,6 +1,7 @@
 import { Group, LineCurve3, MeshStandardMaterial, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { NODE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
+import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
 import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
@@ -61,6 +62,8 @@ export class SystemsOnGrid {
     private readonly routes: Partial<Record<SystemKind, readonly Vector3[]>> = {},
     /** Systems that hang off another rather than Jira (Code search indexes Bitbucket's repositories). */
     private readonly via: Partial<Record<SystemKind, SystemKind>> = {},
+    /** Laid-out grid routes from a system to the one it hangs off (from the map's layout), node center to node center. */
+    private readonly viaRoutes: Partial<Record<SystemKind, readonly Vector3[]>> = {},
   ) {
     stage.onTick((dt) => {
       for (const up of this.placed.values()) up.link?.edge.update(dt);
@@ -76,9 +79,9 @@ export class SystemsOnGrid {
     const up = this.placed.get(kind);
     if (!up) return;
     if (up.link) {
+      // Into the system it hangs off, and on from there (which may hang off another in turn).
       await shoot(this.stage, up.link.edge.path, 5, undefined, product);
-      const parent = this.placed.get(up.link.to);
-      if (parent) await this.hub.report(parent.tie, product);
+      await this.report(up.link.to, product);
       return;
     }
     await this.hub.report(up.tie, product);
@@ -182,10 +185,14 @@ export class SystemsOnGrid {
       let link: PlacedSystem['link'];
       if (parent) {
         // It hangs off its parent: its line reaches straight into the parent's edge.
+        // Along its laid-out route when it has one (round a corner on the grid), otherwise straight in.
         const edgeOf = (NODE_FOOTPRINT * parent.node.scale.x) / 2 + 0.05;
         const toward = parent.node.position.clone().sub(at).normalize();
+        const route = this.viaRoutes[kind];
         const edge = new GraphEdge(
-          new LineCurve3(at.clone().addScaledVector(toward, NODE_FOOTPRINT / 2 + 0.1), parent.node.position.clone().addScaledVector(toward, -edgeOf)),
+          route
+            ? roundedPath(trimPolyline(route.map((p) => p.clone().setY(0)), NODE_FOOTPRINT / 2 + 0.1, edgeOf), BEND_RADIUS)
+            : new LineCurve3(at.clone().addScaledVector(toward, NODE_FOOTPRINT / 2 + 0.1), parent.node.position.clone().addScaledVector(toward, -edgeOf)),
         );
         edge.drawn = 0;
         this.stage.add(edge);
