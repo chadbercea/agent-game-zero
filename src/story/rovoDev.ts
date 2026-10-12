@@ -16,7 +16,7 @@ import { fly, until, wait } from './timeline';
  * the issue and the code; write the change; get it reviewed; get it green
  * and shipped; keep the docs current.
  */
-export const DEV_BEATS = ['arriving', 'intake', 'asked', 'understand', 'build', 'review', 'ship', 'document', 'done'] as const;
+export const DEV_BEATS = ['terminal', 'arriving', 'asked', 'intake', 'understand', 'build', 'review', 'ship', 'document', 'done'] as const;
 export type DevBeat = (typeof DEV_BEATS)[number];
 
 /** How high the clouds float as they bring the team's issues in. */
@@ -41,29 +41,31 @@ const POST: Task = { type: 'slack', steps: [{ system: 'slack', action: 'send' }]
  * to be done, built from the same pieces as the other stories and by the
  * same rules (docs/rovo-mental-model.md).
  *
- * 1. Rovo comes in the way it always does: gate, access, Jira, and the
+ * 1. The day starts in the developer's terminal: it comes up first, and
+ *    Rovo is started from it (it fades in over the terminal).
+ * 2. Rovo goes the way it always does: gate, access, Jira, and the
  *    Teamwork Graph's core (Confluence, Bitbucket) around it.
- * 2. Intake: the team's issues arrive. Clouds (the humans in the loop) float
+ * 3. The ask: the terminal ties into Jira and the developer's ask rides in:
+ *    what's on my plate?
+ * 4. Intake: the team's issues arrive. Clouds (the humans in the loop) float
  *    over Jira's board, one group per issue, and each drops its card into
  *    To do.
- * 3. The ask: the developer's terminal comes up, ties into Jira, and the ask
- *    rides in: take these.
- * 4. Understand the issue and the code: one copy per issue reads what it
+ * 5. Understand the issue and the code: one copy per issue reads what it
  *    needs (a bug: Code search, which comes up off Bitbucket; a feature:
  *    Confluence, and Figma through MCP; a chore: the repo) and reports back
  *    to the developer's terminal.
- * 5. Write the change: each copy takes its issue's code ticket and works it
+ * 6. Write the change: each copy takes its issue's code ticket and works it
  *    in its own lane (worktree → terminal → Bitbucket) and checks it in.
- * 6. Get it reviewed: a reviewing copy comes out of Rovo at the first
+ * 7. Get it reviewed: a reviewing copy comes out of Rovo at the first
  *    check-in and reads each change's diff at its lane's terminal. Sometimes
  *    it asks for changes: the coder writes again and checks in again, and
  *    it's reviewed again.
- * 7. Get it green and shipped: CI runs (red once, sometimes, then the retry
+ * 8. Get it green and shipped: CI runs (red once, sometimes, then the retry
  *    passes); the change is squash-merged, and each merge ships its own
  *    release through the portal.
- * 8. Keep the docs current: the reviewer writes the release notes in
+ * 9. Keep the docs current: the reviewer writes the release notes in
  *    Confluence and tells the developer; sometimes a coder posts it in Slack.
- * 9. Quiet: the copies fly home into Rovo, Jira goes dark. It ends there.
+ * 10. Quiet: the copies fly home into Rovo, Jira goes dark. It ends there.
  *
  * Seeded (`seed`): the map and the day (`rollDevDay`: which issues, what
  * each copy reads, review changes, a red CI run, the Slack post, the clouds).
@@ -72,7 +74,7 @@ export class RovoDev extends RovoAtlassian {
   /** This run's day, from its seed. */
   readonly day: DevDay;
   /** Where the story is now. */
-  beat: DevBeat = 'arriving';
+  beat: DevBeat = 'terminal';
   /** The story has run to its end. */
   finished = false;
   /** Every cloud that has floated by. */
@@ -94,26 +96,35 @@ export class RovoDev extends RovoAtlassian {
     this.day = day;
     // Each merge ships a release of its own.
     this.deployCubes = 8;
+    // The day starts at the developer's terminal: that's where Rovo is started from.
+    this.rovo.drone.position.set(this.map.userTerminal.x, 0, this.map.userTerminal.z);
   }
 
   override async start(): Promise<void> {
     const { stage, hub, day } = this;
     const rovo = this.rovo.drone;
     this.running = true;
+
+    // The day starts in the developer's terminal, and Rovo is started from it.
+    await this.terminalOnly();
+    await wait(stage, 0.4);
+
+    // Rovo goes the way it always does: its gate, access, into Jira.
+    this.beat = 'arriving';
     await this.enter();
+
+    // The ask: the terminal ties into Jira and the developer's ask rides in: what's on my plate?
+    this.beat = 'asked';
+    await this.userTerminal();
+    await wait(stage, 0.4);
+    await hub.report('user-terminal');
+    rovo.flash = 1;
 
     // Intake: the team's issues float in on clouds and drop onto Jira's board.
     this.beat = 'intake';
     await hub.showBoard();
     const requests = day.issues.map((issue) => this.dev(issue.title));
     await this.intake();
-
-    // The ask: the developer's terminal comes up and ties into Jira; the ask rides in.
-    this.beat = 'asked';
-    await this.userTerminal();
-    await wait(stage, 0.4);
-    await hub.report('user-terminal');
-    rovo.flash = 1;
 
     // Understand: a copy per issue reads what it needs and tells the developer.
     this.beat = 'understand';

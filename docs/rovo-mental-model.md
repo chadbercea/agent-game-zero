@@ -6,7 +6,7 @@ The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`s
 
 - **Rovo is the only real agent.** It authenticates at its gate (the gate locks behind it) and works from **Jira**, the quarterback and system of record.
 - **Clouds are the humans in the loop** (Rovo Dev): the team's issues float in on a group of clouds that drifts over Jira's board, and the first cloud drops the card, which slides into To do.
-- **The user's terminal is the developer** in Rovo Dev: it asks Rovo to take the day's issues, and copies report back to it.
+- **The user's terminal is the developer** in Rovo Dev: the day starts there. It comes up first and Rovo is started from it (fading in over it), then Rovo goes through its gate into Jira as always; the terminal ties into Jira and asks what's on the plate, and copies report back to it.
 - **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They emerge out of Rovo and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to **Rovo** (the parent, already talking two-way with Jira; never to Jira directly), and waits where it is, yellow, for its next ticket. They fly home into Rovo only when the work stops.
 
 ## Tasks

@@ -13,9 +13,10 @@ export default meta;
 
 /**
  * A developer's day, told as the developer's jobs to be done, built from the
- * same pieces as the other stories (docs/rovo-mental-model.md). Rovo comes in
- * and gets into Jira; clouds (the team) float over the board and drop the
- * day's issues; the developer's terminal asks Rovo to take them. Understand:
+ * same pieces as the other stories (docs/rovo-mental-model.md). The day
+ * starts in the developer's terminal, and Rovo is started from it; Rovo goes
+ * through its gate into Jira, the terminal ties in and asks what's on the
+ * plate; clouds (the team) float over the board and drop the day's issues. Understand:
  * a copy per issue reads what it needs (Code search for a bug, Confluence and
  * Figma for a feature, the repo for a chore) and tells the developer. Write
  * the change: each copy codes its issue in its own lane. Get it reviewed: a
@@ -33,7 +34,7 @@ export const DevDay: StoryObj<{ seed: number; beat: DevBeat }> = {
     seed: { control: { type: 'number', min: 1, step: 1 } },
     beat: { control: 'select', options: DEV_BEATS },
   },
-  args: { seed: 5, beat: 'arriving' },
+  args: { seed: 5, beat: 'terminal' },
   render: (args) => {
     const { root, stage } = specimenStage({ viewSize: 19, focusY: 0.6 });
     const scene = new RovoDev(stage, args.seed);
