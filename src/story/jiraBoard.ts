@@ -30,6 +30,8 @@ export interface KanbanCard {
   readonly material: MeshStandardMaterial;
   readonly target: Vector3;
   column: Column;
+  /** Its color at rest: white, or red for an open incident. */
+  base: Color;
   opacity: number;
   glow: number;
   leaving: boolean;
@@ -64,12 +66,13 @@ export class KanbanBoard extends Group {
     }
   }
 
-  /** A new card slides in from the left into To do. */
-  addCard(): KanbanCard {
+  /** A new card slides in from the left into To do (red for an incident). */
+  addCard(incident = false): KanbanCard {
     cardGeometry ??= new RoundedBoxGeometry(CARD_W, CARD_H, 0.03, 2, 0.012);
     const material = new MeshStandardMaterial({ color: CARD_WHITE, roughness: 0.4, transparent: true, opacity: 0 });
     const mesh = solid(cardGeometry, material);
-    const card: KanbanCard = { mesh, material, target: new Vector3(), column: 0, opacity: 1, glow: 0, leaving: false };
+    const base = incident ? STATUS_COLOR.stopped : CARD_WHITE;
+    const card: KanbanCard = { mesh, material, target: new Vector3(), column: 0, base, opacity: 1, glow: 0, leaving: false };
     mesh.position.set(ENTER_X, TOP_ROW - this.columns[0].length * ROW_GAP, FACE);
     this.add(mesh);
     this.columns[0].push(card);
@@ -83,7 +86,11 @@ export class KanbanBoard extends Group {
     from.splice(from.indexOf(card), 1);
     card.column = to;
     this.columns[to].push(card);
-    if (to === 2) card.glow = 1;
+    if (to === 2) {
+      // Done: it glows green, and an incident is no longer red.
+      card.glow = 1;
+      card.base = CARD_WHITE;
+    }
     this.layout();
   }
 
@@ -107,8 +114,8 @@ export class KanbanBoard extends Group {
       card.material.opacity += (card.opacity - card.material.opacity) * k;
       card.material.depthWrite = card.material.opacity > 0.98;
       card.glow = Math.max(0, card.glow - dt * 0.6);
-      card.material.color.copy(CARD_WHITE).lerp(STATUS_COLOR.working, card.glow * 0.8);
-      card.material.emissive.copy(CARD_WHITE).multiplyScalar(LIFT * 1.2 * (1 - card.glow)).lerp(STATUS_COLOR.working, card.glow * 0.5);
+      card.material.color.copy(card.base).lerp(STATUS_COLOR.working, card.glow * 0.8);
+      card.material.emissive.copy(card.base).multiplyScalar(LIFT * 1.2 * (1 - card.glow)).lerp(STATUS_COLOR.working, card.glow * 0.5);
     }
     for (let i = this.leaving.length - 1; i >= 0; i--) {
       const card = this.leaving[i];

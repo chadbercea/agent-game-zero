@@ -8,7 +8,7 @@ import { seededRandom } from '../../core/scatter';
 /**
  * Terminal states. Off = a dark screen. Admin = a prompt and a few config
  * lines typing in (setting up). Tail = log lines scrolling (CI/CD, live
- * logs); `pass()` flashes it green. Diff = code being written: green added
+ * logs); `pass()` flashes it green, `fail()` red. Diff = code being written: green added
  * and red removed rows beside a gutter (also how code review looks).
  */
 export type TerminalState = 'off' | 'admin' | 'tail' | 'diff';
@@ -61,6 +61,7 @@ export class Terminal extends Group {
   private clock = 0;
   private passLeft = 0;
   private _passed = false;
+  private _failed = false;
 
   constructor(options: { state?: TerminalState; seed?: number } = {}) {
     super();
@@ -93,6 +94,7 @@ export class Terminal extends Group {
     this._state = value;
     this.clock = 0;
     this._passed = false;
+    this._failed = false;
     this.rows = value === 'off' ? [] : this.makeRows(value);
     this.draw();
   }
@@ -100,8 +102,21 @@ export class Terminal extends Group {
   /** CI passed: the screen flashes green and stays marked passed until the state changes. */
   pass(): void {
     this._passed = true;
+    this._failed = false;
     this.passLeft = PASS_SECONDS;
     this.draw();
+  }
+
+  /** CI failed: the screen flashes red and stays marked failed until it passes or the state changes. */
+  fail(): void {
+    this._failed = true;
+    this._passed = false;
+    this.passLeft = PASS_SECONDS;
+    this.draw();
+  }
+
+  get failed(): boolean {
+    return this._failed;
   }
 
   get passed(): boolean {
@@ -149,10 +164,10 @@ export class Terminal extends Group {
     if (this._state === 'admin') this.drawAdmin();
     else if (this._state === 'tail') this.drawTail();
     else if (this._state === 'diff') this.drawDiff();
-    if (this.passLeft > 0 || this._passed) {
+    if (this.passLeft > 0 || this._passed || this._failed) {
       const flash = this.passLeft / PASS_SECONDS;
       ctx.globalAlpha = 0.12 + 0.35 * flash;
-      ctx.fillStyle = GREEN;
+      ctx.fillStyle = this._failed ? RED : GREEN;
       ctx.fillRect(0, 0, PX, PX);
       ctx.globalAlpha = 1;
       ctx.fillRect(LEFT, PX - ROW * 1.4, PX * 0.35, BAR);

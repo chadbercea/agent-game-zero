@@ -10,6 +10,8 @@ import { NEUTRAL, STATUS_COLOR } from '../../core/palette';
 export interface Request {
   key: string;
   title: string;
+  /** An incident: something in production is down. Its card is red (status: stopped) until it's resolved. */
+  incident?: boolean;
 }
 
 export const DEFAULT_REQUEST: Request = { key: 'DEMO-1', title: 'Add dark mode' };
@@ -65,7 +67,7 @@ export class Ticket extends Group {
       rule: new BoxGeometry(0.76, 0.04, 0.014),
       avatar: new SphereGeometry(0.075, 14, 10),
     });
-    this.shell = new MeshStandardMaterial({ color: NEUTRAL.shell, roughness: 0.55 });
+    this.shell = new MeshStandardMaterial({ color: request.incident ? STATUS_COLOR.stopped : NEUTRAL.shell, roughness: 0.55 });
     this.shell.emissive.copy(STATUS_COLOR.working);
     this.shell.emissiveIntensity = 0;
     this.graphite = new MeshStandardMaterial({ color: NEUTRAL.graphite, roughness: 0.6 });
@@ -102,6 +104,11 @@ export class Ticket extends Group {
 
   get glow(): number {
     return this.glowLevel;
+  }
+
+  /** The work is done: an incident's card is no longer red. */
+  resolve(): void {
+    this.shell.color.copy(NEUTRAL.shell);
   }
 
   /** Fade card and label together (0 = gone, 1 = solid). */

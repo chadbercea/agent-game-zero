@@ -54,4 +54,30 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
     expect(m.places.notion).toBeUndefined();
     expect(m.mcpAt).toBeDefined();
   });
+
+  it('production (Rovo on Call): past the portal, on the grid, clear of the rest, turning with the code side', () => {
+    const ON_CALL = ['confluence', 'jsm', 'compass', 'statuspage'] as const;
+    const flows = new Set<string>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const m = storyMap(seed, { mini: ON_CALL, production: true });
+      const prod = m.production!;
+      flows.add(`${prod.flow.x},${prod.flow.z}`);
+      const slots = prod.tiers.flat();
+      expect(prod.tiers.map((t) => t.length)).toEqual([1, 3, 3]);
+      for (const p of slots) {
+        expect(onGrid(p)).toBe(true);
+        // Downstream of the portal.
+        expect(p.clone().sub(m.code.portal).dot(prod.flow)).toBeGreaterThan(2);
+        for (const q of [m.jira, m.gate, m.slack.at, m.userTerminal, ...(Object.values(m.places) as Vector3[])]) expect(p.distanceTo(q)).toBeGreaterThanOrEqual(2.5 - 1e-9);
+      }
+      // Halfway between slots is on the grid too (where replicas and terminals stand).
+      expect(onGrid(slots[0].clone().addScaledVector(prod.across, Math.floor(prod.slotGap / 2 / 0.5) * 0.5))).toBe(true);
+      // The monitoring tool stands beside JSM, in line with it along the grid.
+      const jsm = m.places.jsm as Vector3;
+      expect(m.monitorAt).toBeDefined();
+      expect(square([jsm, m.monitorAt!])).toBe(true);
+      expect(m.monitorAt!.distanceTo(jsm)).toBeCloseTo(2.5);
+    }
+    expect(flows.size).toBe(4);
+  });
 });

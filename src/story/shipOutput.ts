@@ -29,6 +29,8 @@ export interface OutputPlace {
   /** How fast the belt runs, world units per second (the Conveyor's own pace if left out). */
   beltSpeed?: number;
   portal: Vector3;
+  /** A portal already standing there, open (production's): the output uses it rather than bringing up its own. */
+  existingPortal?: Portal;
   /** A bigger block just went through the portal (e.g. to bring it out the exit side: ExitLine). */
   onShipped?: () => void;
 }
@@ -39,8 +41,8 @@ export interface OutputLine {
   assembler: Assembler;
   conveyor: Conveyor;
   portal: Portal;
-  /** A commit just landed in GitHub: send a little block down the line (if there's room). */
-  commit: () => void;
+  /** A commit just landed in GitHub: send a little block down the line (if there's room; returns whether it went). */
+  commit: () => boolean;
   stop: () => void;
 }
 
@@ -70,27 +72,31 @@ export async function shipOutput(
   const heading = output.beltDirection ? Math.atan2(-output.beltDirection.z, output.beltDirection.x) : 0;
   conveyor.rotation.y = heading;
   if (output.beltSpeed) conveyor.speed = output.beltSpeed;
-  const portal = new Portal();
-  portal.position.copy(output.portal);
-  portal.rotation.y = heading;
-  for (const part of [assembler, conveyor, portal]) part.scale.setScalar(0.001);
-  stage.add(line, assembler, conveyor, portal);
+  const ownPortal = !output.existingPortal;
+  const portal = output.existingPortal ?? new Portal();
+  const parts = ownPortal ? [assembler, conveyor, portal] : [assembler, conveyor];
+  if (ownPortal) {
+    portal.position.copy(output.portal);
+    portal.rotation.y = heading;
+  }
+  for (const part of parts) part.scale.setScalar(0.001);
+  stage.add(line, ...parts);
   const untickParts = stage.onTick((dt) => {
     assembler.update(dt);
     conveyor.update(dt);
-    portal.update(dt);
+    if (ownPortal) portal.update(dt);
   });
 
   // The line draws out from GitHub; the assembler, the belt and the portal pop in; the portal opens.
   onStep('line');
   await tween(stage, 1, (t) => (line.drawn = 1 - (1 - t) ** 3));
   await Promise.all(
-    [assembler, conveyor, portal].map(async (part, i) => {
+    parts.map(async (part, i) => {
       await wait(stage, i * 0.25);
       await tween(stage, 0.45, (t) => part.scale.setScalar(Math.max(0.001, t + Math.sin(t * Math.PI) * 0.15)));
     }),
   );
-  await tween(stage, 0.8, (t) => (portal.open = t));
+  if (ownPortal) await tween(stage, 0.8, (t) => (portal.open = t));
 
   // Shipping: little blocks down the line, bigger blocks along the belt and through the portal.
   onStep('shipping');
@@ -98,7 +104,7 @@ export async function shipOutput(
   let running = true;
   const length = route.getLength();
   const commit = () => {
-    if (!running || onLine >= MAX_ON_LINE || assembler.count + onLine >= 8) return;
+    if (!running || onLine >= MAX_ON_LINE || assembler.count + onLine >= 8) return false;
     onLine++;
     const packet = new Packet();
     packet.trail.visible = false;
@@ -120,6 +126,7 @@ export async function shipOutput(
       onLine--;
       if (running) assembler.addBlock();
     });
+    return true;
   };
   const shipping: Mesh[] = [];
   const untickShip = stage.onTick(() => {
@@ -138,7 +145,7 @@ export async function shipOutput(
       untickParts();
       untickShip();
       for (const b of shipping.splice(0)) b.removeFromParent();
-      for (const part of [line, assembler, conveyor, portal]) part.removeFromParent();
+      for (const part of [line, ...parts]) part.removeFromParent();
     },
   };
 }

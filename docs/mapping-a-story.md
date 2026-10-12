@@ -1,6 +1,6 @@
 # Mapping a story
 
-How to turn a real workflow (shipping a feature, an incident, an onboarding) into a Rovo story on the grid, using only the parts that already exist. The rules of the world are in [`rovo-mental-model.md`](rovo-mental-model.md); this guide is how to apply them. The worked example is **Rovo ships a feature** (`src/story/rovoFeature.ts`).
+How to turn a real workflow (shipping a feature, an incident, an onboarding) into a Rovo story on the grid, using only the parts that already exist. The rules of the world are in [`rovo-mental-model.md`](rovo-mental-model.md); this guide is how to apply them. The worked examples are **Rovo ships a feature** (`src/story/rovoFeature.ts`, a fixed plot) and **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident rolled from the seed).
 
 ## 1. Write the beats
 
@@ -23,8 +23,11 @@ Every beat must be shown with these. If a beat needs something not on this list,
 |---|---|---|
 | Rovo arrives and gets into Jira | `enter()`: gate, access check, lock, Jira, Confluence and Bitbucket come up | `RovoAtlassian` |
 | Work arrives | `hub.addTask()`: a card slides into To do | `JiraHub` |
-| A copy is created | spawn out of Rovo (see `emerge()` in `rovoFeature.ts`) | `spawnDrone` |
-| Rovo hands a copy its task | `hub.takeTask(copy, rovo, { key, title })` | `JiraHub` |
+| A copy is created | `emerge()`: born inside Rovo, full size | `RovoAtlassian` |
+| Rovo hands a copy its task, and it runs it | `handOver(copy, task, lane, { key, title })` | `RovoAtlassian` |
+| A copy goes home | `home(copy, delay)` | `RovoAtlassian` |
+| Rovo hands a copy a card (a custom task) | `hub.takeTask(copy, rovo, { key, title })` | `JiraHub` |
+| An incident | `hub.addTask(true)`: a red card; `{ incident: true }` on its request | `JiraHub`, `Ticket` |
 | A copy does a task | `runTask(sub, task, card, lane, from)`: runs every step, reports, shoots the card to Rovo | `RovoAtlassian` |
 | Read / write / update a system | a `Step`: `{ system, action: 'read' \| 'write' \| 'update' }` | `rovoTasks.ts` |
 | Read a design through MCP | a `Step` with `mcp: true` on `figma` | `mcpRead()` |
@@ -32,6 +35,10 @@ Every beat must be shown with these. If a beat needs something not on this list,
 | Write code and ship it | a code `Task` with a lane index 0–2: worktree, diff, check-in, CI, squash merge, deploy cubes | `code()`, `CodeLane`, `shipOutput` |
 | Tell the user | `reportToUser: true` on a task | `userTerminal()` |
 | A third-party tool | `systems.call(kind)` brings it up; `systems.release(kind)` lets it go | `SystemsOnGrid` |
+| A system that hangs off another | `via` in the story options (the monitor into JSM, like Code search off Bitbucket) | `SystemsOnGrid` |
+| Production past the portal | `production: true` in the story options lays it out; `Production`: `comeUp()`, `health()`, `deliver()`, `addReplica()`, `flagOff()`, `trace()`, `logsTerminal()` | `production.ts` |
+| A release built only when needed | `buildOutputLine()` (a story can send it on, e.g. into production) | `RovoAtlassian` |
+| CI fails once, then passes | `flakyCI = true` before a code task | `RovoAtlassian` |
 | Wait for something | `wait`, `tween`, `fly`, `until` on the stage clock | `timeline.ts` |
 | Know a release shipped | `scene.shipped` | `RovoAtlassian` |
 
@@ -49,7 +56,7 @@ const SPEC: Task = {
 };
 ```
 
-Primitives with a Storybook specimen each (`src/primitives/`): Drone, Gate and Padlock, SystemNode (emblems for every system, `permanent` for the tall housing with Gearworks), Pad, Terminal, Ticket, Product, Job and RepoTrunk, Branch, GraphEdge, SignalLink, Connection, Conduit and Gateway, Packet, Assembler, Conveyor, Portal.
+Primitives with a Storybook specimen each (`src/primitives/`): Drone, Gate and Padlock, SystemNode (emblems for every system, including JSM, Compass, Statuspage, Datadog, Grafana and the production services; `permanent` for the tall housing with Gearworks; `name` for one of several of a kind), Pad, Terminal (`pass()`, `fail()`), Ticket, Product, Job and RepoTrunk, Branch, GraphEdge, SignalLink, Connection, Conduit and Gateway, Packet, Assembler, Conveyor, Portal, Flag.
 
 ## 3. Check every part against the rules
 
@@ -61,14 +68,14 @@ Go through the mental model's **Rules on screen** for each beat:
 - Is only the next thing needed being built?
 - Does color only mean status or lineage?
 
-**New pieces need Chad's OK before you build them.** Write a proposal that marks each new piece clearly and says why the story needs it. The *Rovo on Call* SRE proposal did this as a page with the beat map, the dice and an "existing vs new" list. Build only after the answer.
+**New pieces need Chad's OK before you build them.** Write a proposal that marks each new piece clearly and says why the story needs it. The *Rovo on Call* proposal did this as a page with the beat map, the dice and an "existing vs new" list; Chad approved all five new pieces (production past the portal, service nodes, the JSM, Compass and Statuspage emblems, the red incident card, rollback motion). Build only after the answer.
 
 ## 4. Decide what the seed varies
 
 A story must look different from seed to seed. Two kinds of variation:
 
 - **The map**: comes free from `storyMap` (gate corner, code side direction, Slack's side, terminal, mini systems). Pass only the mini systems your story uses.
-- **The plot**: your own dice from the scene's seeded `this.random`, e.g. how many coders, which tool gets read, whether CI flakes once. Bias toward simple but varied. Write the outcomes and weights down, in the code's doc comment.
+- **The plot**: your own dice, from the seed. Bias toward simple but varied. Write the outcomes and weights down, in the code's doc comment. A small plot can roll from the scene's `this.random`; a bigger one is best as a pure function of the seed that a unit test can check, like `rollIncident(seed)` in `incident.ts` (what broke, how bad, the crew, the fix, the detours).
 
 Never use `Math.random` in a story; the same seed must give the same run.
 
@@ -100,7 +107,7 @@ export class RovoIncident extends RovoAtlassian {
 
 ## 6. Test it
 
-A browser test runs the whole story on a fake stage, with no rendering, in well under a second. See `rovoFeature.browser.test.ts`:
+A browser test runs the whole story on a fake stage, with no rendering, in well under a second. See `rovoFeature.browser.test.ts`, and `rovoOnCall.browser.test.ts` for running one seed per outcome of the dice:
 
 - The beats happen in order and the story finishes.
 - Each beat left what it should: tasks done, releases shipped, write-backs, messages, user reports.

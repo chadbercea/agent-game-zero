@@ -28,6 +28,16 @@ export const PRODUCT_NAME: Record<SystemKind, string> = {
   gitlab: 'Merge request',
   slack: 'Message',
   worktree: 'Commit',
+  jsm: 'Incident',
+  compass: 'Service map',
+  statuspage: 'Status update',
+  datadog: 'Alert',
+  grafana: 'Alert',
+  web: 'Requests',
+  api: 'Requests',
+  db: 'Queries',
+  cache: 'Reads',
+  queue: 'Messages',
 };
 
 /** About the size of the old work cube: small enough to ride a line, big enough to read. */
@@ -77,7 +87,7 @@ export function productGeometry(kind: SystemKind): BufferGeometry {
     // Three sheets fanned out from the bottom, the front one ruled.
     for (let i = 0; i < 3; i++) add(new BoxGeometry(s * 0.66, s * 0.86, s * 0.05), s * (i - 1) * 0.18, 0, -i * s * 0.08, (1 - i) * 0.28);
     for (let i = 0; i < 2; i++) add(new BoxGeometry(s * 0.4, s * 0.05, s * 0.05), -s * 0.2, s * (0.14 - i * 0.16), s * 0.05, 0.28);
-  } else if (kind === 'jira') {
+  } else if (kind === 'jira' || kind === 'jsm') {
     add(new RoundedBoxGeometry(s * 1.1, s * 0.72, s * 0.1, 2, s * 0.06));
     add(new BoxGeometry(s * 0.34, s * 0.12, s * 0.08), -s * 0.24, s * 0.16, s * 0.07);
     add(new BoxGeometry(s * 0.7, s * 0.07, s * 0.06), -s * 0.05, -s * 0.08, s * 0.07);

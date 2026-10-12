@@ -36,7 +36,9 @@ export interface Task {
 }
 
 /** Atlassian Teamwork Graph apps: permanent on the grid once first called. */
-export const TWG_SYSTEMS: readonly SystemKind[] = ['jira', 'confluence', 'codesearch', 'bitbucket'];
+export const TWG_SYSTEMS: readonly SystemKind[] = ['jira', 'confluence', 'codesearch', 'bitbucket', 'jsm', 'compass'];
+/** Atlassian apps that come up on call and go when done (Statuspage, during an incident): native, so no connector. */
+export const NATIVE_ON_CALL: readonly SystemKind[] = ['statuspage'];
 /** Docs a copy can write to or read from: Confluence (TWG) or third-party docs (on call). */
 export const DOC_SYSTEMS: readonly SystemKind[] = ['confluence', 'gdocs', 'notion'];
 /** How often each is written to: Confluence carries most of it; Notion is rare. */
@@ -51,6 +53,11 @@ export const MCP_SHARE = 0.5;
 /** Is this a Teamwork Graph app (permanent), or a third-party tool (spawned on call, gone when its issue is done)? */
 export function isTwg(kind: SystemKind): boolean {
   return TWG_SYSTEMS.includes(kind);
+}
+
+/** Does it join the Teamwork Graph through a connector (a third-party tool)? */
+export function isThirdParty(kind: SystemKind): boolean {
+  return !isTwg(kind) && !NATIVE_ON_CALL.includes(kind);
 }
 
 /**

@@ -16,11 +16,12 @@ import {
   ticketCard,
 } from '../stage/inspectCards';
 import type { RovoAtlassian } from './rovoAtlassian';
-import { isTwg } from './rovoTasks';
+import { isThirdParty, isTwg } from './rovoTasks';
 import { TEAMWORK_LINKS } from './systemLayout';
 
 const TWG = 'Teamwork Graph';
 const CONNECTOR = 'Third-party, through a connector';
+const ON_CALL = 'Atlassian, up while it is needed';
 
 /**
  * Everything in Rovo on the Atlassian Grid you can hover and click (the
@@ -58,7 +59,7 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
     if (shown(scene.jira)) out.push(node(scene.jira, TWG));
     for (const up of systems.placed.values()) {
       if (!shown(up.node)) continue;
-      out.push(node(up.node, isTwg(up.kind) ? TWG : CONNECTOR));
+      out.push(node(up.node, isTwg(up.kind) ? TWG : isThirdParty(up.kind) ? CONNECTOR : ON_CALL));
       // What's been written back there.
       for (const p of up.writeBacks) {
         out.push({ kind: 'product', object: p, card: () => productCard({ name: PRODUCT_NAME[up.kind], from: SYSTEM_NAME[up.kind], heldBy: SYSTEM_NAME[up.kind] }) });
