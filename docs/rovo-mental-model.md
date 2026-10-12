@@ -1,10 +1,12 @@
 # Rovo mental model
 
-The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end), **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production) and **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident from page to postmortem). Everything here comes from Chad (from 2026-10-09). **If a visual isn't covered here, ask Chad; don't invent one.** To build a story from these rules, see [`mapping-a-story.md`](mapping-a-story.md).
+The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end), **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production) **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident from page to postmortem) and **Rovo Dev** (`src/story/rovoDev.ts`, a developer's day told as the developer's jobs to be done). Everything here comes from Chad (from 2026-10-09). **If a visual isn't covered here, ask Chad; don't invent one.** To build a story from these rules, see [`mapping-a-story.md`](mapping-a-story.md).
 
 ## Who
 
 - **Rovo is the only real agent.** It authenticates at its gate (the gate locks behind it) and works from **Jira**, the quarterback and system of record.
+- **Clouds are the humans in the loop** (Rovo Dev): the team's issues float in on a group of clouds that drifts over Jira's board, and the first cloud drops the card, which slides into To do.
+- **The user's terminal is the developer** in Rovo Dev: it asks Rovo to take the day's issues, and copies report back to it.
 - **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They emerge out of Rovo and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to **Rovo** (the parent, already talking two-way with Jira; never to Jira directly), and waits where it is, yellow, for its next ticket. They fly home into Rovo only when the work stops.
 
 ## Tasks
@@ -37,6 +39,7 @@ Linear, like real life: the Jira issue calls for code → a coding copy → gene
 - **Output:** each merge sends small, fast cubes down the output line into the assembler. Every 2 × 2 × 2 set fuses into a release, which rides a short, fast belt through the portal.
 - **Terminal:** flat on the grid, lines plugging into its back. States: admin, live tail logs (pass turns it green), code gen (a diff view, also used for code review).
 - **Production** (Rovo on Call): past the assembler (no belt), releases cross a **secure glass tunnel** to the **production server**, which serves the rest of the business: a web front, the APIs behind it and the data behind those, each a node whose light is its health, joined by gray lines from caller to callee. A release goes assembler → tunnel → server → along those lines to its service. (In the other stories the release rides the belt into the portal.) Fixes happen at a service: replicas grow in beside it (line first), or its feature flag lowers.
+- **Code review** (Rovo Dev): between check-in and CI, a reviewing copy (its own Jira card) flies to the lane's terminal and reads the diff there, one change at a time. If it asks for changes, it waits (yellow) while the coder writes again and checks in again, then reads it again and approves.
 - **Coding lanes** (worktree → terminal → repo) go to Bitbucket first and spawn out from there (ILI-1004). They fold back up when the work is done.
 
 ## Visual vocabulary
@@ -50,6 +53,7 @@ What things mean on screen. Use these; don't add meanings.
 | Blue dotted line (Graph line) | A link in the Teamwork Graph: Jira to a system, a system to the system it hangs off. |
 | Gray line | Rovo's access line, a coding lane, the output line. |
 | Packet riding a line | Status or a product going home to Jira (the tool's product shape when it carries one). |
+| Cloud (a group drifting over Jira's board) | The team, bringing an issue in: the first cloud drops its card. |
 | Ticket card | A Jira issue, carried by the copy working it; it glows green when shot back to Rovo. |
 | Red card | An open incident (status: stopped). It turns white when it's resolved and goes to Done. |
 | A service's light | Its health: green healthy, yellow degraded (it depends on something down), red down, off out of service. |

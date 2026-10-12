@@ -1,6 +1,6 @@
 # Mapping a story
 
-How to turn a real workflow (shipping a feature, an incident, an onboarding) into a Rovo story on the grid, using only the parts that already exist. The rules of the world are in [`rovo-mental-model.md`](rovo-mental-model.md); this guide is how to apply them. The worked examples are **Rovo ships a feature** (`src/story/rovoFeature.ts`, a fixed plot) and **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident rolled from the seed).
+How to turn a real workflow (shipping a feature, an incident, an onboarding) into a Rovo story on the grid, using only the parts that already exist. The rules of the world are in [`rovo-mental-model.md`](rovo-mental-model.md); this guide is how to apply them. The worked examples are **Rovo ships a feature** (`src/story/rovoFeature.ts`, a fixed plot), **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident rolled from the seed) and **Rovo Dev** (`src/story/rovoDev.ts`, a developer's day rolled from the seed by `rollDevDay`).
 
 ## 1. Write the beats
 
@@ -40,6 +40,8 @@ Every beat must be shown with these. If a beat needs something not on this list,
 | Releases straight from the assembler, no belt or portal | `buildOutput(stage, code, onShipped, handOff)` | `rovoCode.ts` |
 | A release built only when needed | `buildOutputLine()` (a story can send it on, e.g. into production) | `RovoAtlassian` |
 | CI fails once, then passes | `flakyCI = true` before a code task | `RovoAtlassian` |
+| Issues arriving from the team | `cloudDrop(stage, cloud, ticket, target, { escorts })` with `Cloud` (five seeded shapes) and `groupOffsets`; then `hub.addTask()` | `cloudDrop.ts`, `Cloud` |
+| Review a change before CI | override `reviewed(coder, lane)` (Rovo Dev reads the diff at `lane.terminal`) | `RovoAtlassian`, `rovoDev.ts` |
 | Wait for something | `wait`, `tween`, `fly`, `until` on the stage clock | `timeline.ts` |
 | Know a release shipped | `scene.shipped` | `RovoAtlassian` |
 
@@ -57,7 +59,7 @@ const SPEC: Task = {
 };
 ```
 
-Primitives with a Storybook specimen each (`src/primitives/`): Drone, Gate and Padlock, SystemNode (emblems for every system, including JSM, Compass, Statuspage, Datadog, Grafana and the production services; `permanent` for the tall housing with Gearworks; `name` for one of several of a kind), Pad, Terminal (`pass()`, `fail()`), Ticket, Product, Job and RepoTrunk, Branch, GraphEdge, SignalLink, Connection, Conduit and Gateway, Packet, Assembler, Conveyor, Portal, Flag.
+Primitives with a Storybook specimen each (`src/primitives/`): Cloud, Drone, Gate and Padlock, SystemNode (emblems for every system, including JSM, Compass, Statuspage, Datadog, Grafana and the production services; `permanent` for the tall housing with Gearworks; `name` for one of several of a kind), Pad, Terminal (`pass()`, `fail()`), Ticket, Product, Job and RepoTrunk, Branch, GraphEdge, SignalLink, Connection, Conduit and Gateway, Packet, Assembler, Conveyor, Portal, Flag.
 
 ## 3. Check every part against the rules
 

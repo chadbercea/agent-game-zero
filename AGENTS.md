@@ -39,9 +39,9 @@ Several agents may work on this repo at once. **Use your own git worktree** (`gi
 
 Layering: **Primitive → Animation → Stage → Story.**
 
-- **`src/primitives/`:** geometry and materials only, no motion. Drone, Pad, Gate, SystemNode and emblems, Gearworks (gear windows), Terminal, Ticket, Product, Job, Branch, GraphEdge, Gateway, Assembler, Conveyor, Portal, Flag, and more. Each has a `*.stories.ts` specimen.
+- **`src/primitives/`:** geometry and materials only, no motion. Cloud, Drone, Pad, Gate, SystemNode and emblems, Gearworks (gear windows), Terminal, Ticket, Product, Job, Branch, GraphEdge, Gateway, Assembler, Conveyor, Portal, Flag, and more. Each has a `*.stories.ts` specimen.
 - **`src/animation/`:** animators that move primitives (drone flight, gates, signals).
 - **`src/stage/`:** the isometric `Stage`, which owns the camera (`frame`, `centerOn`), the clock (`onTick`, `onRendered`, `skip`) and Detail view. Also `spawnDrone`, `attachSignal` and the hover/click `Inspector`.
-- **`src/story/`:** the Rovo stories and their parts. Start at `rovoAtlassian.ts` (the base scene), then `rovoFeature.ts` (a scripted story built on it) and `rovoOnCall.ts` (a story whose plot is rolled from the seed, with production past the portal).
+- **`src/story/`:** the Rovo stories and their parts. Start at `rovoAtlassian.ts` (the base scene), then `rovoFeature.ts` (a scripted story built on it) `rovoOnCall.ts` (a story whose plot is rolled from the seed, with production past the portal) and `rovoDev.ts` (a developer's day as jobs to be done, issues brought in by clouds).
 - **`src/uiTests/`:** Storybook *UI Tests* section, for design explorations (e.g. permanent-system variants).
 - **`docs/`:** the mental model and the mapping guide.
