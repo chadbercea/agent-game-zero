@@ -145,6 +145,7 @@ export class RovoAtlassian {
   mcpTerminal?: Terminal;
   private mcpSession: Promise<number> = Promise.resolve(0);
   private terminalUp?: Promise<Terminal>;
+  private terminalGrown?: Promise<Terminal>;
   /** Every copy Rovo can run at once. */
   get crew(): number {
     return this.codeCrew + this.loopCrew;
@@ -720,6 +721,17 @@ export class RovoAtlassian {
   /** The user's terminal, brought up the first time a copy reports back: it comes up under the copy, then its line reaches in to Jira. It stays. */
   protected userTerminal(): Promise<Terminal> {
     this.terminalUp ??= (async () => {
+      const terminal = await this.terminalOnly();
+      await this.hub.tie('user-terminal', this.map.userTerminal, undefined, TERMINAL_SIZE / 2 + 0.1, true);
+      this.terminal = terminal;
+      return terminal;
+    })();
+    return this.terminalUp;
+  }
+
+  /** The user's terminal growing in at its place, on its own (no line to Jira yet): a story that starts there brings it up first. */
+  protected terminalOnly(): Promise<Terminal> {
+    this.terminalGrown ??= (async () => {
       const { stage } = this;
       const terminal = new Terminal({ state: 'admin', seed: 7 });
       terminal.position.copy(this.map.userTerminal);
@@ -727,11 +739,9 @@ export class RovoAtlassian {
       stage.add(terminal);
       stage.onTick((dt) => terminal.update(dt));
       await tween(stage, 0.4, (t) => terminal.scale.setScalar(Math.max(0.001, easeOutBack(t))));
-      await this.hub.tie('user-terminal', this.map.userTerminal, undefined, TERMINAL_SIZE / 2 + 0.1, true);
-      this.terminal = terminal;
       return terminal;
     })();
-    return this.terminalUp;
+    return this.terminalGrown;
   }
 
   protected between([lo, hi]: [number, number]): number {
