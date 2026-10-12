@@ -5,8 +5,8 @@ The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`s
 ## Who
 
 - **Rovo is the only real agent.** It authenticates at its gate (the gate locks behind it) and works from **Jira**, the quarterback and system of record.
-- **Clouds are the humans in the loop** (Rovo Dev): the team's issues float in on a group of clouds that drifts over Jira's board, and the first cloud drops the card, which slides into To do.
-- **The user's terminal is the developer** in Rovo Dev: the day starts there. It comes up first and Rovo is started from it (fading in over it), then Rovo goes through its gate into Jira as always; the terminal ties into Jira and asks what's on the plate, and copies report back to it.
+- **Clouds are the humans in the loop** (Rovo Dev): before anything is up, the team files its tickets. A group of clouds drifts over where Jira's board will stand, and the first cloud drops the ticket, which waits there. When Rovo authenticates, Jira comes up downstream and its board takes the waiting tickets into To do.
+- **The developer** (Rovo Dev) hears about a user-facing bug in Slack, from a copy of Rovo; then their terminal (the user's terminal) comes up, ties into Jira and kicks off the work. Copies report back to it, and the fix is posted in Slack, where it started.
 - **Sub-agents are copies of Rovo,** each set up by a Jira task (skills, access, instructions). They emerge out of Rovo and **stay on**: Rovo hands a copy a ticket, it does the task, shoots the finished ticket back to **Rovo** (the parent, already talking two-way with Jira; never to Jira directly), and waits where it is, yellow, for its next ticket. They fly home into Rovo only when the work stops.
 
 ## Tasks
@@ -53,7 +53,7 @@ What things mean on screen. Use these; don't add meanings.
 | Blue dotted line (Graph line) | A link in the Teamwork Graph: Jira to a system, a system to the system it hangs off. |
 | Gray line | Rovo's access line, a coding lane, the output line. |
 | Packet riding a line | Status or a product going home to Jira (the tool's product shape when it carries one). |
-| Cloud (a group drifting over Jira's board) | The team, bringing an issue in: the first cloud drops its card. |
+| Cloud (a group drifting over Jira's board) | The team, filing a ticket: the first cloud drops it, and it waits until Jira takes it in. |
 | Ticket card | A Jira issue, carried by the copy working it; it glows green when shot back to Rovo. |
 | Red card | An open incident (status: stopped). It turns white when it's resolved and goes to Done. |
 | A service's light | Its health: green healthy, yellow degraded (it depends on something down), red down, off out of service. |

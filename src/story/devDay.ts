@@ -10,19 +10,17 @@ import type { Step } from './rovoTasks';
  * | Roll | Outcomes and weights |
  * |---|---|
  * | Issues | 2 (55%) or 3 (45%), each dropped onto Jira by its own group of clouds |
- * | Each issue | bug 50% · feature 30% · chore 20% |
+ * | Each issue | the first is always a user-facing bug (the one Slack tells the developer about); the rest bug 50% · feature 30% · chore 20% |
  * | Understand | bug: Code search · feature: Confluence, then Figma through MCP 50% · chore: the repo (Bitbucket) |
  * | Review | changes requested 30% per issue: the coder writes again, checks in again, and it's reviewed again |
  * | CI | red once, then passes on the retry: 35% (the first change to reach CI) |
- * | Wrap-up | the release notes in Confluence, back to the developer, always · a post in Slack 50% |
+ * | Wrap-up | the release notes in Confluence, back to the developer, and the fix posted in Slack, where it started: always |
  * | Clouds | 1–3 in each group, each a seeded shape; each group's path a little up or down the screen |
  */
 export interface DevDay {
   issues: DevIssue[];
   /** CI tails red once on the first change to reach it, then passes on the retry. */
   flakyCI: boolean;
-  /** A copy posts the release in the team's Slack channel. */
-  slack: boolean;
 }
 
 export interface DevIssue {
@@ -58,9 +56,10 @@ export function rollDevDay(seed: number): DevDay {
   const random = seededRandom(seed * 17 + 3);
   const count = random() < 0.55 ? 2 : 3;
   const used = new Set<string>();
-  const issues = Array.from({ length: count }, (): DevIssue => {
+  const issues = Array.from({ length: count }, (_, i): DevIssue => {
     const r = random();
-    const kind: IssueKind = r < 0.5 ? 'bug' : r < 0.8 ? 'feature' : 'chore';
+    // The first is the user-facing bug the developer hears about in Slack.
+    const kind: IssueKind = i === 0 || r < 0.5 ? 'bug' : r < 0.8 ? 'feature' : 'chore';
     const pool = TITLES[kind].filter((t) => !used.has(t));
     const title = pool[Math.floor(random() * pool.length)];
     used.add(title);
@@ -75,5 +74,5 @@ export function rollDevDay(seed: number): DevDay {
     const tilt = (random() - 0.5) * 0.4;
     return { kind, title, understand, changes, clouds, tilt };
   });
-  return { issues, flakyCI: random() < 0.35, slack: random() < 0.5 };
+  return { issues, flakyCI: random() < 0.35 };
 }
