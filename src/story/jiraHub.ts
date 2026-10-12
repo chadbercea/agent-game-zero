@@ -112,10 +112,10 @@ export class JiraHub {
     return this.kanban.columns[0];
   }
 
-  /** A new task comes into Jira: a white card slides into To do. No room: it waits (returns false). */
-  async addTask(): Promise<boolean> {
+  /** A new task comes into Jira: a white card (red for an incident) slides into To do. No room: it waits (returns false). */
+  async addTask(incident = false): Promise<boolean> {
     if (this.board.length >= BOARD_MAX) return false;
-    this.kanban.addCard();
+    this.kanban.addCard(incident);
     await wait(this.stage, 0.3);
     return true;
   }
@@ -152,6 +152,7 @@ export class JiraHub {
     this.stage.add(card);
     card.position.copy(from);
     card.scale.setScalar(size);
+    card.resolve();
     card.glow = 1;
     const target = new Vector3();
     await tween(this.stage, SHOT_SECONDS, (t) => {

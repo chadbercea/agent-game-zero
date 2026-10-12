@@ -19,6 +19,9 @@ import { layoutSystems, TEAMWORK_LINKS } from './systemLayout';
  * - **The user's terminal** stands near Jira, wherever there's room.
  * - **The mini systems** are laid out last round Jira by the house rules
  *   (systemLayout), clear of all of that, with a seeded spread.
+ * - **Production** (when a story asks for it): past the portal, the way the
+ *   code side flows, in three tiers of service slots (front, APIs, data).
+ *   It turns with the code side.
  *
  * An arrangement whose parts crowd each other is passed over for the next,
  * so every seed still gives one map, the same every time.
@@ -38,6 +41,10 @@ export interface StoryMap {
   routes: Partial<Record<SystemKind, readonly Vector3[]>>;
   /** Where a copy reading Figma through MCP builds its terminal (if Figma is on the map). */
   mcpAt?: Vector3;
+  /** Where a monitoring tool stands, beside Jira Service Management (if JSM is on the map). */
+  monitorAt?: Vector3;
+  /** Production, past the portal (if the story asked for it). */
+  production?: ProductionPlace;
   /** Everything fixed on the map that lines and systems keep clear of. */
   keepClear: Vector3[];
   /** What the camera frames: the map's middle, and how tall a view it needs. */
@@ -78,9 +85,25 @@ export interface CodeSide {
   tieSide: Vector3;
 }
 
+export interface ProductionPlace {
+  /** Where things come out of the portal, on its far side. */
+  exit: Vector3;
+  /** Service slots by tier: [the front], [APIs], [data], each tier across the flow. */
+  tiers: Vector3[][];
+  /** The code side's directions: downstream, and across. */
+  flow: Vector3;
+  across: Vector3;
+  /** Halfway between tiers, along the flow: where lines between tiers turn. */
+  tierGap: number;
+  /** How far apart slots in a tier stand. */
+  slotGap: number;
+}
+
 export interface StoryMapOptions {
   /** The mini systems this story uses, laid out round Jira. */
   mini: readonly SystemKind[];
+  /** Lay out production past the portal. */
+  production?: boolean;
 }
 
 /** How close parts of different groups (hub, Slack, code side) may stand. */
@@ -92,6 +115,14 @@ const MINI_NEAR = 3.5;
 const MINI_SPREAD = 2;
 /** How far an MCP terminal stands from Figma. */
 const MCP_OUT = 2.5;
+
+/** Production in the code side's frame (u downstream, v across): three tiers past the portal. */
+const PRODUCTION = {
+  exitU: 13.75,
+  tierU: [16, 19, 22],
+  slotV: [-1.5, -5, -8.5],
+  frontV: -5,
+} as const;
 
 /**
  * The code side in its own frame: `u` downstream, `v` across, from the gate
@@ -199,6 +230,23 @@ function arrange(
     [code.scm, code.portal],
     [code.scm, code.codesearch],
   ];
+  let production: ProductionPlace | undefined;
+  if (options.production) {
+    const [front, apis, data] = PRODUCTION.tierU;
+    production = {
+      exit: at(PRODUCTION.exitU, PRODUCTION.frontV),
+      tiers: [[at(front, PRODUCTION.frontV)], PRODUCTION.slotV.map((v) => at(apis, v)), PRODUCTION.slotV.map((v) => at(data, v))],
+      flow,
+      across,
+      tierGap: (apis - front) / 2,
+      slotGap: Math.abs(PRODUCTION.slotV[1] - PRODUCTION.slotV[0]),
+    };
+    // Its whole block keeps clear of the rest: every slot, the room replicas take beside them, and the lines between.
+    const [v0, , v2] = PRODUCTION.slotV;
+    const edge = production.slotGap / 2;
+    for (const u of PRODUCTION.tierU) for (const v of [v0 - edge, ...PRODUCTION.slotV, v2 + edge]) codeParts.push(at(u, v));
+    codeLines.push([code.portal, at(front, PRODUCTION.frontV)], [at(front, v0 - edge), at(data, v0 - edge)], [at(front, v2 + edge), at(data, v2 + edge)]);
+  }
 
   // Slack: straight out from Jira, the gateway on its line.
   const slackAt = jira.clone().addScaledVector(slackOut, 10);
@@ -276,10 +324,27 @@ function arrange(
       mcpAt = GRID_DIRS.map((w) => figma.clone().addScaledVector(w, MCP_OUT)).sort((a, b) => room(b) - room(a))[0];
     }
   }
+  // A monitoring tool stands beside JSM, its line straight into JSM along the grid, wherever there's most room.
+  let monitorAt: Vector3 | undefined;
+  if (places.jsm) {
+    const jsm = places.jsm;
+    const others = [...keepClear, jira, ...(Object.values(places) as Vector3[]).filter((p) => p !== jsm)];
+    const lines = Object.values(routes) as Vector3[][];
+    const room = (spot: Vector3) => Math.min(...others.map((o) => o.distanceTo(spot)), ...lines.map((l) => distanceToPolyline(spot.x, spot.z, l) * 2));
+    monitorAt = GRID_DIRS.map((w) => jsm.clone().addScaledVector(w, MCP_OUT)).sort((a, b) => room(b) - room(a))[0];
+    if (room(monitorAt) < LINE_ROOM) return null;
+  }
 
-  const everything = [...taken, userTerminal, rovoStart, ...Object.values(places), ...(mcpAt ? [mcpAt] : [])] as Vector3[];
+  const everything = [
+    ...taken,
+    userTerminal,
+    rovoStart,
+    ...Object.values(places),
+    ...(mcpAt ? [mcpAt] : []),
+    ...(monitorAt ? [monitorAt] : []),
+  ] as Vector3[];
   const { center, viewSize } = frame(everything);
-  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, keepClear, center, viewSize };
+  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, monitorAt, production, keepClear, center, viewSize };
 }
 
 /**

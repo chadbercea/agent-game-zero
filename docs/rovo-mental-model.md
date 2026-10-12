@@ -1,6 +1,6 @@
 # Rovo mental model
 
-The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end) and **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production). Everything here comes from Chad (from 2026-10-09). **If a visual isn't covered here, ask Chad; don't invent one.** To build a story from these rules, see [`mapping-a-story.md`](mapping-a-story.md).
+The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`src/story/rovoAtlassian.ts`, work flowing without end), **Rovo ships a feature** (`src/story/rovoFeature.ts`, one request followed from the ask to production) and **Rovo on Call** (`src/story/rovoOnCall.ts`, an incident from page to postmortem). Everything here comes from Chad (from 2026-10-09). **If a visual isn't covered here, ask Chad; don't invent one.** To build a story from these rules, see [`mapping-a-story.md`](mapping-a-story.md).
 
 ## Who
 
@@ -23,6 +23,8 @@ The rules of the Rovo world, for every story: **Rovo on the Atlassian Grid** (`s
   - **Code search** hangs off Bitbucket (it indexes the repositories): it comes up beside Bitbucket, its line into Bitbucket, and stays once called.
 - **Bitbucket is the repo:** all the code activity is around it.
 - **Third-party tools** (GitHub, GitLab, Google Docs, Notion, Figma, ...) **spawn on call** through a connector and **despawn when their Jira issue is done**. Work written to a tool stays there (write-back).
+- **Incident apps** (Rovo on Call): **Jira Service Management** (JSM, the service desk) and **Compass** (the service catalog, which shows the blast radius) are on the Teamwork Graph and stay once up. **Statuspage** comes up on call (Atlassian, so no connector) for SEV1–2 and folds when the incident is resolved.
+- **Monitoring tools** (Datadog, Grafana) are third-party: one comes up beside JSM when it raises an alert, its line straight into JSM, and goes when the incident is resolved.
 - **Slack** is a standalone, secure, always-busy comms hub behind the glass gateway. It catches comms and sends comms.
 - **The user's terminal** is where copies report back to the human.
 
@@ -33,6 +35,7 @@ Linear, like real life: the Jira issue calls for code → a coding copy → gene
 - **SCMs** (GitHub, Bitbucket, GitLab) share the branch emblem and job; the job ends in a squash merge.
 - **Output:** each merge sends small, fast cubes down the output line into the assembler. Every 2 × 2 × 2 set fuses into a release, which rides a short, fast belt through the portal.
 - **Terminal:** flat on the grid, lines plugging into its back. States: admin, live tail logs (pass turns it green), code gen (a diff view, also used for code review).
+- **Production** is past the portal (Rovo on Call): a web front, the APIs behind it and the data behind those, each a node whose light is its health, joined by gray lines from caller to callee. A release that goes through the portal rides out along those lines to its service. Fixes happen at a service: replicas grow in beside it (line first), or its feature flag lowers.
 - **Coding lanes** (worktree → terminal → repo) go to Bitbucket first and spawn out from there (ILI-1004). They fold back up when the work is done.
 
 ## Visual vocabulary
@@ -47,10 +50,15 @@ What things mean on screen. Use these; don't add meanings.
 | Gray line | Rovo's access line, a coding lane, the output line. |
 | Packet riding a line | Status or a product going home to Jira (the tool's product shape when it carries one). |
 | Ticket card | A Jira issue, carried by the copy working it; it glows green when shot back to Rovo. |
+| Red card | An open incident (status: stopped). It turns white when it's resolved and goes to Done. |
+| A service's light | Its health: green healthy, yellow degraded (it depends on something down), red down, off out of service. |
+| Replica beside a service | More of that service: a failover standby, or extra capacity for a spike. |
+| Flag on a service | A feature flag: raised is on, lowered is off. |
+| Red flash on a terminal | CI failed; it's retried. |
 | Tall housing with gear windows | A permanent (Teamwork Graph) system. Gears turn while it works. |
 | Small plug on a node | A third-party connector into the Teamwork Graph. |
 | Glass gateway with a lock | A secure crossing (Slack). |
-| Cubes, assembler, belt, portal | Code merged, released and shipped to production. |
+| Cubes, assembler, belt, portal | Code merged, released and shipped to production. The release rides on past the portal to its service when production is on the map. |
 
 ## Rules on screen
 
@@ -64,4 +72,5 @@ What things mean on screen. Use these; don't add meanings.
 
 ## Status
 
-- ILI-1004 (rule 5, and lanes spawning out of Bitbucket) is agreed but **not built yet**: today the code side still builds its lanes from the copy's spot and the whole output chain on the first code task.
+- ILI-1004 (rule 5, and lanes spawning out of Bitbucket) is agreed but **not built yet**: today the code side still builds its lanes from the copy's spot and the whole output chain on the first code task. Rovo on Call follows it where it can: the output line, assembler and belt only come up when a fix ships a release, into the portal production already opened.
+- Rovo on Call's dice say 1–3 replicas for a spike; it grows as many as fit beside the service (two at most beside a middle API).

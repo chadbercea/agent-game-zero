@@ -31,6 +31,8 @@ export interface SystemNodeOptions {
   showLabel?: boolean;
   /** A permanent system: stands taller (PERMANENT_RAISE). */
   permanent?: boolean;
+  /** Its name under it, when it's one of several of a kind (a production service: `checkout-api`). The system's name if left out. */
+  name?: string;
 }
 
 /**
@@ -82,7 +84,7 @@ export class SystemNode extends Group {
 
     if (options.showLabel ?? true) {
       const el = document.createElement('div');
-      el.textContent = SYSTEM_NAME[options.kind];
+      el.textContent = options.name ?? SYSTEM_NAME[options.kind];
       Object.assign(el.style, {
         font: '500 11px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
         letterSpacing: '0.04em',

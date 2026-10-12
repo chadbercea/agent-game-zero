@@ -10,7 +10,7 @@ import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { type JiraHub } from './jiraHub';
-import { isTwg } from './rovoTasks';
+import { isThirdParty, isTwg } from './rovoTasks';
 import { tween } from './timeline';
 
 /** One system on the grid: its node, how many open tasks are using it, and whether it stays. */
@@ -99,9 +99,12 @@ export class SystemsOnGrid {
     up.users = Math.max(0, up.users - 1);
     if (up.permanent || up.users > 0) return;
     this.placed.delete(kind);
-    const { node, connector } = up;
-    // The reverse of coming up: its line draws back into it from Jira, then it folds away.
-    await this.hub.untie(up.tie);
+    const { node, connector, link } = up;
+    // The reverse of coming up: its line draws back into it (from Jira, or from the system it hangs off), then it folds away.
+    if (link) {
+      await tween(this.stage, 0.6, (t) => (link.edge.drawn = Math.max(0.001, 1 - t)));
+      link.edge.dispose();
+    } else await this.hub.untie(up.tie);
     await tween(this.stage, 0.4, (t) => {
       node.scale.setScalar(Math.max(0.001, 1 - t));
       node.labelOpacity = 1 - t;
@@ -173,7 +176,7 @@ export class SystemsOnGrid {
       });
       const tie = `system:${kind}:${++this.ups}`;
       // A third-party tool plugs into the Teamwork Graph through a connector first.
-      const connector = permanent ? undefined : this.plug(at);
+      const connector = isThirdParty(kind) ? this.plug(at) : undefined;
       if (connector) await tween(this.stage, 0.25, (t) => connector.scale.setScalar(Math.max(0.001, easeOutBack(t))));
       const parent = this.via[kind] ? this.placed.get(this.via[kind]!) : undefined;
       let link: PlacedSystem['link'];

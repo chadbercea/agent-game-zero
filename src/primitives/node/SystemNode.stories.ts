@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { rowPosition, specimenStage } from '../../stage/specimen';
 import { STATUSES } from '../../core/palette';
-import { SYSTEM_KINDS, type SystemKind } from './emblems';
+import { INCIDENT_KINDS, MONITOR_KINDS, SERVICE_KINDS, SYSTEM_KINDS, type SystemKind } from './emblems';
 import { type NodeLight, SystemNode } from './SystemNode';
 
 const meta: Meta = {
@@ -11,18 +11,26 @@ const meta: Meta = {
 export default meta;
 
 /**
- * Every system's emblem: the Act 1 tools (Figma, GitHub, Notion), the
- * Atlassian tools behind the second gate (Code search, Confluence, Jira,
- * Bitbucket), and Linear, the third-party tracker. Monochrome; told apart by shape.
+ * Every system's emblem, in two rows. Back: the tools on Rovo's grid (Figma,
+ * GitHub, Notion; Code search, Confluence, Jira, Bitbucket; Linear, Google
+ * Docs, GitLab, Slack, the worktree). Front: Rovo on Call's (JSM, Compass,
+ * Statuspage; Datadog, Grafana; the production services: web, API,
+ * database, cache, queue). Monochrome; told apart by shape.
  */
 export const Emblems: StoryObj = {
   render: () => {
     const { root, stage } = specimenStage({ viewSize: 10, focusY: 0.6 });
-    SYSTEM_KINDS.forEach((kind, i) => {
-      const { x, z } = rowPosition(i, SYSTEM_KINDS.length, 1.9);
-      const node = new SystemNode({ kind });
-      node.position.set(x, 0, z);
-      stage.add(node);
+    const onCall = [...INCIDENT_KINDS, ...MONITOR_KINDS, ...SERVICE_KINDS] as readonly SystemKind[];
+    const rows = [SYSTEM_KINDS.filter((k) => !onCall.includes(k)), onCall];
+    rows.forEach((kinds, r) => {
+      // Rows step toward the camera, along the floor.
+      const toward = (r - 0.5) * 2.4 * Math.SQRT1_2;
+      kinds.forEach((kind, i) => {
+        const { x, z } = rowPosition(i, kinds.length, 1.4);
+        const node = new SystemNode({ kind });
+        node.position.set(x + toward, 0, z + toward);
+        stage.add(node);
+      });
     });
     return root;
   },

@@ -14,7 +14,7 @@ import { Job as JobAnimation } from '../primitives/job/Job';
 import { RepoTrunk } from '../primitives/job/RepoTrunk';
 import { hasJob, type ScmKind, type SystemKind } from '../primitives/node/emblems';
 import { PERMANENT_TOP, SystemNode } from '../primitives/node/SystemNode';
-import type { Ticket } from '../primitives/ticket/Ticket';
+import type { Request, Ticket } from '../primitives/ticket/Ticket';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import { attachSignal } from '../stage/attachSignal';
 import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
@@ -36,6 +36,10 @@ export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'gdoc
 export interface RovoStoryOptions {
   /** The mini systems this story uses (all four if left out); only these are laid out on its map. */
   mini?: readonly SystemKind[];
+  /** Lay out production past the portal (storyMap). */
+  production?: boolean;
+  /** Systems that hang off another system rather than Jira, beyond Code search off Bitbucket. */
+  via?: Partial<Record<SystemKind, SystemKind>>;
 }
 
 const WORK: [number, number] = [1.1, 1.9];
@@ -44,7 +48,7 @@ const SWAY = 0.35;
 /** A coder only takes code tasks. */
 const NOT_CODE = TASK_TYPES.filter((t) => t !== 'code');
 /** Little cubes a deploy sends down the output line: two merges fill the assembler's 2 × 2 × 2. */
-const DEPLOY_CUBES = 4;
+export const DEPLOY_CUBES = 4;
 /** A job animation takes a little longer than plain work, so it reads. */
 const JOB_STRETCH = 1.6;
 /** A job animation stands bigger than its tool's emblem, so it reads at this zoom. */
@@ -61,6 +65,12 @@ const LOCK_HEIGHT = 0.9;
 
 /** How high a sub-agent's floor anchor sits for its body to be level with Rovo's body. */
 export const AT_ROVOS_BODY = HOVER_HEIGHT * (1 - SUB_AGENT_SCALE);
+
+/** A copy of Rovo out on the grid, and the height it's flying at. */
+export interface Copy {
+  sub: SpawnedDrone;
+  from: number;
+}
 
 /** One Jira task, run by one copy of Rovo. */
 export interface TaskRun {
@@ -146,6 +156,12 @@ export class RovoAtlassian {
   /** Releases through the portal so far (each a 2 × 2 × 2 of merged code). */
   shipped = 0;
   protected building?: Promise<OutputLine>;
+  /** Little cubes each deploy sends down the output line. */
+  protected deployCubes = DEPLOY_CUBES;
+  /** The next CI run fails once (red), then passes on the retry. */
+  protected flakyCI = false;
+  /** CI runs that failed and were retried. */
+  ciRetries = 0;
   /** Merges at the repo happen one at a time. */
   private merging: Promise<void> = Promise.resolve();
   protected readonly random: () => number;
@@ -158,7 +174,7 @@ export class RovoAtlassian {
     options: RovoStoryOptions = {},
   ) {
     this.random = seededRandom(seed);
-    const map = (this.map = storyMap(seed, { mini: options.mini ?? MINI_SYSTEMS }));
+    const map = (this.map = storyMap(seed, { mini: options.mini ?? MINI_SYSTEMS, production: options.production }));
     this.codeCrew = 1 + Math.floor(this.random() * 3);
     this.loopCrew = 1 + Math.floor(this.random() * Math.min(MAX_LOOPERS, MAX_CREW - this.codeCrew));
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
@@ -193,7 +209,7 @@ export class RovoAtlassian {
     this.places = map.places;
     this.mcpAt = map.mcpAt;
     const tie = map.code.tieSide;
-    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: tie, bitbucket: tie, gitlab: tie }, map.routes, { codesearch: 'bitbucket' });
+    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: tie, bitbucket: tie, gitlab: tie }, map.routes, { codesearch: 'bitbucket', ...options.via });
     let clock = 0;
     stage.onTick((dt) => {
       clock += dt;
@@ -484,7 +500,7 @@ export class RovoAtlassian {
     this.working.set(drone, lane.worktree);
     let repo!: PlacedSystem;
     await lane.build(async () => (repo = await this.systems.call(this.scm)));
-    this.building ??= buildOutput(stage, this.map.code, () => this.shipped++).then((output) => (this.output = output));
+    this.buildOutputLine();
     lane.worktree.light = 'working';
     const signal = attachSignal(stage, drone, lane.worktree);
     const { terminal } = lane;
@@ -495,6 +511,15 @@ export class RovoAtlassian {
     await lane.checkIn(this.scm);
     terminal.state = 'tail';
     await wait(stage, this.between([1.4, 2.2]));
+    if (this.flakyCI) {
+      // A flaky run: it tails red once, and the retry passes.
+      this.flakyCI = false;
+      terminal.fail();
+      await wait(stage, 0.9);
+      terminal.state = 'tail';
+      this.ciRetries++;
+      await wait(stage, this.between([1.2, 1.8]));
+    }
     terminal.pass();
     await wait(stage, 0.4);
     await this.mergeAt(repo.node);
@@ -502,6 +527,12 @@ export class RovoAtlassian {
     signal.detach();
     lane.worktree.light = 'off';
     this.working.delete(drone);
+  }
+
+  /** The output (line, assembler, belt, portal), built the first time it's needed. */
+  protected buildOutputLine(): Promise<OutputLine> {
+    this.building ??= buildOutput(this.stage, this.map.code, () => this.shipped++).then((output) => (this.output = output));
+    return this.building;
   }
 
   /** A squash merge at the repo, one at a time: the branch forks and folds back in, the trunk keeps the commit, and the deploy shoots down the line. */
@@ -527,9 +558,10 @@ export class RovoAtlassian {
       node.emblem.visible = true;
       node.light = 'off';
       // Deployed: small cubes, fast, down the output line.
+      // A cube that finds the line full waits its turn (for a while; past that the deploy moves on).
       const output = await this.building;
-      for (let i = 0; i < DEPLOY_CUBES; i++) {
-        output?.commit();
+      for (let sent = 0, tries = 0; output && sent < this.deployCubes && tries < 80; tries++) {
+        if (output.commit()) sent++;
         await wait(stage, 0.12);
       }
     });
@@ -622,6 +654,54 @@ export class RovoAtlassian {
     });
     this.mcpSession = session.catch(() => 0);
     return session;
+  }
+
+  /** A copy of Rovo, born inside it, full size. */
+  protected async emerge(): Promise<Copy> {
+    const rovo = this.rovo.drone;
+    const sub = spawnDrone(this.stage, rovo.position.x, rovo.position.z, {
+      name: `Rovo.${++this.subs}`,
+      lineage: 'cyan',
+      subAgent: true,
+      status: 'waiting',
+    });
+    sub.drone.position.y = AT_ROVOS_BODY;
+    sub.drone.fade = 0;
+    rovo.flash = 1;
+    await tween(this.stage, EMERGE_SECONDS, (t) => (sub.drone.fade = t));
+    return { sub, from: AT_ROVOS_BODY };
+  }
+
+  /**
+   * Rovo hands `copy` the next card off the board as a Jira issue
+   * (`request`), and the copy runs `task` (in coding lane `lane`, or -1),
+   * shoots the finished card back to Rovo, and waits where it is.
+   */
+  protected async handOver(copy: Copy, task: Task, lane: number, request: Request): Promise<void> {
+    const rovo = this.rovo.drone;
+    const { drone } = copy.sub;
+    rovo.flash = 1;
+    const card = await this.hub.takeTask(drone.rig.hover, rovo.rig.hover, request);
+    if (!card) return;
+    drone.status = 'working';
+    const held: { card: Ticket; run?: TaskRun } = { card };
+    this.copies.set(drone, held);
+    copy.from = await this.runTask(copy.sub, task, card, lane, copy.from, (run) => (held.run = run));
+    this.copies.set(drone, {});
+    drone.status = 'waiting';
+  }
+
+  /** The work is done: the copy flies home into Rovo and fades into it. */
+  protected async home(copy: Copy, delay: number): Promise<void> {
+    const { stage } = this;
+    const rovo = this.rovo.drone;
+    const { drone } = copy.sub;
+    await wait(stage, delay);
+    await fly(stage, DroneFlight.to(drone, rovo.position, { speed: SUB_SPEED, fromHeight: copy.from, toHeight: AT_ROVOS_BODY, lift: 0 }));
+    await tween(stage, 0.3, (t) => (drone.fade = 1 - t));
+    this.copies.delete(drone);
+    copy.sub.despawn();
+    rovo.flash = 1;
   }
 
   /** The user's terminal, brought up the first time a copy reports back: it comes up under the copy, then its line reaches in to Jira. It stays. */

@@ -1,10 +1,12 @@
 import {
   BoxGeometry,
   CylinderGeometry,
+  ExtrudeGeometry,
   Group,
   type Material,
   type Object3D,
   QuadraticBezierCurve3,
+  Shape,
   SphereGeometry,
   TorusGeometry,
   TubeGeometry,
@@ -27,8 +29,24 @@ export type CodeHostKind = 'gitlab';
 export type CommsKind = 'slack';
 /** Where code is written: a worktree, a checkout of the repo a coding agent works in. */
 export type WorkspaceKind = 'worktree';
+/** Atlassian's incident apps (Rovo on Call): the service desk, the service catalog, and the public status page. */
+export type IncidentKind = 'jsm' | 'compass' | 'statuspage';
+/** Third-party monitoring: where an alert can come from. */
+export type MonitorKind = 'datadog' | 'grafana';
+/** Production services, past the portal: what the code ships to. Their light is their health. */
+export type ServiceKind = 'web' | 'api' | 'db' | 'cache' | 'queue';
 /** The systems a gate can lead to. */
-export type SystemKind = JobKind | AtlassianKind | TrackerKind | DocsKind | CodeHostKind | CommsKind | WorkspaceKind;
+export type SystemKind =
+  | JobKind
+  | AtlassianKind
+  | TrackerKind
+  | DocsKind
+  | CodeHostKind
+  | CommsKind
+  | WorkspaceKind
+  | IncidentKind
+  | MonitorKind
+  | ServiceKind;
 
 /** Act 1 systems (outside Atlassian). */
 export const JOB_KINDS: readonly JobKind[] = ['figma', 'github', 'notion'];
@@ -40,6 +58,9 @@ export const DOCS_KINDS: readonly DocsKind[] = ['gdocs'];
 export const CODE_HOST_KINDS: readonly CodeHostKind[] = ['gitlab'];
 export const COMMS_KINDS: readonly CommsKind[] = ['slack'];
 export const WORKSPACE_KINDS: readonly WorkspaceKind[] = ['worktree'];
+export const INCIDENT_KINDS: readonly IncidentKind[] = ['jsm', 'compass', 'statuspage'];
+export const MONITOR_KINDS: readonly MonitorKind[] = ['datadog', 'grafana'];
+export const SERVICE_KINDS: readonly ServiceKind[] = ['web', 'api', 'db', 'cache', 'queue'];
 export const SYSTEM_KINDS: readonly SystemKind[] = [
   ...JOB_KINDS,
   ...ATLASSIAN_KINDS,
@@ -48,7 +69,13 @@ export const SYSTEM_KINDS: readonly SystemKind[] = [
   ...CODE_HOST_KINDS,
   ...COMMS_KINDS,
   ...WORKSPACE_KINDS,
+  ...INCIDENT_KINDS,
+  ...MONITOR_KINDS,
+  ...SERVICE_KINDS,
 ];
+export function isService(kind: SystemKind): kind is ServiceKind {
+  return (SERVICE_KINDS as readonly SystemKind[]).includes(kind);
+}
 /** Source code managers: code is checked in, merged and shipped from these. They share the branch emblem and job. */
 export const SCM_KINDS = ['github', 'bitbucket', 'gitlab'] as const satisfies readonly SystemKind[];
 export type ScmKind = (typeof SCM_KINDS)[number];
@@ -74,6 +101,16 @@ export const SYSTEM_NAME: Record<SystemKind, string> = {
   gitlab: 'GitLab',
   slack: 'Slack',
   worktree: 'Worktree',
+  jsm: 'JSM',
+  compass: 'Compass',
+  statuspage: 'Statuspage',
+  datadog: 'Datadog',
+  grafana: 'Grafana',
+  web: 'Web',
+  api: 'API',
+  db: 'Database',
+  cache: 'Cache',
+  queue: 'Queue',
 };
 
 export interface EmblemMaterials {
@@ -196,6 +233,108 @@ export function buildEmblem(kind: SystemKind, m: EmblemMaterials): Group {
       stripes.add(stripe);
     }
     emblem.add(stripes);
+  } else if (kind === 'jsm') {
+    // The service desk: a concierge bell, a dome on a low base with a button on top.
+    const dome = place(solid(new SphereGeometry(0.17, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), m.shell), 0, -0.08);
+    dome.scale.y = 0.95;
+    place(solid(new CylinderGeometry(0.22, 0.22, 0.04, 20), m.graphite), 0, -0.1);
+    place(solid(new CylinderGeometry(0.016, 0.016, 0.08, 6), m.graphite), 0, 0.12);
+    place(solid(new SphereGeometry(0.035, 10, 6), m.graphite), 0, 0.17);
+  } else if (kind === 'compass') {
+    // The service catalog: a compass, a ring around a needle (one half white, one graphite).
+    const ring = place(solid(new TorusGeometry(0.18, 0.03, 8, 24), m.graphite), 0, 0);
+    ring.rotation.x = 0;
+    place(solid(new CylinderGeometry(0.16, 0.16, 0.02, 20), m.shell), 0, 0, -0.02).rotation.x = Math.PI / 2;
+    for (const [up, mat] of [
+      [1, m.graphite],
+      [-1, m.shell],
+    ] as const) {
+      const half = place(solid(new CylinderGeometry(0, 0.045, 0.14, 4), mat), 0.0, up * 0.07, 0.02);
+      half.rotation.z = up > 0 ? -0.5 : Math.PI - 0.5;
+      half.position.set(up * 0.035, up * 0.06, 0.02);
+    }
+    place(solid(new SphereGeometry(0.025, 8, 6), m.shell), 0, 0, 0.03);
+  } else if (kind === 'statuspage') {
+    // The public status page: a card with a row of uptime bars under a heading.
+    place(solid(new RoundedBoxGeometry(0.42, 0.3, 0.04, 2, 0.03), m.shell), 0, 0);
+    place(solid(new BoxGeometry(0.2, 0.03, 0.012), m.graphite), -0.08, 0.09, 0.024);
+    for (let i = 0; i < 7; i++) place(solid(new BoxGeometry(0.03, 0.1, 0.012), m.graphite), -0.15 + i * 0.05, -0.04, 0.024);
+  } else if (kind === 'datadog') {
+    // Monitoring: a line chart, a jagged line across a card.
+    place(solid(new RoundedBoxGeometry(0.42, 0.3, 0.04, 2, 0.03), m.shell), 0, 0);
+    const points = [
+      [-0.16, -0.08],
+      [-0.08, 0.02],
+      [-0.02, -0.04],
+      [0.06, 0.08],
+      [0.16, -0.02],
+    ];
+    points.slice(1).forEach(([x, y], i) => {
+      const [x0, y0] = points[i];
+      const length = Math.hypot(x - x0, y - y0);
+      const seg = place(solid(new BoxGeometry(length + 0.02, 0.026, 0.014), m.graphite), (x + x0) / 2, (y + y0) / 2, 0.026);
+      seg.rotation.z = Math.atan2(y - y0, x - x0);
+    });
+  } else if (kind === 'grafana') {
+    // Monitoring: a gauge, a half ring with a needle.
+    const arc = place(solid(new TorusGeometry(0.17, 0.035, 8, 20, Math.PI), m.shell), 0, -0.07);
+    arc.rotation.z = 0;
+    place(solid(new CylinderGeometry(0.2, 0.2, 0.04, 20, 1, false, 0, Math.PI), m.graphite), 0, -0.07, -0.03).rotation.set(Math.PI / 2, 0, -Math.PI / 2);
+    const needle = place(solid(new BoxGeometry(0.15, 0.024, 0.014), m.shell), 0.05, -0.02, 0.01);
+    needle.rotation.z = 0.7;
+    place(solid(new SphereGeometry(0.03, 8, 6), m.shell), 0, -0.07, 0.01);
+  } else if (kind === 'web') {
+    // A web front: a browser window, its bar along the top, blocks of page below.
+    place(solid(new RoundedBoxGeometry(0.44, 0.32, 0.04, 2, 0.03), m.shell), 0, 0);
+    place(solid(new BoxGeometry(0.44, 0.06, 0.046), m.graphite), 0, 0.13);
+    place(solid(new BoxGeometry(0.16, 0.14, 0.012), m.graphite), -0.1, -0.04, 0.024);
+    place(solid(new BoxGeometry(0.14, 0.03, 0.012), m.graphite), 0.1, 0.0, 0.024);
+    place(solid(new BoxGeometry(0.14, 0.03, 0.012), m.graphite), 0.1, -0.07, 0.024);
+  } else if (kind === 'api') {
+    // An API: a pair of braces around a dot.
+    for (const side of [-1, 1]) {
+      // One brace, drawn as a thick outline: top arm, upper stem, the point, lower stem, bottom arm.
+      const w = 0.035;
+      const x0 = side * 0.12;
+      // Arms reach in toward the dot; the point juts out.
+      const pts: [number, number][] = [
+        [x0 - side * 0.06, 0.17],
+        [x0, 0.17],
+        [x0, 0.04],
+        [x0 + side * 0.05, 0],
+        [x0, -0.04],
+        [x0, -0.17],
+        [x0 - side * 0.06, -0.17],
+      ];
+      pts.slice(1).forEach(([x, y], i) => {
+        const [px, py] = pts[i];
+        const length = Math.hypot(x - px, y - py);
+        const seg = place(solid(new BoxGeometry(length + w * 0.8, w, 0.05), m.graphite), (x + px) / 2, (y + py) / 2);
+        seg.rotation.z = Math.atan2(y - py, x - px);
+      });
+    }
+    place(solid(new SphereGeometry(0.045, 10, 8), m.shell), 0, 0);
+  } else if (kind === 'db') {
+    // A database: three stacked discs, graphite seams between them.
+    for (let i = 0; i < 3; i++) place(solid(new CylinderGeometry(0.17, 0.17, 0.1, 20), m.shell), 0, -0.12 + i * 0.12);
+    for (let i = 0; i < 2; i++) place(solid(new CylinderGeometry(0.175, 0.175, 0.02, 20), m.graphite), 0, -0.06 + i * 0.12);
+  } else if (kind === 'cache') {
+    // A cache: a bolt, for fast.
+    const bolt = new Shape();
+    bolt.moveTo(0.04, 0.2);
+    bolt.lineTo(-0.12, -0.02);
+    bolt.lineTo(-0.01, -0.02);
+    bolt.lineTo(-0.05, -0.2);
+    bolt.lineTo(0.12, 0.04);
+    bolt.lineTo(0.01, 0.04);
+    bolt.closePath();
+    const geometry = new ExtrudeGeometry(bolt, { depth: 0.06, bevelEnabled: false });
+    geometry.translate(0, 0, -0.03);
+    place(solid(geometry, m.shell), 0, 0);
+  } else if (kind === 'queue') {
+    // A queue: three messages in a row on a rail, waiting their turn.
+    place(solid(new BoxGeometry(0.46, 0.03, 0.08), m.graphite), 0, -0.08);
+    for (let i = 0; i < 3; i++) place(solid(new RoundedBoxGeometry(0.11, 0.11, 0.11, 2, 0.02), m.shell), -0.14 + i * 0.14, 0.0);
   } else {
     // Docs: a small stack of ruled pages, the same pages the Notion job stacks up.
     const stack = new Group();
