@@ -135,7 +135,11 @@ const ROOM = 2.5;
 const LINE_ROOM = 1.5;
 /** How far out the mini systems' ring starts from Jira, and how much the seed adds. */
 const MINI_NEAR = 3.5;
-const MINI_SPREAD = 2;
+const MINI_SPREAD = 1.5;
+/** How far Slack stands out from Jira, closest first (farther only where close doesn't fit); its gateway (2 long) sits on the line between, a little short of Slack. */
+const SLACK_OUT = [6.5, 8];
+/** Arrangements that fit, tried before the most compact is chosen. */
+const CANDIDATES = 3;
 /** How far an MCP terminal stands from Figma. */
 const MCP_OUT = 2.5;
 /** How far Jira's line to the repo keeps from anything standing: a clear node's width past its edge. */
@@ -155,9 +159,9 @@ const PHONE_OUT = 2.5;
  * services in three tiers (the front, APIs, data).
  */
 const PRODUCTION = {
-  tunnelU: [10.5, 12.5],
-  serverU: 14.5,
-  tierU: [17.5, 20.5, 23.5],
+  tunnelU: [9.3, 11.3],
+  serverU: 12.8,
+  tierU: [15, 17.5, 20],
   slotV: [-1.5, -5, -8.5],
   frontV: -5,
 } as const;
@@ -167,16 +171,16 @@ const PRODUCTION = {
  * (this is the original layout, gate at the origin, flowing along +x).
  */
 const CODE = {
-  scm: [7, -5],
-  codesearch: [7, -8],
+  scm: [6, -5],
+  codesearch: [6, -8],
   laneV: [-5, -3, -7],
   worktreeU: 1.5,
-  terminalU: 4,
-  mergeU: 5.3,
-  assembler: [9.5, -5],
-  beltFrom: [10.4, -5],
-  beltLength: 2.2,
-  portal: [13.2, -5],
+  terminalU: 3.5,
+  mergeU: 4.5,
+  assembler: [8, -5],
+  beltFrom: [8.9, -5],
+  beltLength: 1.8,
+  portal: [11.3, -5],
 } as const;
 
 const GRID_DIRS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
@@ -211,15 +215,23 @@ export function storyMap(seed: number, options: StoryMapOptions): StoryMap {
     [1, 3],
     [3, 1],
   ]);
-  for (const [gx, gz] of gates) {
+  // The first few that fit, in the seed's order; the most compact of them is the map (the seed still picks which few).
+  const fits: StoryMap[] = [];
+  search: for (const [gx, gz] of gates) {
     for (const { turn, mirror } of turns) {
       for (const out of sides) {
-        const map = arrange(seed, random, options, new Vector3(gx, 0, gz), turn, mirror, out, terminals);
-        if (map) return map;
+        for (const slackOut of SLACK_OUT) {
+          const map = arrange(seed, random, options, new Vector3(gx, 0, gz), turn, mirror, out, slackOut, terminals);
+          if (!map) continue;
+          fits.push(map);
+          if (fits.length >= CANDIDATES) break search;
+          break;
+        }
       }
     }
   }
-  throw new Error(`storyMap: no arrangement fits for seed ${seed}`);
+  if (!fits.length) throw new Error(`storyMap: no arrangement fits for seed ${seed}`);
+  return fits.reduce((best, m) => (m.viewSize < best.viewSize ? m : best));
 }
 
 function arrange(
@@ -230,6 +242,7 @@ function arrange(
   turn: number,
   mirror: boolean,
   slackOut: Vector3,
+  slackDistance: number,
   terminalOffsets: number[][],
 ): StoryMap | null {
   // Jira at the origin; everything else from there.
@@ -297,9 +310,9 @@ function arrange(
   }
 
   // Slack: straight out from Jira, the gateway on its line.
-  const slackAt = jira.clone().addScaledVector(slackOut, 10);
-  const slackEnd = jira.clone().addScaledVector(slackOut, 8);
-  const jiraEnd = jira.clone().addScaledVector(slackOut, 6);
+  const slackAt = jira.clone().addScaledVector(slackOut, slackDistance);
+  const slackEnd = jira.clone().addScaledVector(slackOut, slackDistance - 1.5);
+  const jiraEnd = jira.clone().addScaledVector(slackOut, slackDistance - 3.5);
   const alongX = slackOut.x !== 0;
   const s0 = alongX ? slackEnd.x : slackEnd.z;
   const s1 = alongX ? jiraEnd.x : jiraEnd.z;
@@ -582,6 +595,6 @@ function frame(points: Vector3[]): { center: Vector3; viewSize: number } {
   const sum = -cu * Math.sqrt(6);
   const diff = cr * Math.SQRT2;
   const center = new Vector3((sum + diff) / 2, 0.6, (sum - diff) / 2);
-  const viewSize = Math.max(u1 - u0 + 3.5, (r1 - r0 + 3) / (16 / 9)) * 1.12;
+  const viewSize = Math.max(u1 - u0 + 3, (r1 - r0 + 2.5) / (16 / 9)) * 1.04;
   return { center, viewSize };
 }
