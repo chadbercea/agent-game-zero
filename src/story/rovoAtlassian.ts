@@ -166,6 +166,8 @@ export class RovoAtlassian {
   ciRetries = 0;
   /** Merges at the repo happen one at a time. */
   private merging: Promise<void> = Promise.resolve();
+  /** Copies update the user's terminal one at a time. */
+  private reporting: Promise<void> = Promise.resolve();
   protected readonly random: () => number;
   protected running = false;
   protected subs = 0;
@@ -457,18 +459,23 @@ export class RovoAtlassian {
       run.done++;
     }
     if (run.task.reportToUser) {
-      // Last, the copy updates the terminal back to the user.
-      await fly(stage, DroneFlight.to(sub.drone, this.map.userTerminal, { speed: SUB_SPEED, fromHeight: from, lift: 0 }));
+      // Last, the copy updates the terminal back to the user: one copy at the terminal at a time, the others wait their turn where they are.
+      const fromHere = from;
+      const report = this.reporting.then(async () => {
+        await fly(stage, DroneFlight.to(sub.drone, this.map.userTerminal, { speed: SUB_SPEED, fromHeight: fromHere, lift: 0 }));
+        const terminal = await this.userTerminal();
+        this.working.set(sub.drone, terminal);
+        terminal.state = 'tail';
+        await wait(stage, this.between(WORK));
+        terminal.pass();
+        await wait(stage, 0.5);
+        terminal.state = 'admin';
+        this.working.delete(sub.drone);
+        this.userReports++;
+      });
+      this.reporting = report.catch(() => {});
+      await report;
       from = 0;
-      const terminal = await this.userTerminal();
-      this.working.set(sub.drone, terminal);
-      terminal.state = 'tail';
-      await wait(stage, this.between(WORK));
-      terminal.pass();
-      await wait(stage, 0.5);
-      terminal.state = 'admin';
-      this.working.delete(sub.drone);
-      this.userReports++;
     }
 
     // The task is done: a coding copy collapses its lane back into itself, then the card is shot to Rovo.
@@ -511,6 +518,7 @@ export class RovoAtlassian {
     terminal.state = 'diff';
     await wait(stage, this.between([2.2, 3.2]));
     await lane.checkIn(this.scm);
+    await this.reviewed(drone, lane);
     terminal.state = 'tail';
     await wait(stage, this.between([1.4, 2.2]));
     if (this.flakyCI) {
@@ -530,6 +538,9 @@ export class RovoAtlassian {
     lane.worktree.light = 'off';
     this.working.delete(drone);
   }
+
+  /** Between check-in and CI: a story can have the change reviewed here (Rovo Dev). None by default. */
+  protected async reviewed(_coder: Drone, _lane: CodeLane): Promise<void> {}
 
   /** The output (line, assembler, belt, portal), built the first time it's needed. */
   protected buildOutputLine(): Promise<OutputLine> {
