@@ -1,5 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, type Vector3 } from 'three';
 import { GRID } from '../../core/grid';
+import { distanceToRect, type FloorRect } from '../unit/unitLayout';
 import { distanceToPolyline } from './gridPath';
 
 const LINE_COLOR = [0.62, 0.64, 0.69];
@@ -9,10 +10,12 @@ const PIECE = GRID / 4;
 /**
  * The faint floor grid around a path: grid lines near the path, fading to
  * white with distance from it. `opacity` (0–1) fades the whole patch, so it
- * can come and go with its branch.
+ * can come and go with its branch. `clear` keeps the grid off the floor
+ * inside each rectangle (a grounded unit), fading back in over one grid
+ * square outside it.
  */
 export class GridPatch extends LineSegments<BufferGeometry, LineBasicMaterial> {
-  constructor(path: Vector3[], reach = 2.2, strength = 0.5) {
+  constructor(path: Vector3[], reach = 2.2, strength = 0.5, clear: readonly FloorRect[] = []) {
     const xs = path.map((p) => p.x);
     const zs = path.map((p) => p.z);
     const snapDown = (v: number) => Math.floor(v / GRID) * GRID;
@@ -26,7 +29,8 @@ export class GridPatch extends LineSegments<BufferGeometry, LineBasicMaterial> {
     const colors: number[] = [];
     const alphaAt = (x: number, z: number) => {
       const d = distanceToPolyline(x, z, path);
-      return strength * Math.max(0, 1 - d / reach) ** 2;
+      const kept = clear.reduce((k, rect) => Math.min(k, distanceToRect(x, z, rect) / GRID), 1);
+      return strength * Math.max(0, 1 - d / reach) ** 2 * kept;
     };
     const piece = (x0: number, z0: number, x1: number, z1: number) => {
       const a0 = alphaAt(x0, z0);
