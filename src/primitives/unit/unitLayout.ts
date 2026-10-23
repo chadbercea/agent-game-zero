@@ -17,9 +17,9 @@ export type BorderSide = '-x' | '+x' | '-z' | '+z';
 
 /** Space between the border and what it wraps, and between the node and its panel: half a grid square. */
 export const UNIT_MARGIN = GRID / 2;
-/** The panel's long side. The node is 2 / 5 of it (ILI-1070: 1/3 to 1/2). */
+/** The panel's long side. A plain node is 2 / 5 of it (ILI-1070: 1/3 to 1/2). */
 export const PANEL_LENGTH = 2.5 * NODE_FOOTPRINT;
-/** The panel's short side: as deep as the node. */
+/** The panel's short side: as deep as a plain node. */
 export const PANEL_DEPTH = NODE_FOOTPRINT;
 
 export interface UnitLayout {
@@ -33,10 +33,11 @@ export interface UnitLayout {
  * centered on the origin (its edges on grid lines, as every node's are), the
  * panel beside it or below it, and the border around both. The node keeps its
  * corner whichever way the panel goes; the panel is the same landscape strip
- * either way, so it always reads the same way up.
+ * either way, so it always reads the same way up. `nodeSize` is the node's
+ * width as it stands (a hub stands bigger than a plain node).
  */
-export function unitLayout(direction: PanelDirection): UnitLayout {
-  const h = NODE_FOOTPRINT / 2;
+export function unitLayout(direction: PanelDirection, nodeSize = NODE_FOOTPRINT): UnitLayout {
+  const h = nodeSize / 2;
   const node = { minX: -h, maxX: h, minZ: -h, maxZ: h };
   const panel =
     direction === 'x'
