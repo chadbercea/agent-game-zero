@@ -10,7 +10,6 @@ import {
   Vector3,
 } from 'three';
 import { GridFade } from '../branch/GridFade';
-import type { FloorRect } from '../unit/unitLayout';
 
 /** The Teamwork Graph's color: its own layer, apart from status, lineage and the gray access traces. */
 export const GRAPH_COLOR = new Color('#5b74d9');
@@ -44,8 +43,7 @@ export class GraphEdge extends Group {
   private _drawn = 0;
   private flow = 0;
 
-  /** `clear`: floor its grid stays off, such as the grounded units it joins (see GridPatch). */
-  constructor(path: Curve<Vector3>, clear: readonly FloorRect[] = []) {
+  constructor(path: Curve<Vector3>) {
     super();
     this.path = path;
     this.length = path.getLength();
@@ -54,7 +52,7 @@ export class GraphEdge extends Group {
     this.dots = new InstancedMesh((dotGeometry ??= new SphereGeometry(DOT_RADIUS, 6, 4)), this.material, this.capacity);
     this.dots.frustumCulled = false;
     this.add(this.dots);
-    this.grid = new GridFade(path, clear);
+    this.grid = new GridFade(path);
     this.grid.follow(this);
     this.drawn = 0;
   }

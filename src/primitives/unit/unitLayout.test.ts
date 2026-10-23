@@ -1,6 +1,7 @@
+import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { GRID, NODE_FOOTPRINT } from '../../core/grid';
-import { attachPoint, distanceToRect, PANEL_LENGTH, unitLayout } from './unitLayout';
+import { attachPoint, distanceToRect, PANEL_LENGTH, pickAttachments, scaleRect, unitLayout } from './unitLayout';
 
 const width = (r: { minX: number; maxX: number }) => r.maxX - r.minX;
 
@@ -65,5 +66,38 @@ describe('distanceToRect', () => {
     expect(distanceToRect(0.5, 0.5, r)).toBe(0);
     expect(distanceToRect(2, 0.5, r)).toBe(1);
     expect(distanceToRect(4, 5, r)).toBe(5);
+  });
+});
+
+describe('pickAttachments', () => {
+  const { border } = unitLayout('x');
+
+  it('uses the side facing the target, nearest grid line first, never the same point twice', () => {
+    const east = new Vector3(8, 0, 0);
+    const picks = pickAttachments(border, [east, east, east]);
+    expect(picks.map((p) => p.side)).toEqual(['+x', '+x', '+x']);
+    expect(picks.map((p) => p.point.z)).toEqual([0, -0.5, 0.5]);
+    expect(picks.every((p) => p.point.x === border.maxX)).toBe(true);
+  });
+
+  it('picks the axis the target is farther out along', () => {
+    const [below] = pickAttachments(border, [new Vector3(1, 0, 6)]);
+    expect(below.side).toBe('+z');
+    expect(below.point.toArray()).toEqual([1, 0, border.maxZ]);
+    const [west] = pickAttachments(border, [new Vector3(-6, 0, 2)]);
+    expect(west.side).toBe('-x');
+    expect(west.point.z).toBe(0.5);
+  });
+
+  it('refuses a target over the border, and a side with no grid lines left', () => {
+    expect(() => pickAttachments(border, [new Vector3(1, 0, 0)])).toThrow(/over the border/);
+    const east = new Vector3(8, 0, 0);
+    expect(() => pickAttachments(border, [east, east, east, east])).toThrow(/no free grid line/);
+  });
+});
+
+describe('scaleRect', () => {
+  it('folds a rectangle toward the origin', () => {
+    expect(scaleRect({ minX: -1, maxX: 3, minZ: -1, maxZ: 1 }, 0.5)).toEqual({ minX: -0.5, maxX: 1.5, minZ: -0.5, maxZ: 0.5 });
   });
 });

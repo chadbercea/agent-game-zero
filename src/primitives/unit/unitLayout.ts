@@ -79,6 +79,44 @@ export function attachPoint(border: FloorRect, side: BorderSide, at: number): Ve
   }
 }
 
+/** `rect` scaled by `k` about the origin (a unit folding into its node). */
+export function scaleRect(rect: FloorRect, k: number): FloorRect {
+  return { minX: rect.minX * k, maxX: rect.maxX * k, minZ: rect.minZ * k, maxZ: rect.maxZ * k };
+}
+
+/** Where a line leaves a unit: the side of its border and the point on it. */
+export interface Attachment {
+  side: BorderSide;
+  point: Vector3;
+}
+
+/**
+ * Attach points for lines leaving `border` toward each of `targets`, in
+ * order: each on the side that faces its target (the axis it's farther out
+ * along), at the grid line on that side nearest the target, and never on a
+ * point an earlier line took. Throws if a target is over the border or a
+ * side runs out of grid lines.
+ */
+export function pickAttachments(border: FloorRect, targets: readonly Vector3[]): Attachment[] {
+  const taken = new Set<string>();
+  return targets.map((t) => {
+    const outX = Math.max(border.minX - t.x, 0, t.x - border.maxX);
+    const outZ = Math.max(border.minZ - t.z, 0, t.z - border.maxZ);
+    if (outX === 0 && outZ === 0) throw new Error(`target (${t.x}, ${t.z}) is over the border`);
+    const side: BorderSide =
+      outX >= outZ ? (t.x > border.maxX ? '+x' : '-x') : t.z > border.maxZ ? '+z' : '-z';
+    const alongZ = side === '-x' || side === '+x';
+    const [lo, hi] = alongZ ? [border.minZ, border.maxZ] : [border.minX, border.maxX];
+    const want = alongZ ? t.z : t.x;
+    const lines: number[] = [];
+    for (let i = Math.floor(lo / GRID) + 1; i * GRID < hi - 1e-6; i++) if (i * GRID > lo + 1e-6) lines.push(i * GRID);
+    const free = lines.filter((at) => !taken.has(`${side}:${at}`)).sort((a, b) => Math.abs(a - want) - Math.abs(b - want));
+    if (!free.length) throw new Error(`no free grid line on the ${side} side`);
+    taken.add(`${side}:${free[0]}`);
+    return { side, point: attachPoint(border, side, free[0]) };
+  });
+}
+
 /** Distance from a floor point to `rect` (0 inside it). */
 export function distanceToRect(x: number, z: number, rect: FloorRect): number {
   const dx = Math.max(rect.minX - x, 0, x - rect.maxX);
