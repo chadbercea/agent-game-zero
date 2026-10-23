@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { FACE_CAMERA, NODE_FOOTPRINT } from '../../core/grid';
 import { NEUTRAL, STATUS_COLOR, type Status } from '../../core/palette';
 import { PAD_TOP, Pad } from '../pad/Pad';
+import { GroundPanel } from '../unit/GroundPanel';
 import { Gearworks } from './Gearworks';
 import { buildEmblem, SYSTEM_NAME, type SystemKind } from './emblems';
 
@@ -155,6 +156,7 @@ export class SystemNode extends Group {
 
   dispose(): void {
     this.removeFromParent();
+    for (const child of [...this.children]) if (child instanceof GroundPanel) child.dispose();
     this.pad.dispose();
     this.gearworks?.dispose();
     this.label?.element.remove();

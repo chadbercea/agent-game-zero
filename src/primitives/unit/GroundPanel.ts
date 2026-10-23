@@ -1,6 +1,7 @@
-import { CanvasTexture, DoubleSide, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three';
+import { CanvasTexture, DoubleSide, Group, Mesh, MeshBasicMaterial, type Object3D, PlaneGeometry, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three';
+import { NODE_FOOTPRINT } from '../../core/grid';
 import type { Status } from '../../core/palette';
-import { type NodeLight, SystemNode, type SystemNodeOptions } from '../node/SystemNode';
+import type { NodeLight } from '../node/SystemNode';
 import { GROUND_CLAIM, type GroundClaim } from './groundClaims';
 import { type FloorRect, offsetRect, type PanelDirection, scaleRect, type UnitLayout, unitLayout } from './unitLayout';
 
@@ -42,35 +43,46 @@ const CLAIM_MIN_SCALE = 0.05;
 const worldPosition = new Vector3();
 const worldScale = new Vector3();
 
+export interface GroundPanelOptions {
+  direction: PanelDirection;
+  /** The node's scale when it's fully up (a hub or a Teamwork Graph app stands bigger); the panel stays true size whatever it is. */
+  fullScale?: number;
+  /** What to show, read fresh each frame; the panel repaints when it changes. */
+  data: () => GroundPanelData;
+}
+
 /**
- * Grounded unit primitive (ILI-1070): a system node and its panel, drawn as
- * one footprint on the floor. The node holds the unit's upper-left corner;
- * the panel lies flat beside it (`direction` 'x') or below it ('z'), showing
- * the node card's facts; one light gray border wraps both. Lines end on the
- * border, each at its own point (unitLayout's pickAttachments). The unit's
- * origin is the node's center, so place it on a grid point like any node,
- * and bring it up or fold it away by its scale, as nodes do. While it's up,
- * the grid under any line stays off its floor (groundClaims).
+ * Ground panel primitive (ILI-1070): the floor half of a grounded unit. It
+ * hangs off a system node as its child, so it comes up, folds away and hides
+ * with the node, and everything that uses the node's position still finds
+ * the node's center. The node holds the unit's upper-left corner; the panel
+ * lies flat beside it (`direction` 'x') or below it ('z'), showing the node
+ * card's facts; one light gray border wraps both. Lines end on the border
+ * (unitLayout). While the node is up, the grid under any line stays off the
+ * unit's floor (groundClaims). Make the node with `showLabel: false`: the
+ * panel names it.
  */
-export class GroundUnit extends Group {
-  readonly node: SystemNode;
+export class GroundPanel extends Group {
   readonly direction: PanelDirection;
-  /** Its parts, in the unit's own frame. */
+  /** Its parts, in world units about the node's center at full size. */
   readonly layout: UnitLayout;
+  private readonly data: () => GroundPanelData;
+  private shown = '';
   private readonly canvas: HTMLCanvasElement;
   private readonly texture: CanvasTexture;
   private readonly panel: Mesh<PlaneGeometry, MeshBasicMaterial>;
   private readonly border: Mesh<ShapeGeometry, MeshBasicMaterial>;
 
-  constructor(options: SystemNodeOptions & { direction: PanelDirection; panel: GroundPanelData }) {
+  constructor(node: Object3D, options: GroundPanelOptions) {
     super();
+    const fullScale = options.fullScale ?? 1;
     this.direction = options.direction;
-    this.layout = unitLayout(options.direction);
-    this.name = `unit:${options.kind}`;
-
-    // The panel names it, so the node's floating name tag stays off.
-    this.node = new SystemNode({ ...options, showLabel: false });
-    this.add(this.node);
+    this.layout = unitLayout(options.direction, NODE_FOOTPRINT * fullScale);
+    this.data = options.data;
+    this.name = 'ground-panel';
+    // Undo the node's own scale, so at full size the panel is true size.
+    this.scale.setScalar(1 / fullScale);
+    node.add(this);
 
     const { panel, border } = this.layout;
     const width = panel.maxX - panel.minX;
@@ -89,6 +101,7 @@ export class GroundUnit extends Group {
     this.panel.rotation.x = -Math.PI / 2;
     this.panel.position.set((panel.minX + panel.maxX) / 2, PANEL_Y, (panel.minZ + panel.maxZ) / 2);
     this.panel.renderOrder = -1;
+    this.panel.onBeforeRender = () => this.refresh();
     this.add(this.panel);
 
     this.border = new Mesh(
@@ -100,7 +113,7 @@ export class GroundUnit extends Group {
     this.border.renderOrder = -1;
     this.add(this.border);
 
-    this.show(options.panel);
+    this.refresh();
     this.userData[GROUND_CLAIM] = (() => {
       const k = this.getWorldScale(worldScale).x;
       if (k < CLAIM_MIN_SCALE) return null;
@@ -109,13 +122,18 @@ export class GroundUnit extends Group {
     }) satisfies GroundClaim;
   }
 
-  /** The border's rectangle on the floor at full size, where the unit stands (for attach points). */
+  /** The border's rectangle on the floor at full size, where the node stands (for attach points and laying out). */
   get footprint(): FloorRect {
-    return offsetRect(this.layout.border, this.position.x, this.position.z);
+    const at = this.parent?.position ?? worldPosition.set(0, 0, 0);
+    return offsetRect(this.layout.border, at.x, at.z);
   }
 
-  /** Paint the panel with `data` (call again when the node's state changes). */
-  show(data: GroundPanelData): void {
+  /** Repaint if what it shows has changed. */
+  refresh(): void {
+    const data = this.data();
+    const key = JSON.stringify(data);
+    if (key === this.shown) return;
+    this.shown = key;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -127,7 +145,6 @@ export class GroundUnit extends Group {
 
   dispose(): void {
     this.removeFromParent();
-    this.node.dispose();
     this.texture.dispose();
     this.panel.geometry.dispose();
     this.panel.material.dispose();
