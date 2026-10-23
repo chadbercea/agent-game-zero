@@ -1,5 +1,4 @@
 import { type Curve, MathUtils, type Object3D, type Vector3 } from 'three';
-import type { FloorRect } from '../unit/unitLayout';
 import { GridPatch } from './GridPatch';
 
 /**
@@ -39,14 +38,15 @@ export class GridFade {
   private held = false;
   private last = -1;
 
-  /** `clear`: floor the grid stays off (see GridPatch). */
-  constructor(path: Curve<Vector3> | Vector3[], clear: readonly FloorRect[] = []) {
+  constructor(path: Curve<Vector3> | Vector3[]) {
     const points = Array.isArray(path)
       ? path
       : path.getSpacedPoints(Math.max(2, Math.ceil(path.getLength() * SAMPLES_PER_UNIT)));
-    this.patch = new GridPatch(points, undefined, undefined, clear);
+    this.patch = new GridPatch(points);
     this.patch.opacity = 0;
-    this.patch.onBeforeRender = () => {
+    const clear = this.patch.onBeforeRender;
+    this.patch.onBeforeRender = (...args) => {
+      clear.apply(this.patch, args);
       const now = performance.now() / 1000;
       if (this.last >= 0) this.update(Math.min(MAX_STEP, now - this.last));
       this.last = now;

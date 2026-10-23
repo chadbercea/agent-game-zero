@@ -1,5 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, type Vector3 } from 'three';
 import { GRID } from '../../core/grid';
+import { groundClaims } from '../unit/groundClaims';
 import { distanceToRect, type FloorRect } from '../unit/unitLayout';
 import { distanceToPolyline } from './gridPath';
 
@@ -10,12 +11,17 @@ const PIECE = GRID / 4;
 /**
  * The faint floor grid around a path: grid lines near the path, fading to
  * white with distance from it. `opacity` (0–1) fades the whole patch, so it
- * can come and go with its branch. `clear` keeps the grid off the floor
- * inside each rectangle (a grounded unit), fading back in over one grid
- * square outside it.
+ * can come and go with its branch. It stays off the floor any grounded unit
+ * claims (groundClaims), fading back in over one grid square outside it, and
+ * follows the units as they come and go.
  */
 export class GridPatch extends LineSegments<BufferGeometry, LineBasicMaterial> {
-  constructor(path: Vector3[], reach = 2.2, strength = 0.5, clear: readonly FloorRect[] = []) {
+  /** Each vertex's alpha before any unit clears it. */
+  private readonly baseAlpha: Float32Array;
+  /** The claims the alphas were last cleared for, as a key. */
+  private clearedFor = '';
+
+  constructor(path: Vector3[], reach = 2.2, strength = 0.5) {
     const xs = path.map((p) => p.x);
     const zs = path.map((p) => p.z);
     const snapDown = (v: number) => Math.floor(v / GRID) * GRID;
@@ -29,8 +35,7 @@ export class GridPatch extends LineSegments<BufferGeometry, LineBasicMaterial> {
     const colors: number[] = [];
     const alphaAt = (x: number, z: number) => {
       const d = distanceToPolyline(x, z, path);
-      const kept = clear.reduce((k, rect) => Math.min(k, distanceToRect(x, z, rect) / GRID), 1);
-      return strength * Math.max(0, 1 - d / reach) ** 2 * kept;
+      return strength * Math.max(0, 1 - d / reach) ** 2;
     };
     const piece = (x0: number, z0: number, x1: number, z1: number) => {
       const a0 = alphaAt(x0, z0);
@@ -52,6 +57,24 @@ export class GridPatch extends LineSegments<BufferGeometry, LineBasicMaterial> {
     super(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, opacity: 0 }));
     this.renderOrder = -2;
     this.frustumCulled = false;
+    this.baseAlpha = Float32Array.from({ length: colors.length / 4 }, (_, i) => colors[i * 4 + 3]);
+    this.onBeforeRender = (renderer, scene) => this.clearFor(groundClaims(scene, renderer.info.render.frame));
+  }
+
+  /** Clear the grid off `rects` (and only them), if they've changed since last time. */
+  clearFor(rects: readonly FloorRect[]): void {
+    const key = rects.map((r) => `${r.minX},${r.maxX},${r.minZ},${r.maxZ}`).join(';');
+    if (key === this.clearedFor) return;
+    this.clearedFor = key;
+    const position = this.geometry.getAttribute('position');
+    const color = this.geometry.getAttribute('color');
+    for (let i = 0; i < this.baseAlpha.length; i++) {
+      const x = position.getX(i);
+      const z = position.getZ(i);
+      const kept = rects.reduce((k, rect) => Math.min(k, distanceToRect(x, z, rect) / GRID), 1);
+      color.setW(i, this.baseAlpha[i] * kept);
+    }
+    color.needsUpdate = true;
   }
 
   get opacity(): number {

@@ -1,7 +1,8 @@
-import { CanvasTexture, DoubleSide, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, SRGBColorSpace } from 'three';
+import { CanvasTexture, DoubleSide, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three';
 import type { Status } from '../../core/palette';
 import { type NodeLight, SystemNode, type SystemNodeOptions } from '../node/SystemNode';
-import { type FloorRect, offsetRect, type PanelDirection, type UnitLayout, unitLayout } from './unitLayout';
+import { GROUND_CLAIM, type GroundClaim } from './groundClaims';
+import { type FloorRect, offsetRect, type PanelDirection, scaleRect, type UnitLayout, unitLayout } from './unitLayout';
 
 /** What the panel shows: the node card's facts (inspectCards' nodeCard), laid out for a strip on the floor. */
 export interface GroundPanelData {
@@ -36,14 +37,20 @@ const CHIP_EDGE = '#e3e4e8';
 const PAD = 12;
 const LINE = 12 * 1.4;
 const STATUS_WORD: Record<Status, string> = { working: 'Working', waiting: 'Waiting', stopped: 'Stopped' };
+/** Below this scale a folding unit no longer keeps the grid off the floor. */
+const CLAIM_MIN_SCALE = 0.05;
+const worldPosition = new Vector3();
+const worldScale = new Vector3();
 
 /**
  * Grounded unit primitive (ILI-1070): a system node and its panel, drawn as
  * one footprint on the floor. The node holds the unit's upper-left corner;
  * the panel lies flat beside it (`direction` 'x') or below it ('z'), showing
  * the node card's facts; one light gray border wraps both. Lines end on the
- * border, each at its own point (unitLayout's attachPoint). The unit's
- * origin is the node's center, so place it on a grid point like any node.
+ * border, each at its own point (unitLayout's pickAttachments). The unit's
+ * origin is the node's center, so place it on a grid point like any node,
+ * and bring it up or fold it away by its scale, as nodes do. While it's up,
+ * the grid under any line stays off its floor (groundClaims).
  */
 export class GroundUnit extends Group {
   readonly node: SystemNode;
@@ -94,9 +101,15 @@ export class GroundUnit extends Group {
     this.add(this.border);
 
     this.show(options.panel);
+    this.userData[GROUND_CLAIM] = (() => {
+      const k = this.getWorldScale(worldScale).x;
+      if (k < CLAIM_MIN_SCALE) return null;
+      const p = this.getWorldPosition(worldPosition);
+      return offsetRect(scaleRect(this.layout.border, k), p.x, p.z);
+    }) satisfies GroundClaim;
   }
 
-  /** The border's rectangle on the floor, where the unit stands now (for attach points and keeping the grid off it). */
+  /** The border's rectangle on the floor at full size, where the unit stands (for attach points). */
   get footprint(): FloorRect {
     return offsetRect(this.layout.border, this.position.x, this.position.z);
   }
