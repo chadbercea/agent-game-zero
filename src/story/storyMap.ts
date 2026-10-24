@@ -1,12 +1,12 @@
 import { Vector3 } from 'three';
-import { Floor, squareAt, standUnits, type UnitToStand } from '../core/floor';
+import { Floor, gatewayUnit, squareAt, standUnits, type UnitToStand } from '../core/floor';
 import { GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
 import { seededRandom } from '../core/scatter';
 import { type SharedRun, sharedRuns } from '../core/sharedRuns';
 import { distanceToPolyline, trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
 import { TERMINAL_SIZE } from '../primitives/terminal/Terminal';
-import type { FloorRect, PanelDirection } from '../primitives/unit/unitLayout';
+import { GATEWAY_SIDES, type GatewaySide, type PanelDirection } from '../primitives/unit/unitLayout';
 import { isTwg } from './rovoTasks';
 import { layoutSystems, SEED_TRIES, TEAMWORK_LINKS } from './systemLayout';
 
@@ -60,6 +60,8 @@ export interface StoryMap {
    * `server` and `tier{k}-{j}` for production's slots.
    */
   panels: Map<string, PanelDirection>;
+  /** Which side of its run each secure gateway's panel lies: Slack's (`slack`) and production's (`production`). */
+  gatewaySides: Map<string, GatewaySide>;
   /** The map's floor, every unit and line on it, for anything placed as the story runs. */
   floor: Floor;
   /** What the camera frames: the map's middle, and how tall a view it needs. */
@@ -150,7 +152,7 @@ const LINE_ROOM = 1.5;
 const MINI_NEAR = 3.5;
 const MINI_SPREAD = 1.5;
 /** How far Slack stands out from Jira, closest first (farther only where close doesn't fit); its gateway (2 long) sits on the line between, a little short of Slack. */
-const SLACK_OUT = [6.5, 8];
+const SLACK_OUT = [6.5, 8, 9.5];
 /** Arrangements that fit, tried before the most compact is chosen: just the first, now that units leave fewer that fit (each seed still gets its own). */
 const CANDIDATES = 2;
 /** How far an MCP terminal stands from Figma. */
@@ -220,7 +222,8 @@ const PHONE_FLOOR = 0.6;
 /** What stands without a panel, for keeping units off it: the assembler, the portal, a glass run's width. */
 const ASSEMBLER_SIZE = 1.2;
 const PORTAL_SIZE = 1.3;
-const GATEWAY_WIDTH = 1;
+/** How wide a secure gateway stands across its run. */
+export const GATEWAY_WIDTH = 1;
 /** A Teamwork Graph app stands this much bigger (rovoSystems' TWG_SCALE). */
 const TWG_SCALE = 1.2;
 
@@ -340,7 +343,6 @@ function arrange(
   // The floor (ILI-1073): the code side's, then the glass gateway and the lines, then the gate's, Jira's and Slack's units.
   // Jira's panel lies along +x: the task board floats over the floor on its other side.
   let floor = side.floor.fork();
-  floor.addPart(runRect(slack.run, GATEWAY_WIDTH));
   floor.addLine(accessLine);
   floor.addLine(slackLine);
   const hub = standUnits(floor, [
@@ -350,6 +352,10 @@ function arrange(
   ], (u) => (u.id === 'jira' ? ['x'] : ['x', 'z']));
   if (!hub) return null;
   floor = hub.floor;
+  const slackSide = standGateway(floor, slack.run);
+  if (!slackSide) return null;
+  const gatewaySides = new Map<string, GatewaySide>([['slack', slackSide]]);
+  if (side.productionSide) gatewaySides.set('production', side.productionSide);
   floor.addPart(squareAt(jira.clone().add(BOARD_OUT), BOARD_FLOOR));
   const panels = new Map([...side.panels, ...hub.ways]);
 
@@ -482,7 +488,7 @@ function arrange(
   // Every unit's border counts for the frame: panels reach out toward the camera.
   for (const r of floor.borders) everything.push(new Vector3(r.minX, 0, r.minZ), new Vector3(r.maxX, 0, r.maxZ), new Vector3(r.minX, 0, r.maxZ), new Vector3(r.maxX, 0, r.minZ));
   const { center, viewSize } = frame(everything);
-  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, links, production, paging, keepClear, panels, floor, center, viewSize };
+  return { seed, gate, rovoStart, jira, userTerminal, slack, code, places, routes, mcpAt, links, production, paging, keepClear, panels, gatewaySides, floor, center, viewSize };
 }
 
 /** The code side (and production past it) laid out round its gate, with its floor: its parts, lines and units. */
@@ -498,6 +504,8 @@ export interface CodeLayout {
   floor: Floor;
   /** Which way each code-side node's panel lies, by id (UNIT ids: scm, codesearch, lane0…, server, tier-slot). */
   panels: Map<string, PanelDirection>;
+  /** Which side production's secure gateway has its panel, if there's production. */
+  productionSide?: GatewaySide;
 }
 
 /**
@@ -539,7 +547,8 @@ export function layCodeSide(gate: Vector3, turn: number, mirror: boolean, withPr
   const floor = new Floor();
   for (const l of code.lanes) floor.addPart(squareAt(l.terminal, TERMINAL_SIZE));
   floor.addPart(squareAt(code.assembler, ASSEMBLER_SIZE));
-  floor.addPart(squareAt(code.portal, PORTAL_SIZE));
+  // With production there's no belt or portal: releases cross the secure gateway instead.
+  if (!withProduction) floor.addPart(squareAt(code.portal, PORTAL_SIZE));
   const units: UnitToStand[] = [
     { id: 'scm', at: code.scm, size: NODE_FOOTPRINT * TWG_SCALE },
     { id: 'codesearch', at: code.codesearch, size: NODE_FOOTPRINT },
@@ -571,7 +580,6 @@ export function layCodeSide(gate: Vector3, turn: number, mirror: boolean, withPr
     for (const u of PRODUCTION.tierU) for (const v of [v0 - edge, ...PRODUCTION.slotV, v2 + edge]) parts.push(at(u, v));
     parts.push(tunnelIn, tunnelOut, server);
     lines.push([code.portal, at(front, PRODUCTION.frontV)], [at(front, v0 - edge), at(data, v0 - edge)], [at(front, v2 + edge), at(data, v2 + edge)]);
-    floor.addPart(runRect(production.tunnel, GATEWAY_WIDTH));
     const frontAt = production.tiers[0][0];
     drawn.push([tunnelOut, server], [server, frontAt]);
     // Every caller-to-callee way between tiers (production draws the ones its incident uses).
@@ -588,7 +596,10 @@ export function layCodeSide(gate: Vector3, turn: number, mirror: boolean, withPr
   const ways = codeWays.get(key);
   if (!ways) return null;
   for (const u of units) floor.addUnit(u, ways.get(u.id) as PanelDirection);
-  return { code, production, flow, parts, lines, floor, panels: new Map(ways) };
+  // Production's secure gateway, its panel on whichever side of it is clear.
+  const productionSide = production ? standGateway(floor, production.tunnel) : undefined;
+  if (production && !productionSide) return null;
+  return { code, production, flow, parts, lines, floor, panels: new Map(ways), productionSide: productionSide ?? undefined };
 }
 
 /** How the code side's units fit, by turn, mirror and production: null where they don't. */
@@ -601,12 +612,15 @@ export function tierWay(a: Vector3, b: Vector3, flow: Vector3, tierGap: number):
   return corner.distanceTo(turnAt) < 1e-6 ? [a.clone(), b.clone()] : [a.clone(), turnAt, corner, b.clone()];
 }
 
-/** A shared run's floor, `width` across (a glass gateway or tunnel). */
-function runRect(run: SharedRun, width: number): FloorRect {
-  const h = width / 2;
-  return run.along === 'x'
-    ? { minX: run.from, maxX: run.to, minZ: run.low - h, maxZ: run.high + h }
-    : { minX: run.low - h, maxX: run.high + h, minZ: run.from, maxZ: run.to };
+/** Stand a secure gateway's unit (the gateway and its panel; only its own line runs through it), its panel toward the camera if that's clear, else away; where the panel lies, or null if nowhere's clear. */
+function standGateway(floor: Floor, run: SharedRun): GatewaySide | null {
+  for (const side of GATEWAY_SIDES) {
+    const { border, keepOff } = gatewayUnit(run, GATEWAY_WIDTH, side);
+    if (!floor.gatewayFits(border, keepOff)) continue;
+    floor.addGatewayUnit(border, keepOff);
+    return side;
+  }
+  return null;
 }
 
 /**

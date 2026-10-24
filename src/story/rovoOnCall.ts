@@ -126,7 +126,7 @@ export class RovoOnCall extends RovoAtlassian {
     // The alert's way in, laid out by the house rules: Datadog's line into PagerDuty; PagerDuty's own line into Jira.
     super(stage, seed, { mini: ON_CALL_MINI, production: true, paging: true, via: { datadog: 'pagerduty' } });
     this.incident = rollIncident(seed);
-    this.production = new Production(stage, this.map.production!, this.incident, this.map.panels, this.map.floor);
+    this.production = new Production(stage, this.map.production!, this.incident, this.map.panels, this.map.floor, this.map.gatewaySides.get('production'));
     const paging = this.map.paging!;
     // PagerDuty's lines leave its unit's border; the one to Slack ends on Slack's.
     const unit = (id: string, at: Vector3) => borderFor(this.map.panels, id, at, 1, NODE_FOOTPRINT / 2 + 0.1);

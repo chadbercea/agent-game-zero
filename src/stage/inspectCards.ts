@@ -327,10 +327,19 @@ export interface GatewayCardData {
   crossings: number;
 }
 
-/** The secure gateway: the two sides it joins with the tunnel between, its lock, and its traffic. */
+/** A secure gateway's facts: whether it's secured, its traffic, and how many have crossed. */
+export function gatewayRows(d: GatewayCardData): [string, string][] {
+  return [
+    ['Lock', d.secured ? 'Secured' : 'Not secured'],
+    ['Traffic', d.flowing ? 'Data flowing' : 'Quiet'],
+    ['Crossings', String(d.crossings)],
+  ];
+}
+
+/** The secure gateway: the two sides it joins, its lock, and its traffic. */
 export function gatewayCard(d: GatewayCardData): HTMLElement {
   const sides = el('div', 'sides');
-  sides.append(el('strong', undefined, d.sides[0]), el('span', 'tube', d.secured ? 'locked tunnel' : 'open tunnel'), el('strong', undefined, d.sides[1]));
+  sides.append(el('strong', undefined, d.sides[0]), el('span', 'tube', d.secured ? 'locked' : 'open'), el('strong', undefined, d.sides[1]));
   const crossings = el('div');
   crossings.append(el('div', 'big', String(d.crossings)), el('div', 'muted', 'crossings this run'));
   return card(

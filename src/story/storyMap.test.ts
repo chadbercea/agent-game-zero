@@ -73,7 +73,8 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
         expect(m.panels.get('jira')).toBe('x');
         // No border overlaps another (the floor only takes units that clear it), and every line still fits.
         const borders = m.floor.borders;
-        expect(borders.length).toBe(unitIds(m).length);
+        // And the secure gateways' units: Slack's, and production's crossing.
+        expect(borders.length).toBe(unitIds(m).length + (m.production ? 2 : 1));
         for (let i = 0; i < borders.length; i++)
           for (let j = i + 1; j < borders.length; j++) {
             const [a, b] = [borders[i], borders[j]];

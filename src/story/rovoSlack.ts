@@ -9,7 +9,9 @@ import { shoot } from './beam';
 import { nodeFacts, SYSTEM_LABEL } from './rovoInspect';
 import type { SlackPlace } from './storyMap';
 import { tween, wait } from './timeline';
-import { groundNode, type PanelWays } from './units';
+import type { GatewayCardData } from '../stage/inspectCards';
+import type { GatewaySide } from '../primitives/unit/unitLayout';
+import { gatewayPanel, groundNode, type PanelWays } from './units';
 
 const MESSAGE_SPEED = 7;
 /** Seconds between messages in the background chatter (seeded). */
@@ -49,9 +51,12 @@ export class SlackHub {
     slackEdge = place.at.clone().addScaledVector(place.out, -(NODE_FOOTPRINT / 2 + 0.1)),
     /** Which way its ground panel lies (the map's). */
     ways: PanelWays = new Map(),
+    /** Which side of the gateway its panel lies (the map's). */
+    gatewaySide: GatewaySide = 'near-from',
   ) {
     groundNode(ways, 'slack', this.node, 1, () => nodeFacts(this.node, SYSTEM_LABEL.slack));
     this.gateway = new Gateway(place.run);
+    gatewayPanel(this.gateway, gatewaySide, () => this.gatewayFacts());
     this.toGateway = new GraphEdge(new LineCurve3(slackEdge, place.slackEnd.clone()));
     this.toJira = new GraphEdge(new LineCurve3(place.jiraEnd.clone(), jiraEdge.clone()));
     this.path = new LineCurve3(slackEdge.clone(), jiraEdge.clone());
@@ -69,6 +74,11 @@ export class SlackHub {
       this.toGateway.update(dt);
       this.toJira.update(dt);
     });
+  }
+
+  /** Its gateway's card: what it joins, whether it's secured, its traffic, and the messages through it. */
+  gatewayFacts(): GatewayCardData {
+    return { sides: ['Slack', 'Jira'], secured: this.gateway.lockDrop >= 1, flowing: this.gateway.conduit.streams > 0, crossings: this.messages };
   }
 
   /** Bring Slack up for the copy that's come to send something (once): node, line, gateway, line, then the chatter starts. */

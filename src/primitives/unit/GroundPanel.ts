@@ -60,6 +60,8 @@ export interface GroundPanelOptions {
   fullScale?: number;
   /** How wide the node stands at scale 1 (a gate stands wider than a node). */
   nodeSize?: number;
+  /** Its parts, if not a node's (a secure gateway's: runLayout); `direction` then only names the way the panel lies. */
+  layout?: UnitLayout;
   /** What to show, read fresh each frame; the panel repaints when it changes. */
   data: () => GroundPanelData;
 }
@@ -89,7 +91,7 @@ export class GroundPanel extends Group {
     super();
     const fullScale = options.fullScale ?? 1;
     this.direction = options.direction;
-    this.layout = unitLayout(options.direction, (options.nodeSize ?? NODE_FOOTPRINT) * fullScale);
+    this.layout = options.layout ?? unitLayout(options.direction, (options.nodeSize ?? NODE_FOOTPRINT) * fullScale);
     this.data = options.data;
     this.name = 'ground-panel';
     // Undo the node's own scale, so at full size the panel is true size.

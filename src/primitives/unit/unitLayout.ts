@@ -52,6 +52,41 @@ export function unitLayout(direction: PanelDirection, nodeSize = NODE_FOOTPRINT)
   return { node, panel, border };
 }
 
+/**
+ * Where a secure gateway's panel lies: on which side of its run, toward the
+ * camera (below a run along X, right of one along Z) or away, and lined up
+ * with which end of it, the low one (`from`) or the high one (`to`).
+ */
+export type GatewaySide = 'near-from' | 'near-to' | 'far-from' | 'far-to';
+export const GATEWAY_SIDES: readonly GatewaySide[] = ['near-from', 'near-to', 'far-from', 'far-to'];
+
+/**
+ * A unit round a secure gateway (a run `length` long and `width` across,
+ * lying `along` X or Z), in its own frame: the gateway centered on the origin,
+ * the panel beside it as `side` says (beside it, so the line through the
+ * gateway never crosses it), and the border round both.
+ */
+export function runLayout(along: 'x' | 'z', length: number, width: number, side: GatewaySide = 'near-from'): UnitLayout {
+  const [l, w] = [length / 2, width / 2];
+  const node = along === 'x' ? { minX: -l, maxX: l, minZ: -w, maxZ: w } : { minX: -w, maxX: w, minZ: -l, maxZ: l };
+  const [across, end] = side.split('-');
+  const out = across === 'near' ? w + UNIT_MARGIN : -w - UNIT_MARGIN - (along === 'x' ? PANEL_DEPTH : PANEL_LENGTH);
+  // Lined up with the low end it runs on past the high one; with the high end, past the low one.
+  const reach = along === 'x' ? PANEL_LENGTH : PANEL_DEPTH;
+  const start = end === 'from' ? -l : l - reach;
+  const panel =
+    along === 'x'
+      ? { minX: start, maxX: start + reach, minZ: out, maxZ: out + PANEL_DEPTH }
+      : { minX: out, maxX: out + PANEL_LENGTH, minZ: start, maxZ: start + reach };
+  const border = {
+    minX: Math.min(node.minX, panel.minX) - UNIT_MARGIN,
+    maxX: Math.max(node.maxX, panel.maxX) + UNIT_MARGIN,
+    minZ: Math.min(node.minZ, panel.minZ) - UNIT_MARGIN,
+    maxZ: Math.max(node.maxZ, panel.maxZ) + UNIT_MARGIN,
+  };
+  return { node, panel, border };
+}
+
 /** `rect` moved by `(x, z)`. */
 export function offsetRect(rect: FloorRect, x: number, z: number): FloorRect {
   return { minX: rect.minX + x, maxX: rect.maxX + x, minZ: rect.minZ + z, maxZ: rect.maxZ + z };

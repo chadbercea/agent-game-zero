@@ -38,6 +38,8 @@ const LOCK_SCALE = 1.8;
 export class Gateway extends Group {
   readonly conduit: Conduit;
   readonly lock = new Lock();
+  /** A point on the floor at its middle, unturned, that comes up and goes with it: what hangs off it on the floor (its ground panel) does too. */
+  readonly ground = new Group();
   /** World point the lock drops from (e.g. the security bot's body). */
   readonly dropFrom = new Vector3();
   /** How it shakes when something enters (see GATEWAY_SHAKE). */
@@ -55,6 +57,8 @@ export class Gateway extends Group {
     // Quiet inside until the lines connect to its ends (see the story): then the streams flow.
     this.conduit.streams = 0;
     this.add(this.conduit);
+    this.ground.position.copy(this.conduit.position);
+    this.add(this.ground);
     this.lock.rotation.y = FACE_CAMERA;
     this.lock.scale.setScalar(LOCK_SCALE);
     this.add(this.lock);
@@ -84,6 +88,8 @@ export class Gateway extends Group {
     this._built = MathUtils.clamp(value, 0, 1);
     this.conduit.scale.setScalar(Math.max(0.001, this._built));
     this.conduit.visible = this._built > 0.001;
+    this.ground.scale.copy(this.conduit.scale);
+    this.ground.visible = this.conduit.visible;
   }
 
   /** How far the lock has dropped from the bot to its float (0 = not released, hidden). */

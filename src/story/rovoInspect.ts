@@ -87,8 +87,7 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
       out.push({
         kind: 'gateway',
         object: slack.gateway,
-        card: () =>
-          gatewayCard({ sides: ['Slack', 'Jira'], secured: slack.gateway.lockDrop >= 1, flowing: slack.gateway.conduit.streams > 0, crossings: slack.messages }),
+        card: () => gatewayCard(slack.gatewayFacts()),
       });
     }
 
