@@ -8,6 +8,7 @@ import type { SceneHost } from '../stage/Stage';
 import { MAX_CREW, MINI_SYSTEMS, RovoAtlassian } from './rovoAtlassian';
 import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
+import { GroundPanel } from '../primitives/unit/GroundPanel';
 import { TASK_TYPES } from './rovoTasks';
 
 function testStage(fps = 30) {
@@ -211,6 +212,7 @@ describe('Rovo and Jira, the quarterback', () => {
     const { root, stage, run } = testStage();
     const scene = new RovoAtlassian(stage, 5);
     let unprompted = 0;
+    let bare = 0;
     const appeared = new Set<SystemKind>();
     const shown = new Set<Object3D>();
     const copies = () => root.children.filter((o): o is Drone => o instanceof Drone && o.subAgent && o.visible);
@@ -221,11 +223,17 @@ describe('Rovo and Jira, the quarterback', () => {
         if (!isNew || o.scale.x < 0.01 || shown.has(o)) continue;
         shown.add(o);
         if (o instanceof SystemNode) appeared.add(o.kind);
+        // Every node stands as a unit, its panel on the ground beside it (ILI-1073).
+        if (o instanceof SystemNode && !o.children.some((c) => c instanceof GroundPanel)) bare++;
         const underCopy = copies().some((c) => Math.hypot(c.position.x - o.position.x, c.position.z - o.position.z) < 0.3);
         const atLine = root.children.some((e) => {
           const curve = e instanceof GraphEdge && e.drawn > 0.99 ? e.path : e instanceof Branch && e.drawn > 0.99 ? e.curve : null;
-          // A line meets a node at its edge.
-          const near = (p: Vector3) => p.distanceTo(o.position.clone().setY(0)) < 1.25;
+          // A line meets a node on its unit's border (ILI-1073); something with no panel (a terminal), at its edge.
+          const border = o.children.find((c): c is GroundPanel => c instanceof GroundPanel)?.footprint;
+          const near = (p: Vector3) =>
+            border
+              ? p.x >= border.minX - 0.05 && p.x <= border.maxX + 0.05 && p.z >= border.minZ - 0.05 && p.z <= border.maxZ + 0.05
+              : p.distanceTo(o.position.clone().setY(0)) < 1.25;
           return !!curve && (near(curve.getPoint(1)) || near(curve.getPoint(0)));
         });
         if (!underCopy && !atLine) unprompted++;
@@ -235,6 +243,7 @@ describe('Rovo and Jira, the quarterback', () => {
     await run(40);
     expect(appeared.size).toBeGreaterThan(1);
     expect(unprompted).toBe(0);
+    expect(bare).toBe(0);
     // Systems stand at their places; worktrees stand in the code lanes, Slack on its own behind its gateway.
     for (const kind of appeared) if (kind !== 'worktree' && kind !== 'slack') expect(scene.places[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.
@@ -248,6 +257,11 @@ describe('Rovo and Jira, the quarterback', () => {
     }
     expect(scene.scm).toBe('bitbucket');
     // Code search hangs off Bitbucket: beside it (room for both units between), its line into Bitbucket, and it stays once called.
+    // (A read of it is one in ten, so if this run drew none, it's called here.)
+    if (!scene.systems.placed.has('codesearch')) {
+      void scene.systems.call('codesearch');
+      await run(5);
+    }
     const search = scene.systems.placed.get('codesearch');
     expect(search).toBeDefined();
     expect(search?.node.position.distanceTo(scene.places.bitbucket as Vector3)).toBeLessThanOrEqual(4);

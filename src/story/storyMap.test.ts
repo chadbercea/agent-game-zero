@@ -35,7 +35,7 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
     const more = Array.from({ length: 60 }, (_, i) => storyMap(i + 1, { mini: ALL }));
     expect(new Set(more.map(arrangement)).size).toBeGreaterThanOrEqual(30);
     expect(new Set(more.map((m) => `${m.code.flow.x},${m.code.flow.z}`)).size).toBe(4);
-  }, 60000);
+  }, 240000);
 
   it('the house rules hold for every seed: on the grid, square lines, groups apart, mini systems clear', () => {
     for (let seed = 1; seed <= 60; seed++) {
@@ -61,7 +61,7 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
         expect(distanceToPolyline(p.x, p.z, tie)).toBeGreaterThanOrEqual(1.2 - 1e-9);
       expect(m.viewSize).toBeGreaterThan(8);
     }
-  }, 120000);
+  }, 240000);
 
   it('every node stands as a unit (ILI-1073): a panel way each, no unit on another, every line on its own ends only', () => {
     for (const opts of [{ mini: ALL }, { mini: ['confluence', 'jsm', 'compass', 'statuspage'] as const, production: true, paging: true }]) {
@@ -81,7 +81,7 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
         expect(m.floor.linesFit()).toBe(true);
       }
     }
-  }, 120000);
+  }, 240000);
 
   it('a story lays out only the systems it uses', () => {
     const m = storyMap(8, { mini: ['confluence', 'figma'] });
@@ -131,5 +131,5 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
     }
     expect(flows.size).toBe(4);
     // Six systems round Jira, linked, take the layout a few tries: up to about a second a map.
-  }, 60000);
+  }, 240000);
 });

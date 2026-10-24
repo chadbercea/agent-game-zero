@@ -1,14 +1,17 @@
 import { type Curve, type Object3D, Vector3 } from 'three';
+import type { Floor } from '../core/floor';
 import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
-import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { distanceToPolyline, reversed, roundedPath } from '../primitives/branch/gridPath';
 import { GraphEdge } from '../primitives/graph/GraphEdge';
 import type { SystemKind } from '../primitives/node/emblems';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { type Request, Ticket } from '../primitives/ticket/Ticket';
+import type { FloorRect } from '../primitives/unit/unitLayout';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import { COLUMN_MAX, type KanbanCard, KanbanBoard } from './jiraBoard';
 import { tween, wait } from './timeline';
+import { cutToBorders } from './units';
 
 /** Jira stands a size up from everything around it: it's the quarterback. */
 export const HUB_SCALE = 1.35;
@@ -69,6 +72,8 @@ export class JiraHub {
     /** Things ties route around (the gate, other toolsets). */
     private readonly keepClear: () => Vector3[] = () => [],
     private readonly random: () => number = Math.random,
+    /** Jira's unit border (ties set off from it) and the map's floor (ties found on the fly keep off every other unit). */
+    private readonly grounded: { border?: FloorRect; floor?: Floor } = {},
   ) {
     node.scale.setScalar(HUB_SCALE);
     node.emblem.visible = false;
@@ -180,9 +185,10 @@ export class JiraHub {
   /**
    * Tie a toolset into Jira: a Graph Line draws from Jira out to `to` and
    * stays until `untie`. `arriveFrom` (a grid direction from `to`) is the side
-   * its last run comes in on, leaving the other sides free.
+   * its last run comes in on, leaving the other sides free. It ends `endClear`
+   * short of `to`, or on its unit's border when given one.
    */
-  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false, along?: readonly Vector3[]): Promise<void> {
+  async tie(id: string, to: Vector3, arriveFrom?: Vector3, endClear: number | FloorRect = 0.3, inward = false, along?: readonly Vector3[]): Promise<void> {
     // Along a laid-out route (Jira → system, shortest and its own) when there is one; otherwise the hub finds one.
     const edge = new GraphEdge(along ? this.alongRoute(along, endClear, inward) : this.route(to, arriveFrom, endClear, inward));
     this.ties.set(id, edge);
@@ -228,12 +234,12 @@ export class JiraHub {
    * corner (or a three-leg detour) is shortest while staying clear of what it
    * must (the gate, other toolsets).
    */
-  private alongRoute(along: readonly Vector3[], endClear: number, inward: boolean): Curve<Vector3> {
-    const trimmed = trimPolyline(along.map((p) => p.clone().setY(0)), JIRA_EDGE + 0.05, endClear);
+  private alongRoute(along: readonly Vector3[], endClear: number | FloorRect, inward: boolean): Curve<Vector3> {
+    const trimmed = cutToBorders([...along], this.grounded.border ?? JIRA_EDGE + 0.05, endClear);
     return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
   }
 
-  private route(end: Vector3, arriveFrom?: Vector3, endClear = 0.3, inward = false): Curve<Vector3> {
+  private route(end: Vector3, arriveFrom?: Vector3, endClear: number | FloorRect = 0.3, inward = false): Curve<Vector3> {
     const from = this.node.position;
     const options: Vector3[][] = [
       [from.clone(), new Vector3(end.x, 0, from.z), end.clone()],
@@ -252,9 +258,13 @@ export class JiraHub {
     const clear = (line: Vector3[]) => Math.min(Infinity, ...others.map((p) => distanceToPolyline(p.x, p.z, line)));
     const length = (line: Vector3[]) => line.reduce((sum, p, i) => sum + (i ? p.distanceTo(line[i - 1]) : 0), 0);
     const ROOM = 0.95;
-    const ok = clean.filter((l) => clear(l) >= ROOM);
-    const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : clean.sort((a, b) => clear(b) - clear(a))[0];
-    const trimmed = trimPolyline(best, JIRA_EDGE + 0.05, endClear);
+    // Never across another unit: of the ways the floor takes, the shortest clear one.
+    const { floor } = this.grounded;
+    const onFloor = floor ? clean.filter((l) => floor.lineFits(l)) : clean;
+    const ways = onFloor.length ? onFloor : clean;
+    const ok = ways.filter((l) => clear(l) >= ROOM);
+    const best = ok.length ? ok.sort((a, b) => length(a) - length(b))[0] : ways.sort((a, b) => clear(b) - clear(a))[0];
+    const trimmed = cutToBorders(best, this.grounded.border ?? JIRA_EDGE + 0.05, endClear);
     return roundedPath(inward ? trimmed.reverse() : trimmed, BEND_RADIUS);
   }
 }
