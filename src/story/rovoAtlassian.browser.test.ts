@@ -247,10 +247,10 @@ describe('Rovo and Jira, the quarterback', () => {
       expect(up?.node.scale.x).toBeGreaterThan(1.1);
     }
     expect(scene.scm).toBe('bitbucket');
-    // Code search hangs off Bitbucket: close beside it, its line into Bitbucket, and it stays once called.
+    // Code search hangs off Bitbucket: beside it (room for both units between), its line into Bitbucket, and it stays once called.
     const search = scene.systems.placed.get('codesearch');
     expect(search).toBeDefined();
-    expect(search?.node.position.distanceTo(scene.places.bitbucket as Vector3)).toBeLessThanOrEqual(3);
+    expect(search?.node.position.distanceTo(scene.places.bitbucket as Vector3)).toBeLessThanOrEqual(4);
     expect(search?.link?.to).toBe('bitbucket');
     expect(search?.link?.edge.drawn).toBe(1);
   });

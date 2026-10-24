@@ -1,5 +1,7 @@
 import { Vector3 } from 'three';
 import { distanceToPolyline, trimPolyline } from '../primitives/branch/gridPath';
+import type { PanelDirection } from '../primitives/unit/unitLayout';
+import type { Floor } from './floor';
 import { GATE_FOOTPRINT, GRID, snapToGrid } from './grid';
 
 /** A small seeded random generator (mulberry32): same seed, same sequence. */
@@ -53,6 +55,19 @@ export interface RadialOptions {
   avoid?: readonly Vector3[];
   /** Lines already on the floor that nodes keep `spacing` from (lines may cross them). */
   keepOff?: readonly Vector3[][];
+  /**
+   * The map's floor (ILI-1073): when given, every node is a unit, panel and
+   * all. A spot fits only with a way for its panel that clears the floor, and
+   * each node placed (its unit and its line) goes onto the floor.
+   */
+  floor?: Floor;
+}
+
+/** A node's unit, as placed with a floor: its panel's way. */
+export interface UnitPlacement {
+  size: number;
+  /** Ways to try for its panel, in order. */
+  ways: readonly PanelDirection[];
 }
 
 export interface RadialMap {
@@ -135,11 +150,14 @@ export class GatePlacer {
   readonly center: Vector3;
   readonly spots: Vector3[] = [];
   readonly routes: Vector3[][] = [];
+  /** Each spot's panel way (with a floor). */
+  readonly ways: PanelDirection[] = [];
   private readonly near: number;
   private readonly spacing: number;
   private readonly clearance: number;
   private readonly avoid: readonly Vector3[];
   private readonly keepOff: readonly Vector3[][];
+  private readonly floor?: Floor;
 
   constructor(origin: Vector3, options: Omit<RadialOptions, 'seed'> = {}) {
     this.center = snapToGrid(origin);
@@ -148,27 +166,41 @@ export class GatePlacer {
     this.clearance = options.clearance ?? 1;
     this.avoid = options.avoid ?? [];
     this.keepOff = options.keepOff ?? [];
+    this.floor = options.floor;
   }
 
-  place(rays: readonly number[], extra: (spot: Vector3, route: Vector3[]) => boolean = () => true): Vector3 {
-    const spot = this.tryPlace(rays, extra);
+  place(rays: readonly number[], extra: PlaceCheck = () => true, unit?: UnitPlacement): Vector3 {
+    const spot = this.tryPlace(rays, extra, MAX_REACH, unit);
     if (!spot) throw new Error(`GatePlacer: no room for node ${this.spots.length + 1}`);
     return spot;
   }
 
   /** Like `place`, but only out to `maxReach` past the nearest ring; null (nothing placed) if nothing fits. */
-  tryPlace(
-    rays: readonly number[],
-    extra: (spot: Vector3, route: Vector3[]) => boolean = () => true,
-    maxReach = MAX_REACH,
-  ): Vector3 | null {
-    const { center, near } = this;
+  tryPlace(rays: readonly number[], extra: PlaceCheck = () => true, maxReach = MAX_REACH, unit?: UnitPlacement): Vector3 | null {
+    const { center, near, floor } = this;
+    // Nothing changes while it looks, so a spot that didn't fit once won't on the next, wider pass.
+    const tried = new Set<string>();
     for (let reach = RAY_REACH; reach <= maxReach; reach += RAY_REACH) {
       for (const angle of rays) {
         for (let r = near; r <= near + reach; r += GRID / 2) {
           const spot = snapToGrid(new Vector3(center.x + Math.cos(angle) * r, 0, center.z + Math.sin(angle) * r));
-          const route = this.linesTo(spot).find((line) => this.fits(spot, line) && extra(spot, line));
-          if (route) {
+          const key = `${spot.x},${spot.z}`;
+          if (tried.has(key)) continue;
+          tried.add(key);
+          for (const route of this.linesTo(spot)) {
+            // With a floor, the ways its panel may lie (cheap, and ruling out most spots) come first.
+            const at = unit && { at: spot, size: unit.size };
+            const ways = floor && at ? unit.ways.filter((w) => floor.canStand(at, w, [route])) : [];
+            if (floor && !ways.length) continue;
+            if (!this.fits(spot, route)) continue;
+            if (floor && at) {
+              // The first of those that passes `extra` as well.
+              const way = ways.find((w) => extra(spot, route, { ...at, way: w }));
+              if (!way) continue;
+              floor.addUnit(at, way);
+              floor.addLine(route);
+              this.ways.push(way);
+            } else if (!extra(spot, route)) continue;
             this.spots.push(spot);
             this.routes.push(route);
             return spot;
@@ -202,6 +234,9 @@ export class GatePlacer {
     return PORTS.map((o) => gridRoute(center.clone().add(alongX ? new Vector3(0, 0, o) : new Vector3(o, 0, 0)), spot));
   }
 }
+
+/** An outside condition on a spot and its line (and, with a floor, the unit it would stand as). */
+export type PlaceCheck = (spot: Vector3, route: Vector3[], unit?: { at: Vector3; size: number; way: PanelDirection }) => boolean;
 
 const legsReadable = (route: Vector3[]) =>
   route.slice(1).every((p, i) => p.distanceTo(route[i]) >= MIN_LEG || p.distanceTo(route[i]) < 1e-6);

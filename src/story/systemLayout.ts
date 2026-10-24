@@ -11,7 +11,9 @@ import {
 } from '../core/scatter';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import type { SystemKind } from '../primitives/node/emblems';
+import { Floor } from '../core/floor';
 import { GRID } from '../core/grid';
+import type { PanelDirection } from '../primitives/unit/unitLayout';
 import { type SharedRun, sharedRuns } from '../core/sharedRuns';
 
 /** One relationship the Teamwork Graph tracks between two systems, and why it exists. */
@@ -47,6 +49,12 @@ export interface GateSystemPlan {
   near?: number;
   /** Lines already on the floor no node may stand near (its own lines may cross them). */
   keepOff?: readonly Vector3[][];
+  /** The map's floor so far (ILI-1073): every node then stands as a unit, panel and all, clear of it. Not changed; the layout returns its own. */
+  floor?: Floor;
+  /** How wide each kind stands (with a floor). */
+  sizeOf?: (kind: SystemKind) => number;
+  /** Ways to try for each kind's panel, in order (with a floor). */
+  waysOf?: (kind: SystemKind) => readonly PanelDirection[];
 }
 
 export interface SystemsLayout {
@@ -61,6 +69,9 @@ export interface SystemsLayout {
    * their own; their work rides feeder → tunnel → feeder.
    */
   feeders: Map<SystemKind, Vector3[]>;
+  /** With a floor: each node's panel way, and the floor with every unit and line on it. */
+  ways: Map<SystemKind, PanelDirection>;
+  floor?: Floor;
 }
 
 /** The secure gateway's ports: for each tunnel end, the lane points on its end face, and which way is out. */
@@ -106,9 +117,9 @@ const AIM_CONE = Math.PI / 3;
 const AIM_STEP = Math.PI / 12;
 const AIM_STEPS = 6;
 /** An aimed node looks this far out along its aim (past the nearest ring) before trying other directions. */
-const AIM_REACH = 4.5;
+const AIM_REACH = 6.5;
 /** No node sits further from its gate than this (past the nearest ring): a map stays a cluster, never a sprawl. */
-const MAX_REACH = 4.5;
+const MAX_REACH = 6.5;
 /** How far a graph link keeps from pads it doesn't connect (nodes and gates). */
 const LINK_CLEARANCE = 0.9;
 /** A feeder runs at least this far out of the tunnel end (along its axis) before turning toward its node. */
@@ -118,6 +129,9 @@ const CORRIDOR_STEPS = 6;
 const CORRIDOR_CLEARANCE = 1.5;
 /** Cross-linked nodes aim this far out past their tunnel end, so their feeders leave the tunnel head-on. */
 const FEED_APPROACH = 2.5;
+/** Seeds tried in turn when one boxes a node in; with units (a floor) only a few, since where units have no room more seeds rarely find it. */
+export const SEED_TRIES = 9;
+const UNIT_TRIES = 3;
 /** How far nodes behind different gates keep from each other, and from each other's lines. */
 const NODE_SPACING = 2;
 const LINE_CLEARANCE = 1;
@@ -144,13 +158,14 @@ export function layoutSystems(
   links: readonly TeamworkLink[],
   seed: number,
   gateway?: SharedRun,
+  tries = plans.some((p) => p.floor) ? UNIT_TRIES : SEED_TRIES,
 ): SystemsLayout {
   // Sometimes a seed boxes a node in with no room close to its gate that meets every rule; then the next seed lays it out.
   for (let attempt = 0; ; attempt++) {
     try {
       return layoutOnce(plans, links, seed + attempt, gateway);
     } catch (e) {
-      if (attempt >= 8) throw e;
+      if (attempt + 1 >= tries) throw e;
     }
   }
 }
@@ -162,7 +177,10 @@ function layoutOnce(
   gateway?: SharedRun,
 ): SystemsLayout {
   const random = seededRandom(seed);
-  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid, near: plan.near, keepOff: plan.keepOff }));
+  // One floor for every gate's system, forked so a failed try leaves nothing behind.
+  const floor = plans.find((p) => p.floor)?.floor?.fork();
+  const placers = plans.map((plan) => new GatePlacer(plan.gate, { avoid: plan.avoid, near: plan.near, keepOff: plan.keepOff, floor }));
+  const ways = new Map<SystemKind, PanelDirection>();
   const gates = placers.map((p) => p.center);
   const home = new Map<SystemKind, number>();
   plans.forEach((plan, g) => plan.kinds.forEach((kind) => home.set(kind, g)));
@@ -233,7 +251,7 @@ function layoutOnce(
     let chosen: Map<TeamworkLink, Vector3[]> = new Map();
     let feeder: Vector3[] | undefined;
 
-    const extra = (spot: Vector3, route: Vector3[]) => {
+    const extra = (spot: Vector3, route: Vector3[], unit?: { at: Vector3; size: number; way: PanelDirection }) => {
       if (corridor.some((c) => c.distanceTo(spot) < CORRIDOR_CLEARANCE)) return false;
       // Clear of the other gates' nodes and lines.
       for (const other of placers) {
@@ -251,8 +269,10 @@ function layoutOnce(
       const picks = new Map<TeamworkLink, Vector3[]>();
       for (const { link, at } of closing) {
         const options = [gridRoute(spot, at), gridRoute(at, spot)];
-        const clear = options.find((line) =>
-          pads.every((p) => p === at || distanceToPolyline(p.x, p.z, line) >= LINK_CLEARANCE),
+        const clear = options.find(
+          (line) =>
+            pads.every((p) => p === at || distanceToPolyline(p.x, p.z, line) >= LINK_CLEARANCE) &&
+            (!floor || !unit || floor.lineFits(line, [Floor.unit(unit, unit.way)])),
         );
         if (!clear) return false;
         picks.set(link, clear);
@@ -279,14 +299,20 @@ function layoutOnce(
     };
 
     // Toward the partners first, a little further out if need be; only then anywhere around the gate, still close in.
+    const plan = plans[g];
+    const unit = floor ? { size: plan.sizeOf?.(kind) ?? GRID * 2, ways: plan.waysOf?.(kind) ?? (['x', 'z'] as const) } : undefined;
     const spot =
-      (aimed.length ? placer.tryPlace(aimed, extra, AIM_REACH) : null) ??
-      placer.tryPlace([...aimed, ...goldenTurns(start).slice(aimed.length ? 1 : 0)], extra, MAX_REACH);
+      (aimed.length ? placer.tryPlace(aimed, extra, AIM_REACH, unit) : null) ??
+      placer.tryPlace([...aimed, ...goldenTurns(start).slice(aimed.length ? 1 : 0)], extra, MAX_REACH, unit);
     if (!spot) throw new Error(`layoutSystems: no room for ${kind} (placed: ${[...placed.keys()].join(', ')})`);
     const route = placer.routes[placer.routes.length - 1];
     placed.set(kind, spot);
     gateLine.set(kind, route);
-    for (const [link, line] of chosen) lines.set(link, line);
+    if (floor) ways.set(kind, placer.ways[placer.ways.length - 1]);
+    for (const [link, line] of chosen) {
+      lines.set(link, line);
+      floor?.addLine(line);
+    }
     if (feeder) feeders.set(kind, feeder);
     spots[g][i] = spot;
     routes[g][i] = route;
@@ -307,7 +333,7 @@ function layoutOnce(
     fed.forEach(([kind], k) => feeders.set(kind, best![k]));
   }
 
-  return { maps: plans.map((_, g) => ({ spots: spots[g], routes: routes[g] })), lines, feeders };
+  return { maps: plans.map((_, g) => ({ spots: spots[g], routes: routes[g] })), lines, feeders, ways, floor };
 }
 
 /**

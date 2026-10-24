@@ -3,6 +3,17 @@ import type { Vector3 } from 'three';
 import { distanceToPolyline } from '../primitives/branch/gridPath';
 import { type StoryMap, storyMap } from './storyMap';
 
+/** Every node on the map that stands as a unit, by its panel id. */
+const unitIds = (m: StoryMap) => [
+  'jira',
+  'slack',
+  'scm',
+  'codesearch',
+  ...m.code.lanes.map((_, i) => `lane${i}`),
+  ...(Object.keys(m.places) as string[]).filter((k) => !['github', 'bitbucket', 'gitlab', 'codesearch'].includes(k)),
+  ...(m.production ? ['server', ...m.production.tiers.flatMap((t, k) => t.map((_, j) => `tier${k}-${j}`))] : []),
+];
+
 const ALL = ['confluence', 'figma', 'gdocs', 'notion'] as const;
 const key = (m: StoryMap) =>
   [m.gate, m.userTerminal, m.slack.at, m.code.scm, m.code.portal, ...Object.values(m.places)]
@@ -50,7 +61,27 @@ describe('storyMap (ILI-1011): the seed drives the whole map', () => {
         expect(distanceToPolyline(p.x, p.z, tie)).toBeGreaterThanOrEqual(1.2 - 1e-9);
       expect(m.viewSize).toBeGreaterThan(8);
     }
-  });
+  }, 120000);
+
+  it('every node stands as a unit (ILI-1073): a panel way each, no unit on another, every line on its own ends only', () => {
+    for (const opts of [{ mini: ALL }, { mini: ['confluence', 'jsm', 'compass', 'statuspage'] as const, production: true, paging: true }]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const m = storyMap(seed, opts);
+        for (const id of unitIds(m)) expect(['x', 'z']).toContain(m.panels.get(id));
+        // Jira's panel lies along +x, clear of its task board.
+        expect(m.panels.get('jira')).toBe('x');
+        // No border overlaps another (the floor only takes units that clear it), and every line still fits.
+        const borders = m.floor.borders;
+        expect(borders.length).toBe(unitIds(m).length);
+        for (let i = 0; i < borders.length; i++)
+          for (let j = i + 1; j < borders.length; j++) {
+            const [a, b] = [borders[i], borders[j]];
+            expect(a.minX < b.maxX && b.minX < a.maxX && a.minZ < b.maxZ && b.minZ < a.maxZ).toBe(false);
+          }
+        expect(m.floor.linesFit()).toBe(true);
+      }
+    }
+  }, 120000);
 
   it('a story lays out only the systems it uses', () => {
     const m = storyMap(8, { mini: ['confluence', 'figma'] });
