@@ -42,6 +42,13 @@ const CHIP_EDGE = '#e3e4e8';
 const PAD = 12;
 const LINE = 12 * 1.4;
 const STATUS_WORD: Record<Status, string> = { working: 'Working', waiting: 'Waiting', stopped: 'Stopped' };
+/** The facts block (card pixels): where it starts down the panel, and room for this many rows. */
+const FACTS_TOP = PAD + 36 + 10;
+const FACTS_ROWS = 3;
+/** The share of the panel's width the head and facts take, left of the list. */
+const FACTS_SHARE = 0.56;
+/** The facts lie just above the rest of the panel. */
+const FACTS_Y = PANEL_Y + 0.0005;
 /** Below this scale a folding unit no longer keeps the grid off the floor. */
 const CLAIM_MIN_SCALE = 0.05;
 const worldPosition = new Vector3();
@@ -73,10 +80,9 @@ export class GroundPanel extends Group {
   /** Its parts, in world units about the node's center at full size. */
   readonly layout: UnitLayout;
   private readonly data: () => GroundPanelData;
-  private shown = '';
-  private readonly canvas: HTMLCanvasElement;
-  private readonly texture: CanvasTexture;
-  private readonly panel: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  /** What changes rarely (the head and the list), and the facts that change as the story runs (activity, the gate's state): painted and sent to the GPU apart, so a change in one fact sends only the small facts block. */
+  private readonly base: PanelLayer;
+  private readonly facts: PanelLayer;
   private readonly border: Mesh<ShapeGeometry, MeshBasicMaterial>;
 
   constructor(node: Object3D, options: GroundPanelOptions) {
@@ -93,22 +99,12 @@ export class GroundPanel extends Group {
     const { panel, border } = this.layout;
     const width = panel.maxX - panel.minX;
     const depth = panel.maxZ - panel.minZ;
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = Math.round(width * CARD_PX * SUPERSAMPLE);
-    this.canvas.height = Math.round(depth * CARD_PX * SUPERSAMPLE);
-    this.texture = new CanvasTexture(this.canvas);
-    this.texture.colorSpace = SRGBColorSpace;
-    this.texture.anisotropy = 8;
-    this.panel = new Mesh(
-      new PlaneGeometry(width, depth),
-      new MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false }),
-    );
-    // Flat on the floor, reading the right way up from the camera (top of the text toward -Z).
-    this.panel.rotation.x = -Math.PI / 2;
-    this.panel.position.set((panel.minX + panel.maxX) / 2, PANEL_Y, (panel.minZ + panel.maxZ) / 2);
-    this.panel.renderOrder = -1;
-    this.panel.onBeforeRender = () => this.refresh();
-    this.add(this.panel);
+    this.base = new PanelLayer(width, depth, panel.minX, panel.minZ, PANEL_Y);
+    this.base.mesh.onBeforeRender = () => this.refresh();
+    this.add(this.base.mesh);
+    const factsTop = FACTS_TOP / CARD_PX;
+    this.facts = new PanelLayer(width * FACTS_SHARE, (FACTS_ROWS * (LINE + 1) + 4) / CARD_PX, panel.minX, panel.minZ + factsTop, FACTS_Y);
+    this.add(this.facts.mesh);
 
     this.border = new Mesh(
       outlineGeometry(border, BORDER_WIDTH, BORDER_RADIUS),
@@ -134,26 +130,18 @@ export class GroundPanel extends Group {
     return offsetRect(this.layout.border, at.x, at.z);
   }
 
-  /** Repaint if what it shows has changed. */
+  /** Repaint whichever part of what it shows has changed. */
   refresh(): void {
-    const data = this.data();
-    const key = JSON.stringify(data);
-    if (key === this.shown) return;
-    this.shown = key;
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.scale(SUPERSAMPLE, SUPERSAMPLE);
-    paintNodePanel(ctx, data, this.canvas.width / SUPERSAMPLE);
-    this.texture.needsUpdate = true;
+    const d = this.data();
+    const rows = factRows(d);
+    this.base.paint(JSON.stringify({ ...d, light: undefined, facts: rows.map(([k]) => k) }), (ctx, w) => paintHead(ctx, d, w));
+    this.facts.paint(JSON.stringify(rows), (ctx, w) => paintFacts(ctx, rows, w));
   }
 
   dispose(): void {
     this.removeFromParent();
-    this.texture.dispose();
-    this.panel.geometry.dispose();
-    this.panel.material.dispose();
+    this.base.dispose();
+    this.facts.dispose();
     this.border.geometry.dispose();
     this.border.material.dispose();
   }
@@ -184,16 +172,84 @@ function roundedRect(shape: Shape, r: FloorRect, radius: number): Shape {
   return shape;
 }
 
+/** One flat layer of the panel: a canvas `width` × `depth` (world units) on the floor, its upper-left corner at (x, z). */
+class PanelLayer {
+  readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private readonly canvas = document.createElement('canvas');
+  private readonly texture: CanvasTexture;
+  private shown = '';
+
+  constructor(width: number, depth: number, x: number, z: number, y: number) {
+    this.canvas.width = Math.round(width * CARD_PX * SUPERSAMPLE);
+    this.canvas.height = Math.round(depth * CARD_PX * SUPERSAMPLE);
+    this.texture = new CanvasTexture(this.canvas);
+    this.texture.colorSpace = SRGBColorSpace;
+    this.texture.anisotropy = 8;
+    this.mesh = new Mesh(new PlaneGeometry(width, depth), new MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false }));
+    // Flat on the floor, reading the right way up from the camera (top of the text toward -Z).
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.position.set(x + width / 2, y, z + depth / 2);
+    this.mesh.renderOrder = -1;
+  }
+
+  /** Repaint with `draw` (card pixels, `width` across) if `key` has changed since last time. */
+  paint(key: string, draw: (ctx: CanvasRenderingContext2D, width: number) => void): void {
+    if (key === this.shown) return;
+    this.shown = key;
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.scale(SUPERSAMPLE, SUPERSAMPLE);
+    ctx.textBaseline = 'top';
+    ctx.letterSpacing = '0px';
+    draw(ctx, this.canvas.width / SUPERSAMPLE);
+    this.texture.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.texture.dispose();
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+  }
+}
+
+/** The facts down the left of the panel: System, Makes and Activity for a tool, or its own (the gate's). */
+function factRows(d: GroundPanelData): readonly (readonly [string, string])[] {
+  const activity = d.light === 'off' ? 'Idle' : `${STATUS_WORD[d.light]} now`;
+  return (
+    d.facts ?? [
+      ['System', d.system],
+      ['Makes', d.makes],
+      ['Activity', activity],
+    ]
+  );
+}
+
+/** The facts, names in gray and values in ink, on a block `width` card pixels wide (the left of the panel). */
+function paintFacts(ctx: CanvasRenderingContext2D, rows: readonly (readonly [string, string])[], width: number): void {
+  ctx.font = `12px ${FONT}`;
+  const keyWidth = Math.max(...rows.map(([k]) => ctx.measureText(k).width));
+  const gap = keyWidth ? 12 : 0;
+  rows.forEach(([k, v], i) => {
+    const y = i * (LINE + 1);
+    ctx.font = `12px ${FONT}`;
+    ctx.fillStyle = QUIET;
+    ctx.fillText(k, PAD, y);
+    ctx.font = `550 12px ${FONT}`;
+    ctx.fillStyle = INK;
+    ctx.fillText(v, PAD + keyWidth + gap, y, width - PAD - keyWidth - gap - 12);
+  });
+}
+
 /**
- * The node card on a strip `width` card pixels wide: the head (tile, "Tool",
- * name) and the facts on the left, what it's linked to on the right.
+ * The node card on a strip `width` card pixels wide, but for its facts: the
+ * head (tile, "Tool", name) on the left, what it's linked to on the right.
  */
-function paintNodePanel(ctx: CanvasRenderingContext2D, d: GroundPanelData, width: number): void {
-  ctx.textBaseline = 'top';
-  ctx.letterSpacing = '0px';
+function paintHead(ctx: CanvasRenderingContext2D, d: GroundPanelData, width: number): void {
 
   // Head: a tool's tile with the name's first letter, then the eyebrow and the name (clear of the list on the right).
-  const left = width * 0.56;
+  const left = width * FACTS_SHARE;
   const head = d.eyebrow ? PAD : PAD + 46;
   if (!d.eyebrow) {
     roundRect(ctx, PAD, PAD, 36, 36, 8);
@@ -211,26 +267,6 @@ function paintNodePanel(ctx: CanvasRenderingContext2D, d: GroundPanelData, width
   ctx.fillStyle = INK;
   ctx.font = `650 16px ${FONT}`;
   ctx.fillText(d.name, head, PAD + 16, left - head - PAD);
-
-  // Facts: names in gray, values in ink.
-  const activity = d.light === 'off' ? 'Idle' : `${STATUS_WORD[d.light]} now`;
-  const rows = d.facts ?? [
-    ['System', d.system],
-    ['Makes', d.makes],
-    ['Activity', activity],
-  ];
-  ctx.font = `12px ${FONT}`;
-  const keyWidth = Math.max(...rows.map(([k]) => ctx.measureText(k).width));
-  const gap = keyWidth ? 12 : 0;
-  rows.forEach(([k, v], i) => {
-    const y = PAD + 36 + 10 + i * (LINE + 1);
-    ctx.font = `12px ${FONT}`;
-    ctx.fillStyle = QUIET;
-    ctx.fillText(k, PAD, y);
-    ctx.font = `550 12px ${FONT}`;
-    ctx.fillStyle = INK;
-    ctx.fillText(v, PAD + keyWidth + gap, y, left - PAD - keyWidth - gap - 12);
-  });
 
   // Linked on the graph: chips, wrapping.
   label(ctx, d.linkedLabel ?? 'Linked on the graph', left, PAD + 2, 0.06);
