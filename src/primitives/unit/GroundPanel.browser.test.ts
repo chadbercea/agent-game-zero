@@ -42,16 +42,18 @@ describe('GroundPanel', () => {
     expect(claim()).toBeNull();
   });
 
-  it('repaints when what it shows changes, and only then', () => {
+  it('repaints when what it shows changes, and only then: a change in activity repaints just the facts', () => {
     const { node, ground } = setUp(1);
-    const painted = () => (ground as unknown as { shown: string }).shown;
-    const before = painted();
+    type Layer = { shown: string; texture: { version: number } };
+    const { base, facts } = ground as unknown as { base: Layer; facts: Layer };
+    const [baseVersion, factsVersion] = [base.texture.version, facts.texture.version];
     ground.refresh();
-    expect(painted()).toBe(before);
+    expect([base.texture.version, facts.texture.version]).toEqual([baseVersion, factsVersion]);
     node.light = 'working';
     ground.refresh();
-    expect(painted()).not.toBe(before);
-    expect(painted()).toContain('working');
+    expect(facts.texture.version).toBe(factsVersion + 1);
+    expect(facts.shown).toContain('Working now');
+    expect(base.texture.version).toBe(baseVersion);
   });
 
   it('goes with its node', () => {
