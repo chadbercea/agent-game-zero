@@ -1,5 +1,6 @@
-import type { Vector3 } from 'three';
-import { type FloorRect, offsetRect, type PanelDirection, unitLayout } from '../primitives/unit/unitLayout';
+import { Vector3 } from 'three';
+import { type FloorRect, type GatewaySide, offsetRect, type PanelDirection, runLayout, type UnitLayout, unitLayout } from '../primitives/unit/unitLayout';
+import type { SharedRun } from './sharedRuns';
 import { GRID } from './grid';
 
 /** Room kept between a unit's border and anything else standing, or a line that isn't its own. */
@@ -23,6 +24,32 @@ export function unitBorder(spot: UnitSpot, direction: PanelDirection): FloorRect
   let border = borders.get(key);
   if (!border) borders.set(key, (border = unitLayout(direction, spot.size).border));
   return offsetRect(border, spot.at.x, spot.at.z);
+}
+
+/**
+ * A secure gateway's unit on the floor (the gateway `width` across on `run`,
+ * its panel beside it on `side`): its layout about the gateway's middle, that middle,
+ * its border, and where no line may run (all of it, and UNIT_ROOM round it,
+ * but the gateway's own lane, which its line runs along).
+ */
+export function gatewayUnit(
+  run: SharedRun,
+  width: number,
+  side: GatewaySide = 'near-from',
+): { layout: UnitLayout; center: Vector3; border: FloorRect; keepOff: FloorRect[] } {
+  const layout = runLayout(run.along, run.to - run.from, width + (run.high - run.low), side);
+  const mid = (run.from + run.to) / 2;
+  const across = (run.low + run.high) / 2;
+  const [x, z] = run.along === 'x' ? [mid, across] : [across, mid];
+  const center = new Vector3(x, 0, z);
+  const border = offsetRect(layout.border, x, z);
+  const room = grown(border, UNIT_ROOM);
+  const [lo, hi] = [run.low - width / 2, run.high + width / 2];
+  const keepOff =
+    run.along === 'x'
+      ? [{ ...room, maxZ: lo }, { ...room, minZ: hi }]
+      : [{ ...room, maxX: lo }, { ...room, minX: hi }];
+  return { layout, center, border, keepOff };
 }
 
 /** A square of `size` round `at` (a gate, a terminal: something standing without a panel). */
@@ -95,6 +122,8 @@ interface Standing {
   rect: FloorRect;
   /** For a unit, its node: lines ending on it may come in. */
   node?: UnitSpot;
+  /** For a secure gateway's unit: where no line may run (all of it but the gateway's own lane, which its line runs along). */
+  keepOff?: readonly FloorRect[];
 }
 
 /**
@@ -130,6 +159,22 @@ export class Floor {
     this.standing.push({ rect });
   }
 
+  /** A secure gateway's unit: it stands on `rect`, and no line may run on `keepOff` (all of it but the gateway's lane). */
+  addGatewayUnit(rect: FloorRect, keepOff: readonly FloorRect[]): void {
+    this.standing.push({ rect, keepOff });
+  }
+
+  /**
+   * Whether a secure gateway's unit may stand on `rect`: clear of every unit
+   * (and UNIT_ROOM round it), with no part and no line on `keepOff` (parts may
+   * stand in its lane: what it joins sits at its ends).
+   */
+  gatewayFits(rect: FloorRect, keepOff: readonly FloorRect[]): boolean {
+    const room = grown(rect, UNIT_ROOM);
+    const clear = (s: Standing) => (s.node || s.keepOff ? !overlaps(room, s.rect) : keepOff.every((r) => !overlaps(r, s.rect)));
+    return this.standing.every(clear) && this.lines.every((line) => keepOff.every((r) => !runsInside(line, r)));
+  }
+
   addLine(line: readonly Vector3[]): void {
     this.lines.push(line);
   }
@@ -158,13 +203,14 @@ export class Floor {
 
   /** Whether a part (no panel, no lines of its own) may stand on `rect`: clear of every unit and its room, and of other parts. */
   partFits(rect: FloorRect): boolean {
-    return this.standing.every((s) => !overlaps(s.node ? grown(s.rect, UNIT_ROOM) : s.rect, rect));
+    return this.standing.every((s) => !overlaps(s.node || s.keepOff ? grown(s.rect, UNIT_ROOM) : s.rect, rect));
   }
 
   /** Whether `line` may run: through no border but its own ends', once each, still showing MIN_SHOWING (`more`: units not on the floor yet). */
   lineFits(line: readonly Vector3[], more: readonly Standing[] = []): boolean {
     let hidden = 0;
     const check = (s: Standing): boolean => {
+      if (s.keepOff) return s.keepOff.every((r) => !runsInside(line, r));
       if (!s.node) return true;
       const end = endOn(line, s.node.at, s.node.size / 2);
       if (end < 0) return !runsInside(line, grown(s.rect, UNIT_ROOM));
@@ -184,7 +230,7 @@ export class Floor {
 
   /** Every unit's border, for framing the map. */
   get borders(): FloorRect[] {
-    return this.standing.filter((s) => s.node).map((s) => s.rect);
+    return this.standing.filter((s) => s.node || s.keepOff).map((s) => s.rect);
   }
 
   /** A unit not on the floor yet, for `lineFits`' `more`. */

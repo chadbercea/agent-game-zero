@@ -1,12 +1,15 @@
 import { Vector3 } from 'three';
 import { unitBorder } from '../core/floor';
+import { gatewayUnit } from '../core/floor';
 import { GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import type { Gateway } from '../primitives/gateway/Gateway';
 import type { Gate } from '../primitives/gate/Gate';
-import { GATE_TITLE, type GateCardData, gateRows, gateToolsLabel } from '../stage/inspectCards';
+import { GATE_TITLE, type GateCardData, type GatewayCardData, gateRows, gatewayRows, gateToolsLabel } from '../stage/inspectCards';
+import { GATEWAY_WIDTH } from './storyMap';
 import { trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { GroundPanel, type GroundPanelData } from '../primitives/unit/GroundPanel';
-import type { FloorRect, PanelDirection } from '../primitives/unit/unitLayout';
+import type { FloorRect, GatewaySide, PanelDirection } from '../primitives/unit/unitLayout';
 
 /**
  * Grounded units in the stories (ILI-1073): every node gets its ground panel,
@@ -99,6 +102,28 @@ export function gatePanel(ways: PanelWays, gate: Gate, card: () => GateCardData)
         facts: gateRows(d),
         linkedLabel: gateToolsLabel(d),
         linked: d.tools,
+      };
+    },
+  });
+}
+
+/** Give a secure gateway its ground panel, beside it on the floor on `side`, showing its card: what it joins, whether it's secured, its traffic. */
+export function gatewayPanel(gateway: Gateway, side: GatewaySide, card: () => GatewayCardData): void {
+  const { layout } = gatewayUnit(gateway.run, GATEWAY_WIDTH, side);
+  new GroundPanel(gateway.ground, {
+    direction: gateway.run.along === 'x' ? 'z' : 'x',
+    layout,
+    data: () => {
+      const d = card();
+      return {
+        eyebrow: 'Gateway',
+        name: 'Secure gateway',
+        system: '',
+        light: 'off',
+        makes: '',
+        facts: gatewayRows(d),
+        linkedLabel: 'Joins',
+        linked: d.sides,
       };
     },
   });

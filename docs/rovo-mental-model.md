@@ -67,6 +67,7 @@ What things mean on screen. Use these; don't add meanings.
 | Cubes, assembler, belt, portal | Code merged, released and shipped to production. |
 | Glass tunnel to the production server | Releases crossing securely into production (Rovo on Call), in place of the portal. |
 | Panel on the ground beside a node, one light gray border round both | The node's facts (what its card says), laid on the floor: every node is a grounded unit (ILI-1070). |
+| Panel on the ground beside a secure gateway, one border round both | The gateway's facts: what it joins, its lock, its traffic, its crossings (ILI-1076). On screen it's a "Secure gateway", never a glass tube or tunnel. |
 
 ## Rules on screen
 

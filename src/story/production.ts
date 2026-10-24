@@ -17,7 +17,9 @@ import { shoot } from './beam';
 import type { Incident } from './incident';
 import type { ProductionPlace } from './storyMap';
 import { tween, wait } from './timeline';
-import { borderAt, borderFor, cutToBorders, groundNode, groundPanel, type PanelWays } from './units';
+import type { GatewayCardData } from '../stage/inspectCards';
+import type { GatewaySide } from '../primitives/unit/unitLayout';
+import { borderAt, borderFor, cutToBorders, gatewayPanel, groundNode, groundPanel, type PanelWays } from './units';
 
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
 const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
@@ -87,9 +89,12 @@ export class Production {
     private readonly ways: PanelWays = new Map(),
     /** The map's floor: replicas stand only where their units fit. */
     private readonly floor?: Floor,
+    /** Which side of the secure gateway its panel lies (the map's). */
+    gatewaySide: GatewaySide = 'near-from',
   ) {
     const { flow, tierGap } = place;
     this.tunnel = new Gateway(place.tunnel);
+    gatewayPanel(this.tunnel, gatewaySide, () => this.tunnelFacts());
     this.tunnel.visible = false;
     this.server = new SystemNode({ kind: 'server', showLabel: false });
     groundNode(ways, 'server', this.server, 1, () => this.serverFacts());
@@ -274,6 +279,11 @@ export class Production {
   /** Where lines meet node `id` at `at`: its unit's border, or just short of the node if it has no panel. */
   private border(id: string, at: Vector3): FloorRect | number {
     return borderFor(this.ways, id, at, 1, HALF_NODE);
+  }
+
+  /** The secure crossing's card: what it joins, whether it's secured, its traffic, and the releases through it. */
+  tunnelFacts(): GatewayCardData {
+    return { sides: ['Assembler', 'Production server'], secured: this.tunnel.lockDrop >= 1, flowing: this.tunnel.conduit.streams > 0, crossings: this.delivered };
   }
 
   /** What the production server's card and panel show. */

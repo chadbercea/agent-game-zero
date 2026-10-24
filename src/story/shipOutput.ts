@@ -31,7 +31,7 @@ export interface OutputPlace {
   portal: Vector3;
   /**
    * Where a release goes straight from the assembler instead of the belt and
-   * portal (Rovo on Call: into the glass tunnel to the production server).
+   * portal (Rovo on Call: into the secure gateway to the production server).
    * The output then has no belt or portal; this takes the release and is done with it.
    */
   handOff?: (release: Mesh) => Promise<void>;

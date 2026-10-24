@@ -18,12 +18,12 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
     const out = grid();
     const names = incident.services.map((s) => s.name);
     const shown = (o: { visible: boolean; scale: { x: number } }) => o.visible && o.scale.x > 0.05;
-    // The glass tunnel into production, and the production server past it.
+    // The secure gateway into production, and the production server past it.
     if (production.tunnel.visible && production.tunnel.built > 0.5) {
       out.push({
         kind: 'gateway',
         object: production.tunnel,
-        card: () => gatewayCard({ sides: ['Assembler', 'Production server'], secured: production.tunnel.lockDrop >= 1, flowing: production.tunnel.conduit.streams > 0, crossings: production.delivered }),
+        card: () => gatewayCard(production.tunnelFacts()),
       });
     }
     if (shown(production.server)) {
@@ -34,7 +34,7 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
       });
     }
     for (const [line, from, to, carries] of [
-      [production.intoServer, 'Glass tunnel', 'Production server', 'Releases'],
+      [production.intoServer, 'Secure gateway', 'Production server', 'Releases'],
       [production.toFront, 'Production server', names[0], 'Requests, and releases on their way in'],
     ] as const) {
       if (line.drawn < 0.01) continue;

@@ -219,7 +219,7 @@ export class RovoAtlassian {
     );
     // Slack's line runs straight out from Jira: from Jira's border to Slack's.
     const [slackJiraEnd, slackEnd] = ends(cutToBorders([map.jira, map.slack.at], jiraEdge, borderFor(map.panels, 'slack', map.slack.at, 1, NODE_FOOTPRINT / 2 + 0.1)));
-    this.slack = new SlackHub(stage, map.slack, slackJiraEnd, this.random, slackEnd, map.panels);
+    this.slack = new SlackHub(stage, map.slack, slackJiraEnd, this.random, slackEnd, map.panels, map.gatewaySides.get('slack'));
     this.places = map.places;
     this.mcpAt = map.mcpAt;
     const tie = map.code.tieSide;
