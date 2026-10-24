@@ -2,16 +2,19 @@ import { type Curve, LineCurve3, type Mesh, Vector3 } from 'three';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { Branch } from '../primitives/branch/Branch';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { roundedPath } from '../primitives/branch/gridPath';
 import type { ScmKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
-import { TWG_EDGE } from './rovoSystems';
+import { nodeFacts, SYSTEM_LABEL } from './rovoInspect';
+import { TWG_EDGE, TWG_SCALE } from './rovoSystems';
 import { type OutputLine, shipOutput } from './shipOutput';
 import type { CodeSide } from './storyMap';
 import { tween } from './timeline';
+import { borderFor, cutToBorders, groundNode, type PanelWays } from './units';
+import type { FloorRect } from '../primitives/unit/unitLayout';
 
 /**
  * The code side of Rovo's grid (docs/rovo-mental-model.md, "Code"). One repo
@@ -52,18 +55,20 @@ export class CodeLane {
     readonly index: number,
     seed: number,
     code: CodeSide,
+    /** Which way each node's ground panel lies (the map's): lines end on the worktree's and the repo's borders. */
+    ways: PanelWays = new Map(),
   ) {
     const place = code.lanes[index];
     const terminalAt = place.terminal.clone();
     this.spot = place.spot.clone();
-    this.toTerminal = new Branch(
-      new LineCurve3(this.spot.clone().addScaledVector(code.flow, HALF_NODE), terminalAt.clone().addScaledVector(code.flow, -HALF_TERMINAL)),
-      NEUTRAL.packet,
-    );
-    this.toRepo = new Branch(roundedPath(trimPolyline(place.intoRepo.map((p) => p.clone()), HALF_TERMINAL, REPO_EDGE), BEND_RADIUS), NEUTRAL.packet);
+    const id = `lane${index}`;
+    const [from, to] = cutToBorders([this.spot, terminalAt], borderFor(ways, id, this.spot, 1, HALF_NODE), HALF_TERMINAL);
+    this.toTerminal = new Branch(new LineCurve3(from, to), NEUTRAL.packet);
+    this.toRepo = new Branch(roundedPath(cutToBorders([...place.intoRepo], HALF_TERMINAL, repoBorder(ways, code)), BEND_RADIUS), NEUTRAL.packet);
     this.terminal = new Terminal({ seed });
     this.terminal.position.copy(terminalAt);
-    this.worktree = new SystemNode({ kind: 'worktree' });
+    this.worktree = new SystemNode({ kind: 'worktree', showLabel: false });
+    groundNode(ways, id, this.worktree, 1, () => nodeFacts(this.worktree, SYSTEM_LABEL.worktree));
     this.worktree.position.copy(this.spot);
     for (const line of [this.toTerminal, this.toRepo]) line.drawn = 0;
     for (const node of [this.terminal, this.worktree]) node.scale.setScalar(0.001);
@@ -116,11 +121,15 @@ export class CodeLane {
 }
 
 /** The output, built the first time code merges: the line draws out of the repo, then the assembler, belt and portal appear. */
-export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => void, handOff?: (release: Mesh) => Promise<void>): Promise<OutputLine> {
-  const route: Curve<Vector3> = new LineCurve3(
-    code.scm.clone().addScaledVector(code.flow, REPO_EDGE),
-    code.assembler.clone().addScaledVector(code.flow, -0.45),
-  );
+export function buildOutput(
+  stage: SceneHost,
+  code: CodeSide,
+  onShipped?: () => void,
+  handOff?: (release: Mesh) => Promise<void>,
+  ways: PanelWays = new Map(),
+): Promise<OutputLine> {
+  const [from, to] = cutToBorders([code.scm, code.assembler], repoBorder(ways, code), 0.45);
+  const route: Curve<Vector3> = new LineCurve3(from, to);
   return shipOutput(stage, {
     route,
     assembler: code.assembler,
@@ -132,6 +141,11 @@ export function buildOutput(stage: SceneHost, code: CodeSide, onShipped?: () => 
     handOff,
     onShipped,
   });
+}
+
+/** Where lines meet the repo: its unit's border (a Teamwork Graph app, a size up). */
+function repoBorder(ways: PanelWays, code: CodeSide): FloorRect | number {
+  return borderFor(ways, 'scm', code.scm, TWG_SCALE, REPO_EDGE);
 }
 
 /** Grow a thing in at its place (or fold it away, `out`), easing with a little overshoot. */

@@ -1,19 +1,23 @@
 import { type Curve, LineCurve3, Mesh, MeshStandardMaterial, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BEND_RADIUS, FACE_CAMERA, GRID, NODE_FOOTPRINT } from '../core/grid';
+import { Floor, squareAt } from '../core/floor';
+import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL, type Status } from '../core/palette';
 import { BIG_BLOCK } from '../primitives/assembler/Assembler';
 import { Branch } from '../primitives/branch/Branch';
-import { distanceToPolyline, reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath } from '../primitives/branch/gridPath';
 import { Flag } from '../primitives/flag/Flag';
 import { SystemNode } from '../primitives/node/SystemNode';
 import { Gateway } from '../primitives/gateway/Gateway';
 import { TERMINAL_SIZE, Terminal } from '../primitives/terminal/Terminal';
+import type { GroundPanelData } from '../primitives/unit/GroundPanel';
+import type { FloorRect, PanelDirection } from '../primitives/unit/unitLayout';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
 import type { Incident } from './incident';
 import type { ProductionPlace } from './storyMap';
 import { tween, wait } from './timeline';
+import { borderAt, borderFor, cutToBorders, groundNode, groundPanel, type PanelWays } from './units';
 
 const HALF_NODE = NODE_FOOTPRINT / 2 + 0.08;
 const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
@@ -21,7 +25,8 @@ const HALF_TERMINAL = TERMINAL_SIZE / 2 + 0.06;
 const RELEASE_SPEED = 3.4;
 /** How close a replica or terminal may stand to another node, and to a line. */
 const NODE_ROOM = 1.4;
-const LINE_ROOM = 0.7;
+/** How far out from its service a replica or terminal may stand, nearest first. */
+const BESIDE = [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
 /** A feature flag stands a little bigger than its specimen, so it reads at map scale. */
 const FLAG_SCALE = 1.3;
 
@@ -34,11 +39,12 @@ export interface Dependency {
   points: Vector3[];
 }
 
-/** A replica grown in beside a service: its line (from the service) and its node. */
+/** A replica grown in beside a service: its line (from the service), its node, and which way its panel lies. */
 export interface Replica {
   of: number;
   node: SystemNode;
   line: Branch;
+  way: PanelDirection;
 }
 
 /**
@@ -71,27 +77,31 @@ export class Production {
   flag?: { at: number; flag: Flag };
   /** Releases delivered to a service so far. */
   delivered = 0;
-  /** Lines no replica or terminal may stand on: tunnel to server to front. */
-  private readonly feedPoints: Vector3[];
   private readonly untick: () => void;
 
   constructor(
     private readonly stage: SceneHost,
     readonly place: ProductionPlace,
     readonly incident: Incident,
+    /** Which way each node's ground panel lies (the map's: `server`, `tier{k}-{j}`): lines end on their units' borders. */
+    private readonly ways: PanelWays = new Map(),
+    /** The map's floor: replicas stand only where their units fit. */
+    private readonly floor?: Floor,
   ) {
     const { flow, tierGap } = place;
     this.tunnel = new Gateway(place.tunnel);
     this.tunnel.visible = false;
-    this.server = new SystemNode({ kind: 'server' });
+    this.server = new SystemNode({ kind: 'server', showLabel: false });
+    groundNode(ways, 'server', this.server, 1, () => this.serverFacts());
     this.server.position.copy(place.server);
     this.server.scale.setScalar(0.001);
     this.server.labelOpacity = 0;
     this.server.light = 'working';
     stage.add(this.tunnel, this.server);
 
-    this.nodes = incident.services.map((s) => {
-      const node = new SystemNode({ kind: s.kind, name: s.name });
+    this.nodes = incident.services.map((s, i) => {
+      const node = new SystemNode({ kind: s.kind, name: s.name, showLabel: false });
+      groundNode(ways, slotId(s), node, 1, () => this.serviceFacts(i, node));
       node.position.copy(place.tiers[s.tier][s.slot]);
       node.scale.setScalar(0.001);
       node.labelOpacity = 0;
@@ -100,9 +110,10 @@ export class Production {
       return node;
     });
     const front = this.nodes[0].position;
-    this.feedPoints = [place.tunnelOut.clone(), place.server.clone(), front.clone()];
-    this.intoServer = new Branch(new LineCurve3(place.tunnelOut.clone(), place.server.clone().addScaledVector(flow, -HALF_NODE)), NEUTRAL.packet);
-    this.toFront = new Branch(new LineCurve3(place.server.clone().addScaledVector(flow, HALF_NODE), front.clone().addScaledVector(flow, -HALF_NODE)), NEUTRAL.packet);
+    const serverEdge = this.border('server', place.server);
+    const frontEdge = this.border(slotId(incident.services[0]), front);
+    this.intoServer = new Branch(straight(cutToBorders([place.tunnelOut, place.server], 0, serverEdge)), NEUTRAL.packet);
+    this.toFront = new Branch(straight(cutToBorders([place.server, front], serverEdge, frontEdge)), NEUTRAL.packet);
     for (const line of [this.intoServer, this.toFront]) line.drawn = 0;
     stage.add(this.intoServer, this.toFront);
 
@@ -114,7 +125,8 @@ export class Production {
         const turnAt = a.clone().addScaledVector(flow, tierGap);
         const corner = b.clone().addScaledVector(flow, -tierGap);
         const points = corner.distanceTo(turnAt) < 1e-6 ? [a, b] : [a, turnAt, corner, b];
-        const line = new Branch(roundedPath(trimPolyline(points.map((p) => p.clone()), HALF_NODE, HALF_NODE), BEND_RADIUS), NEUTRAL.packet);
+        const ends = [this.border(slotId(s), a), this.border(slotId(incident.services[to]), b)] as const;
+        const line = new Branch(roundedPath(cutToBorders(points, ...ends), BEND_RADIUS), NEUTRAL.packet);
         line.drawn = 0;
         stage.add(line);
         this.dependencies.push({ from, to, line, points });
@@ -226,47 +238,69 @@ export class Production {
   }
 
   /**
-   * Spots beside service `i` with room for something to stand (a replica, a
-   * terminal): along the grid from it, inside production's block (halfway to
-   * the next slot across, or an empty slot of its tier), clear of every node and line.
+   * Spots beside service `i` with room for a replica to stand (or a
+   * terminal): straight out from it along the grid, nearest first, each with
+   * a way for its unit that clears the map's floor (and what's grown in since,
+   * and each other) with its line from the service.
    */
   spotsBeside(i: number, taken: readonly Vector3[] = []): Vector3[] {
-    const { across, slotGap, tiers } = this.place;
-    // Halfway to the next slot, on the grid.
-    const half = Math.floor(slotGap / 2 / GRID) * GRID;
-    const service = this.incident.services[i];
     const at = this.nodes[i].position;
-    const others = [...this.nodes.map((n) => n.position), ...this.replicas.map((r) => r.node.position), ...taken];
-    const lines = [this.feedPoints, ...this.dependencies.map((d) => d.points)];
-    const slots = tiers[service.tier];
-    const inBlock = (p: Vector3) => {
-      const v = (q: Vector3) => q.dot(across);
-      const all = tiers.flat().map(v);
-      return v(p) >= Math.min(...all) - slotGap / 2 - 1e-6 && v(p) <= Math.max(...all) + slotGap / 2 + 1e-6;
-    };
-    const candidates = [
-      at.clone().addScaledVector(across, half),
-      at.clone().addScaledVector(across, -half),
-      ...slots.filter((s) => s.distanceTo(at) > 1e-6),
-    ].filter(inBlock);
+    const floor = this.standingFloor(taken);
     const free: Vector3[] = [];
-    for (const spot of candidates) {
-      const crowd = [...others, ...free];
-      if (crowd.some((o) => o !== at && o.distanceTo(spot) < NODE_ROOM)) continue;
-      // Its own line from the service runs straight out to it; nothing else may sit on that run.
-      if (lines.some((l) => distanceToPolyline(spot.x, spot.z, l) < LINE_ROOM)) continue;
-      if (crowd.some((o) => o !== at && o.distanceTo(spot) > 1e-6 && distanceToPolyline(o.x, o.z, [at, spot]) < NODE_ROOM - 0.2)) continue;
+    const candidates = GRID_DIRS.flatMap((d) => BESIDE.map((r) => ({ spot: at.clone().addScaledVector(d, r), r }))).sort((a, b) => a.r - b.r);
+    for (const { spot } of candidates) {
+      if ([at, ...taken].some((o) => o.distanceTo(spot) < NODE_ROOM)) continue;
+      const unit = { at: spot, size: NODE_FOOTPRINT };
+      const way = floor.wayFor(unit, ['x', 'z'], [[at, spot]]);
+      if (!way) continue;
+      floor.addUnit(unit, way);
+      floor.addLine([at.clone(), spot.clone()]);
       free.push(spot);
     }
     return free;
   }
 
+  /** The floor as it stands now: the map's, with every replica and its line on it, and `taken` spots kept clear. */
+  private standingFloor(taken: readonly Vector3[] = []): Floor {
+    const floor = this.floor?.fork() ?? new Floor();
+    for (const r of this.replicas) {
+      floor.addUnit({ at: r.node.position, size: NODE_FOOTPRINT }, r.way);
+      floor.addLine([this.nodes[r.of].position.clone(), r.node.position.clone()]);
+    }
+    for (const t of taken) floor.addPart(squareAt(t, TERMINAL_SIZE));
+    return floor;
+  }
+
+  /** Where lines meet node `id` at `at`: its unit's border, or just short of the node if it has no panel. */
+  private border(id: string, at: Vector3): FloorRect | number {
+    return borderFor(this.ways, id, at, 1, HALF_NODE);
+  }
+
+  /** What the production server's card and panel show. */
+  serverFacts(): GroundPanelData {
+    return { name: 'Production server', system: 'Production', light: this.server.light, makes: 'Releases, served to the business', linked: [this.incident.services[0].name] };
+  }
+
+  /** What service `i`'s card and panel show. */
+  serviceFacts(i: number, node = this.nodes[i]): GroundPanelData {
+    const s = this.incident.services[i];
+    const names = this.incident.services.map((x) => x.name);
+    return { name: s.name, system: 'Production service', light: node.light, makes: 'Requests', linked: s.calls.map((c) => names[c]) };
+  }
+
+  /** What a replica's card and panel show. */
+  replicaFacts(r: { of: number; node: SystemNode }): GroundPanelData {
+    const name = this.incident.services[r.of].name;
+    return { name: `${name} replica`, system: 'Production service', light: r.node.light, makes: 'Requests', linked: [name] };
+  }
+
   /** A replica of service `i` grows in at `spot`: the line draws out of the service first, then the replica stands up at its end, healthy. */
   async addReplica(i: number, spot: Vector3, name: string): Promise<Replica> {
     const service = this.nodes[i];
-    const toward = spot.clone().sub(service.position).normalize();
+    const unit = { at: spot, size: NODE_FOOTPRINT };
+    const way = this.standingFloor().wayFor(unit, ['x', 'z'], [[service.position, spot]]) ?? 'x';
     const line = new Branch(
-      new LineCurve3(service.position.clone().addScaledVector(toward, HALF_NODE), spot.clone().addScaledVector(toward, -HALF_NODE)),
+      straight(cutToBorders([service.position, spot], this.border(slotId(this.incident.services[i]), service.position), borderAt(spot, 1, way))),
       NEUTRAL.packet,
     );
     line.drawn = 0;
@@ -274,12 +308,13 @@ export class Production {
     await tween(this.stage, 0.45, (t) => (line.drawn = t));
     // No name under it: it's one more of the service (its card names it).
     const node = new SystemNode({ kind: service.kind, name, showLabel: false });
+    const replica = { of: i, node, line, way };
+    groundPanel(node, way, 1, () => this.replicaFacts(replica));
     node.position.copy(spot);
     node.scale.setScalar(0.001);
     node.labelOpacity = 0;
     node.light = 'working';
     this.stage.add(node);
-    const replica = { of: i, node, line };
     this.replicas.push(replica);
     await this.grow(node);
     return replica;
@@ -320,11 +355,10 @@ export class Production {
   async logsTerminal(i: number, spot: Vector3, seed: number): Promise<{ terminal: Terminal; fold: () => Promise<void> }> {
     const { stage } = this;
     const service = this.nodes[i].position;
-    const toward = service.clone().sub(spot).normalize();
     const terminal = new Terminal({ state: 'admin', seed });
     terminal.position.copy(spot);
     terminal.scale.setScalar(0.001);
-    const line = new Branch(new LineCurve3(spot.clone().addScaledVector(toward, HALF_TERMINAL), service.clone().addScaledVector(toward, -HALF_NODE)), NEUTRAL.packet);
+    const line = new Branch(straight(cutToBorders([spot, service], HALF_TERMINAL, this.border(slotId(this.incident.services[i]), service))), NEUTRAL.packet);
     line.drawn = 0;
     stage.add(terminal, line);
     const untick = stage.onTick((dt) => terminal.update(dt));
@@ -377,6 +411,18 @@ export class Production {
     });
   }
 }
+
+/** A service's slot id on the map's floor. */
+function slotId(s: { tier: number; slot: number }): string {
+  return `tier${s.tier}-${s.slot}`;
+}
+
+/** A two-point cut line, straight. */
+function straight(line: Vector3[]): LineCurve3 {
+  return new LineCurve3(line[0], line[line.length - 1]);
+}
+
+const GRID_DIRS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
 
 function easeOutBack(t: number): number {
   const c = 1.6;

@@ -1,7 +1,7 @@
-import { Group, LineCurve3, MeshStandardMaterial, Vector3 } from 'three';
+import { Group, MeshStandardMaterial, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
-import { roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { roundedPath } from '../primitives/branch/gridPath';
 import { solid } from '../core/mesh';
 import { NEUTRAL } from '../core/palette';
 import { GRAPH_COLOR, GraphEdge } from '../primitives/graph/GraphEdge';
@@ -11,7 +11,9 @@ import type { SystemKind } from '../primitives/node/emblems';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { type JiraHub } from './jiraHub';
+import { nodeFacts, systemOf } from './rovoInspect';
 import { isThirdParty, isTwg } from './rovoTasks';
+import { borderFor, cutToBorders, groundNode, type PanelWays, unitId } from './units';
 import { tween } from './timeline';
 
 /** One system on the grid: its node, how many open tasks are using it, and whether it stays. */
@@ -64,6 +66,8 @@ export class SystemsOnGrid {
     private readonly via: Partial<Record<SystemKind, SystemKind>> = {},
     /** Laid-out grid routes from a system to the one it hangs off (from the map's layout), node center to node center. */
     private readonly viaRoutes: Partial<Record<SystemKind, readonly Vector3[]>> = {},
+    /** Which way each system's ground panel lies (the map's), so lines end on its unit's border. */
+    private readonly ways: PanelWays = new Map(),
   ) {
     stage.onTick((dt) => {
       for (const up of this.placed.values()) up.link?.edge.update(dt);
@@ -127,8 +131,9 @@ export class SystemsOnGrid {
     const at = this.places[kind];
     if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
     const tie = `system:${kind}:${++this.ups}`;
-    await this.hub.tie(tie, at, this.arrive[kind], TWG_EDGE + 0.05, false, this.routes[kind]);
-    const node = new SystemNode({ kind, permanent: true });
+    await this.hub.tie(tie, at, this.arrive[kind], borderFor(this.ways, unitId(kind), at, TWG_SCALE, TWG_EDGE + 0.05), false, this.routes[kind]);
+    const node = new SystemNode({ kind, permanent: true, showLabel: false });
+    groundNode(this.ways, unitId(kind), node, TWG_SCALE, () => nodeFacts(node, systemOf(kind)));
     node.position.copy(at);
     node.scale.setScalar(0.001);
     node.labelOpacity = 0;
@@ -168,7 +173,8 @@ export class SystemsOnGrid {
       if (!at) throw new Error(`SystemsOnGrid: no place for ${kind}`);
       // It comes up for the copy that called it, right under it; then it reaches out to Jira.
       const permanent = isTwg(kind);
-      const node = new SystemNode({ kind, permanent });
+      const node = new SystemNode({ kind, permanent, showLabel: false });
+      groundNode(this.ways, unitId(kind), node, 1, () => nodeFacts(node, systemOf(kind)));
       node.position.copy(at);
       node.scale.setScalar(0.001);
       node.labelOpacity = 0;
@@ -184,22 +190,21 @@ export class SystemsOnGrid {
       const parent = this.via[kind] ? this.placed.get(this.via[kind]!) : undefined;
       let link: PlacedSystem['link'];
       if (parent) {
-        // It hangs off its parent: its line reaches straight into the parent's edge.
+        // It hangs off its parent: its line reaches from its unit's border into the parent's.
         // Along its laid-out route when it has one (round a corner on the grid), otherwise straight in.
-        const edgeOf = (NODE_FOOTPRINT * parent.node.scale.x) / 2 + 0.05;
-        const toward = parent.node.position.clone().sub(at).normalize();
-        const route = this.viaRoutes[kind];
-        const edge = new GraphEdge(
-          route
-            ? roundedPath(trimPolyline(route.map((p) => p.clone().setY(0)), NODE_FOOTPRINT / 2 + 0.1, edgeOf), BEND_RADIUS)
-            : new LineCurve3(at.clone().addScaledVector(toward, NODE_FOOTPRINT / 2 + 0.1), parent.node.position.clone().addScaledVector(toward, -edgeOf)),
-        );
+        const parentAt = parent.node.position;
+        const route = this.viaRoutes[kind] ?? [at, parentAt];
+        const ends = [
+          borderFor(this.ways, unitId(kind), at, 1, NODE_FOOTPRINT / 2 + 0.1),
+          borderFor(this.ways, unitId(parent.kind), parentAt, parent.node.scale.x, (NODE_FOOTPRINT * parent.node.scale.x) / 2 + 0.05),
+        ] as const;
+        const edge = new GraphEdge(roundedPath(cutToBorders([...route], ...ends), BEND_RADIUS));
         edge.drawn = 0;
         this.stage.add(edge);
         await tween(this.stage, 0.6, (t) => (edge.drawn = t));
         link = { to: parent.kind, edge };
       } else {
-        await this.hub.tie(tie, at, this.arrive[kind], NODE_FOOTPRINT / 2 + 0.1, true, this.routes[kind]);
+        await this.hub.tie(tie, at, this.arrive[kind], borderFor(this.ways, unitId(kind), at, 1, NODE_FOOTPRINT / 2 + 0.1), true, this.routes[kind]);
       }
       const up: PlacedSystem = { kind, node, permanent, tie, connector, link, writeBacks: [], users: 0 };
       this.placed.set(kind, up);

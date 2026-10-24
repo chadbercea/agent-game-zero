@@ -66,6 +66,7 @@ What things mean on screen. Use these; don't add meanings.
 | Glass gateway with a lock | A secure crossing (Slack). |
 | Cubes, assembler, belt, portal | Code merged, released and shipped to production. |
 | Glass tunnel to the production server | Releases crossing securely into production (Rovo on Call), in place of the portal. |
+| Panel on the ground beside a node, one light gray border round both | The node's facts (what its card says), laid on the floor: every node is a grounded unit (ILI-1070). |
 
 ## Rules on screen
 
@@ -76,6 +77,7 @@ What things mean on screen. Use these; don't add meanings.
 5. **Only draw and spawn the next thing needed, never the whole chain** (ILI-1004). The output line comes with the first cubes, the assembler when cubes arrive, the belt and portal only when a release needs them.
 6. **The seed drives the whole map** (`src/story/storyMap.ts`): the gate's corner off Jira, which side the code side grows out on, Slack's side, the user's terminal, the mini systems. Each story lays out only the systems it uses, and the camera frames the map it gets.
 7. **No captions.** The scene explains itself. Hover highlights, click shows a details card, and clicking Rovo or a copy shows the drone family tree.
+8. **Every node is a grounded unit** (ILI-1070): the node in the unit's upper-left corner, its panel flat on the floor beside it (+x) or below it (+z), always there while the node is, one light gray border round both. The map picks each panel's way so no unit lands on another, on anything standing, or on a line that isn't its own. Lines end on the border, never at the node; the grid under a line stays off every unit.
 
 ## Status
 

@@ -107,6 +107,7 @@ export class RovoIncident extends RovoAtlassian {
 - Expose `beat` and `finished` so tests and the Storybook beat control can follow the story.
 - Add a `*.stories.ts` under **Story Narrative**, with `seed` and `beat` controls. Frame the camera on the map with `stage.frame(scene.map.center, scene.map.viewSize)`. Wire the `Inspector` (`rovoInspectables`) and the `FamilyTree` like `RovoFeature.stories.ts`.
 - Add the story to the doc comment at the top of `rovo-mental-model.md`.
+- **Every node gets its ground panel** (`groundNode` in `src/story/units.ts`, the way from `map.panels`), made with `showLabel: false`. A line that ends at a node ends on its border: build it with `cutToBorders(points, from, to)`, each end a border (`borderFor`) or a fixed trim for something without a panel. Anything the story places as it runs (a replica) needs room on the map's floor (`map.floor`, `src/core/floor.ts`) first.
 
 ## 6. Test it
 

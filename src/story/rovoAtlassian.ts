@@ -1,11 +1,11 @@
 import { LineCurve3, type Object3D, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
-import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
-import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath } from '../primitives/branch/gridPath';
 import { HOVER_HEIGHT, SUB_AGENT_SCALE } from '../primitives/drone/Drone';
 import { Gate } from '../primitives/gate/Gate';
 import { Padlock } from '../primitives/gate/Padlock';
@@ -21,7 +21,8 @@ import { type SpawnedDrone, spawnDrone } from '../stage/spawnDrone';
 import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
-import { JIRA_EDGE, JiraHub } from './jiraHub';
+import { HUB_SCALE, JIRA_EDGE, JiraHub } from './jiraHub';
+import { gateFacts, nodeFacts, SYSTEM_LABEL } from './rovoInspect';
 import { makeTask, type Step, TASK_TITLE, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { buildOutput, CodeLane } from './rovoCode';
@@ -29,6 +30,7 @@ import type { OutputLine } from './shipOutput';
 import { SlackHub } from './rovoSlack';
 import { type StoryMap, storyMap } from './storyMap';
 import { fly, tween, wait } from './timeline';
+import { borderFor, cutToBorders, gateEdge, gatePanel, groundNode } from './units';
 
 /** The mini systems: laid out round Jira from the seed by the house layout rules (storyMap, systemLayout). */
 export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'gdocs', 'notion'];
@@ -185,6 +187,7 @@ export class RovoAtlassian {
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
     this.scm = 'bitbucket';
     this.gate.position.copy(this.map.gate);
+    gatePanel(map.panels, this.gate, () => gateFacts(this.gate, this.lock));
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
     stage.add(this.gate);
@@ -192,9 +195,12 @@ export class RovoAtlassian {
     this.lock.shown = 0;
     this.lock.shut = 0;
     stage.add(this.lock);
-    this.jira = new SystemNode({ kind: 'jira', permanent: true });
+    this.jira = new SystemNode({ kind: 'jira', permanent: true, showLabel: false });
+    groundNode(map.panels, 'jira', this.jira, HUB_SCALE, () => nodeFacts(this.jira, SYSTEM_LABEL.jira));
     this.jira.position.copy(this.map.jira);
     stage.add(this.jira);
+    // Every line into Jira ends on its unit's border.
+    const jiraEdge = borderFor(map.panels, 'jira', map.jira, HUB_SCALE, JIRA_EDGE + 0.05);
     this.hub = new JiraHub(
       stage,
       this.jira,
@@ -209,12 +215,24 @@ export class RovoAtlassian {
         map.userTerminal,
       ],
       this.random,
+      { border: typeof jiraEdge === 'number' ? undefined : jiraEdge, floor: map.floor },
     );
-    this.slack = new SlackHub(stage, map.slack, map.jira.clone().addScaledVector(map.slack.out, JIRA_EDGE + 0.05), this.random);
+    // Slack's line runs straight out from Jira: from Jira's border to Slack's.
+    const [slackJiraEnd, slackEnd] = ends(cutToBorders([map.jira, map.slack.at], jiraEdge, borderFor(map.panels, 'slack', map.slack.at, 1, NODE_FOOTPRINT / 2 + 0.1)));
+    this.slack = new SlackHub(stage, map.slack, slackJiraEnd, this.random, slackEnd, map.panels);
     this.places = map.places;
     this.mcpAt = map.mcpAt;
     const tie = map.code.tieSide;
-    this.systems = new SystemsOnGrid(stage, this.hub, this.places, { github: tie, bitbucket: tie, gitlab: tie }, map.routes, { codesearch: 'bitbucket', ...options.via }, viaRoutes(map, options.via ?? {}));
+    this.systems = new SystemsOnGrid(
+      stage,
+      this.hub,
+      this.places,
+      { github: tie, bitbucket: tie, gitlab: tie },
+      map.routes,
+      { codesearch: 'bitbucket', ...options.via },
+      viaRoutes(map, options.via ?? {}),
+      map.panels,
+    );
     let clock = 0;
     stage.onTick((dt) => {
       clock += dt;
@@ -240,7 +258,7 @@ export class RovoAtlassian {
     // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira.
     const corner = new Vector3(map.gate.x, 0, map.jira.z);
     this.accessLine = new Branch(
-      roundedPath(trimPolyline([map.gate.clone(), corner, map.jira.clone()], GATE_FOOTPRINT / 2 + 0.05, JIRA_EDGE + 0.05), BEND_RADIUS),
+      roundedPath(cutToBorders([map.gate, corner, map.jira], gateEdge(map.panels, map.gate), jiraEdge), BEND_RADIUS),
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);
@@ -407,7 +425,7 @@ export class RovoAtlassian {
     const run: TaskRun = { id: `task-${this.tasks.length + 1}`, key: card.request.key, title: card.request.title, task, done: 0 };
     this.tasks.push(run);
     started(run);
-    const lane = laneIndex >= 0 ? new CodeLane(stage, laneIndex, this.tasks.length, this.map.code) : undefined;
+    const lane = laneIndex >= 0 ? new CodeLane(stage, laneIndex, this.tasks.length, this.map.code, this.map.panels) : undefined;
     if (lane) {
       this.lanes[laneIndex] = lane;
       this.codeOut++;
@@ -545,7 +563,7 @@ export class RovoAtlassian {
 
   /** The output (line, assembler, belt, portal), built the first time it's needed. */
   protected buildOutputLine(): Promise<OutputLine> {
-    this.building ??= buildOutput(this.stage, this.map.code, () => this.shipped++).then((output) => (this.output = output));
+    this.building ??= buildOutput(this.stage, this.map.code, () => this.shipped++, undefined, this.map.panels).then((output) => (this.output = output));
     return this.building;
   }
 
@@ -633,11 +651,8 @@ export class RovoAtlassian {
       terminal.position.copy(at);
       terminal.scale.setScalar(0.001);
       const figmaAt = this.places.figma as Vector3;
-      const toward = figmaAt.clone().sub(at).normalize();
-      const line = new Branch(
-        new LineCurve3(at.clone().addScaledVector(toward, TERMINAL_SIZE / 2 + 0.06), figmaAt.clone().addScaledVector(toward, -(NODE_FOOTPRINT / 2 + 0.08))),
-        NEUTRAL.packet,
-      );
+      const [lineFrom, lineTo] = ends(cutToBorders([at, figmaAt], TERMINAL_SIZE / 2 + 0.06, borderFor(this.map.panels, 'figma', figmaAt, 1, NODE_FOOTPRINT / 2 + 0.08)));
+      const line = new Branch(new LineCurve3(lineFrom, lineTo), NEUTRAL.packet);
       line.drawn = 0;
       stage.add(terminal, line);
       const untick = stage.onTick((dt) => terminal.update(dt));
@@ -764,4 +779,9 @@ function viaRoutes(map: StoryMap, via: Partial<Record<SystemKind, SystemKind>>):
 function easeOutBack(t: number): number {
   const c = 1.6;
   return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
+}
+
+/** The two ends of a cut line. */
+function ends(line: Vector3[]): [Vector3, Vector3] {
+  return [line[0], line[line.length - 1]];
 }

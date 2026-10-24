@@ -2,14 +2,18 @@ import type { Curve, Mesh, Vector3 } from 'three';
 import { NEUTRAL } from '../core/palette';
 import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { SYSTEM_NAME, type SystemKind } from '../primitives/node/emblems';
+import type { Gate } from '../primitives/gate/Gate';
+import type { Padlock } from '../primitives/gate/Padlock';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { PRODUCT_NAME } from '../primitives/product/Product';
 import { type Inspectable, lineHit } from '../stage/Inspector';
 import {
   agentCard,
   gateCard,
+  type GateCardData,
   gatewayCard,
   lineCard,
+  type NodeCardData,
   nodeCard,
   productCard,
   subAgentCard,
@@ -51,15 +55,15 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
       out.push({
         kind: 'gate',
         object: scene.gate,
-        card: () => gateCard({ system: "Rovo's way into the Atlassian grid", state: scene.gate.state, tools: ['Jira', 'Confluence', 'Bitbucket'] }),
+        card: () => gateCard(gateFacts(scene.gate, scene.lock)),
       });
     }
 
     // Jira, and every system that's up.
-    if (shown(scene.jira)) out.push(node(scene.jira, TWG));
+    if (shown(scene.jira)) out.push(node(scene.jira, SYSTEM_LABEL.jira));
     for (const up of systems.placed.values()) {
       if (!shown(up.node)) continue;
-      out.push(node(up.node, isTwg(up.kind) ? TWG : isThirdParty(up.kind) ? CONNECTOR : ON_CALL));
+      out.push(node(up.node, systemOf(up.kind)));
       // What's been written back there.
       for (const p of up.writeBacks) {
         out.push({ kind: 'product', object: p, card: () => productCard({ name: PRODUCT_NAME[up.kind], from: SYSTEM_NAME[up.kind], heldBy: SYSTEM_NAME[up.kind] }) });
@@ -78,7 +82,7 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
     }
 
     // Slack and its gateway.
-    if (shown(slack.node)) out.push(node(slack.node, 'Comms hub, on its own'));
+    if (shown(slack.node)) out.push(node(slack.node, SYSTEM_LABEL.slack));
     if (slack.gateway.visible && slack.gateway.built > 0.5) {
       out.push({
         kind: 'gateway',
@@ -150,7 +154,7 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
     // The code lanes: worktree, terminal, and their lines into the repo.
     for (const lane of scene.lanes) {
       if (!lane) continue;
-      if (shown(lane.worktree)) out.push(node(lane.worktree, 'A checkout of the repo'));
+      if (shown(lane.worktree)) out.push(node(lane.worktree, SYSTEM_LABEL.worktree));
       if (shown(lane.terminal)) {
         out.push({
           kind: 'node',
@@ -207,14 +211,27 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
 }
 
 function node(n: SystemNode, system: string): Inspectable {
-  const linked = TEAMWORK_LINKS.flatMap((l) => (l.a === n.kind ? [l.b] : l.b === n.kind ? [l.a] : []));
-  return {
-    kind: 'node',
-    object: n,
-    card: () =>
-      nodeCard({ name: SYSTEM_NAME[n.kind], system, light: n.light, makes: PRODUCT_NAME[n.kind], linked: linked.map((k: SystemKind) => SYSTEM_NAME[k]) }),
-  };
+  return { kind: 'node', object: n, card: () => nodeCard(nodeFacts(n, system)) };
 }
+
+/** Whose system a node is in, in words: the Teamwork Graph, a connector's, or Atlassian's, up while it's needed. */
+export function systemOf(kind: SystemKind): string {
+  return isTwg(kind) ? TWG : isThirdParty(kind) ? CONNECTOR : ON_CALL;
+}
+
+/** The gate's card: Rovo's access check, how it's going, whether the gate's locked behind it, and the tools it's permitted. */
+export function gateFacts(gate: Gate, lock: Padlock): GateCardData {
+  return { agent: 'Rovo', state: gate.state, locked: lock.shown > 0 && lock.shut >= 1, tools: ['Jira', 'Confluence', 'Bitbucket'] };
+}
+
+/** What a node's card and its ground panel show (read fresh, so its light is live). */
+export function nodeFacts(n: SystemNode, system: string): NodeCardData {
+  const linked = TEAMWORK_LINKS.flatMap((l) => (l.a === n.kind ? [l.b] : l.b === n.kind ? [l.a] : []));
+  return { name: SYSTEM_NAME[n.kind], system, light: n.light, makes: PRODUCT_NAME[n.kind], linked: linked.map((k: SystemKind) => SYSTEM_NAME[k]) };
+}
+
+/** The labels a node's facts use for Jira, Slack and a worktree. */
+export const SYSTEM_LABEL = { jira: TWG, slack: 'Comms hub, on its own', worktree: 'A checkout of the repo' } as const;
 
 /** Where a copy is working, in words. */
 function placeName(at: SystemNode): string {

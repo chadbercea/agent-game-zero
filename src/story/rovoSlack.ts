@@ -6,8 +6,10 @@ import { GraphEdge } from '../primitives/graph/GraphEdge';
 import { SystemNode } from '../primitives/node/SystemNode';
 import type { SceneHost } from '../stage/Stage';
 import { shoot } from './beam';
+import { nodeFacts, SYSTEM_LABEL } from './rovoInspect';
 import type { SlackPlace } from './storyMap';
 import { tween, wait } from './timeline';
+import { groundNode, type PanelWays } from './units';
 
 const MESSAGE_SPEED = 7;
 /** Seconds between messages in the background chatter (seeded). */
@@ -24,7 +26,7 @@ const CHATTER: [number, number] = [0.3, 0.9];
  * and its lock sways.
  */
 export class SlackHub {
-  readonly node = new SystemNode({ kind: 'slack' });
+  readonly node = new SystemNode({ kind: 'slack', showLabel: false });
   readonly gateway: Gateway;
   /** Slack → the gateway's far end. */
   readonly toGateway: GraphEdge;
@@ -43,9 +45,13 @@ export class SlackHub {
     readonly place: SlackPlace,
     jiraEdge: Vector3,
     private readonly random: () => number,
+    /** Where its line leaves Slack: its unit's border, toward Jira. */
+    slackEdge = place.at.clone().addScaledVector(place.out, -(NODE_FOOTPRINT / 2 + 0.1)),
+    /** Which way its ground panel lies (the map's). */
+    ways: PanelWays = new Map(),
   ) {
+    groundNode(ways, 'slack', this.node, 1, () => nodeFacts(this.node, SYSTEM_LABEL.slack));
     this.gateway = new Gateway(place.run);
-    const slackEdge = place.at.clone().addScaledVector(place.out, -(NODE_FOOTPRINT / 2 + 0.1));
     this.toGateway = new GraphEdge(new LineCurve3(slackEdge, place.slackEnd.clone()));
     this.toJira = new GraphEdge(new LineCurve3(place.jiraEnd.clone(), jiraEdge.clone()));
     this.path = new LineCurve3(slackEdge.clone(), jiraEdge.clone());

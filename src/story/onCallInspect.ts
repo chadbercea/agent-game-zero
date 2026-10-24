@@ -30,7 +30,7 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
       out.push({
         kind: 'node',
         object: production.server,
-        card: () => nodeCard({ name: 'Production server', system: 'Production', light: production.server.light, makes: 'Releases, served to the business', linked: [names[0]] }),
+        card: () => nodeCard(production.serverFacts()),
       });
     }
     for (const [line, from, to, carries] of [
@@ -43,22 +43,9 @@ export function onCallInspectables(scene: RovoOnCall): () => Inspectable[] {
       out.push({ kind: 'line', object: line, hit, card: () => lineCard({ type: 'Deploy', from, to, color: NEUTRAL.packet, drawn: line.drawn, carries }) });
     }
     production.nodes.forEach((node, i) => {
-      if (!shown(node)) return;
-      const s = incident.services[i];
-      out.push({
-        kind: 'node',
-        object: node,
-        card: () => nodeCard({ name: s.name, system: 'Production service', light: node.light, makes: 'Requests', linked: s.calls.map((c) => names[c]) }),
-      });
+      if (shown(node)) out.push({ kind: 'node', object: node, card: () => nodeCard(production.serviceFacts(i)) });
     });
-    for (const r of production.replicas) {
-      if (!shown(r.node)) continue;
-      out.push({
-        kind: 'node',
-        object: r.node,
-        card: () => nodeCard({ name: `${names[r.of]} replica`, system: 'Production service', light: r.node.light, makes: 'Requests', linked: [names[r.of]] }),
-      });
-    }
+    for (const r of production.replicas) if (shown(r.node)) out.push({ kind: 'node', object: r.node, card: () => nodeCard(production.replicaFacts(r)) });
     for (const d of production.dependencies) {
       if (d.line.drawn < 0.01) continue;
       let hit = hits.get(d);

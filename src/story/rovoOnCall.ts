@@ -12,10 +12,12 @@ import type { OutputLine } from './shipOutput';
 import { fly, tween, until, wait } from './timeline';
 import { shoot } from './beam';
 import { Branch } from '../primitives/branch/Branch';
-import { reversed, roundedPath, trimPolyline } from '../primitives/branch/gridPath';
+import { reversed, roundedPath } from '../primitives/branch/gridPath';
 import { Phone } from '../primitives/phone/Phone';
 import { BEND_RADIUS, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
+import type { FloorRect } from '../primitives/unit/unitLayout';
+import { borderFor, cutToBorders } from './units';
 
 /** The story's beats, in order. */
 export const ON_CALL_BEATS = ['arriving', 'detect', 'declare', 'triage', 'mitigate', 'verify', 'resolve', 'learn', 'follow-up', 'done'] as const;
@@ -124,12 +126,14 @@ export class RovoOnCall extends RovoAtlassian {
     // The alert's way in, laid out by the house rules: Datadog's line into PagerDuty; PagerDuty's own line into Jira.
     super(stage, seed, { mini: ON_CALL_MINI, production: true, paging: true, via: { datadog: 'pagerduty' } });
     this.incident = rollIncident(seed);
-    this.production = new Production(stage, this.map.production!, this.incident);
+    this.production = new Production(stage, this.map.production!, this.incident, this.map.panels, this.map.floor);
     const paging = this.map.paging!;
-    const line = (points: Vector3[], endClear: number) =>
-      new Branch(roundedPath(trimPolyline(points.map((p) => p.clone()), NODE_FOOTPRINT / 2 + 0.1, endClear), BEND_RADIUS), NEUTRAL.packet);
+    // PagerDuty's lines leave its unit's border; the one to Slack ends on Slack's.
+    const unit = (id: string, at: Vector3) => borderFor(this.map.panels, id, at, 1, NODE_FOOTPRINT / 2 + 0.1);
+    const pager = unit('pagerduty', this.map.places.pagerduty!);
+    const line = (points: Vector3[], end: FloorRect | number) => new Branch(roundedPath(cutToBorders(points, pager, end), BEND_RADIUS), NEUTRAL.packet);
     this.toPhone = line(paging.toPhone, 0.35);
-    this.toSlack = line(paging.toSlack, NODE_FOOTPRINT / 2 + 0.1);
+    this.toSlack = line(paging.toSlack, unit('slack', this.map.slack.at));
     for (const l of [this.toPhone, this.toSlack]) l.drawn = 0;
     this.phone.position.copy(paging.phone);
     this.phone.scale.setScalar(0.001);
@@ -312,6 +316,7 @@ export class RovoOnCall extends RovoAtlassian {
       this.map.code,
       () => this.shipped++,
       (release) => this.production.deliver(this.incident.culprit, release),
+      this.map.panels,
     ).then((output) => (this.output = output));
     return this.building;
   }
