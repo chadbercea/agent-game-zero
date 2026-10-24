@@ -2,12 +2,15 @@ import type { Curve, Mesh, Vector3 } from 'three';
 import { NEUTRAL } from '../core/palette';
 import { GRAPH_COLOR } from '../primitives/graph/GraphEdge';
 import { SYSTEM_NAME, type SystemKind } from '../primitives/node/emblems';
+import type { Gate } from '../primitives/gate/Gate';
+import type { Padlock } from '../primitives/gate/Padlock';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { PRODUCT_NAME } from '../primitives/product/Product';
 import { type Inspectable, lineHit } from '../stage/Inspector';
 import {
   agentCard,
   gateCard,
+  type GateCardData,
   gatewayCard,
   lineCard,
   type NodeCardData,
@@ -52,7 +55,7 @@ export function rovoInspectables(scene: RovoAtlassian): () => Inspectable[] {
       out.push({
         kind: 'gate',
         object: scene.gate,
-        card: () => gateCard({ system: "Rovo's way into the Atlassian grid", state: scene.gate.state, tools: ['Jira', 'Confluence', 'Bitbucket'] }),
+        card: () => gateCard(gateFacts(scene.gate, scene.lock)),
       });
     }
 
@@ -214,6 +217,11 @@ function node(n: SystemNode, system: string): Inspectable {
 /** Whose system a node is in, in words: the Teamwork Graph, a connector's, or Atlassian's, up while it's needed. */
 export function systemOf(kind: SystemKind): string {
   return isTwg(kind) ? TWG : isThirdParty(kind) ? CONNECTOR : ON_CALL;
+}
+
+/** The gate's card: Rovo's access check, how it's going, whether the gate's locked behind it, and the tools it's permitted. */
+export function gateFacts(gate: Gate, lock: Padlock): GateCardData {
+  return { agent: 'Rovo', state: gate.state, locked: lock.shown > 0 && lock.shut >= 1, tools: ['Jira', 'Confluence', 'Bitbucket'] };
 }
 
 /** What a node's card and its ground panel show (read fresh, so its light is live). */

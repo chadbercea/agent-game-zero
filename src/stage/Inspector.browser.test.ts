@@ -175,7 +175,7 @@ describe('Inspector lights the item itself', () => {
 describe('inspect cards', () => {
   it('every kind has its own card: its own layout, not one template with fields swapped', () => {
     const cards = [
-      gateCard({ system: 'Gate', state: 'open', tools: ['Jira'] }),
+      gateCard({ agent: 'Rovo', state: 'open', locked: true, tools: ['Jira'] }),
       nodeCard({ name: 'Jira', system: 'Atlassian', light: 'working', makes: 'Issue', linked: ['Confluence'] }),
       agentCard({ name: 'D3V1N', lineage: 'blue', status: 'working', carrying: ['Issue'], crew: [] }),
       subAgentCard({ name: 'Rovo.1', parent: 'Rovo', lineage: 'cyan', status: 'working' }),
@@ -189,7 +189,7 @@ describe('inspect cards', () => {
       [...c.querySelectorAll('*')].map((e) => `${e.tagName}.${e.className}`).join(' ');
     const shapes = new Set(cards.map(shape));
     expect(shapes.size).toBe(cards.length);
-    expect(cards[0].textContent).toContain('Access granted');
+    expect(cards[0].textContent).toContain('Verified');
     expect(cards[5].querySelector('.key')?.textContent).toBe('DEMO-990');
   });
 });

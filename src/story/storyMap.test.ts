@@ -5,6 +5,7 @@ import { type StoryMap, storyMap } from './storyMap';
 
 /** Every node on the map that stands as a unit, by its panel id. */
 const unitIds = (m: StoryMap) => [
+  'gate',
   'jira',
   'slack',
   'scm',

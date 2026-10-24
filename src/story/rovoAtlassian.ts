@@ -1,7 +1,7 @@
 import { LineCurve3, type Object3D, Vector3 } from 'three';
 import { DroneFlight } from '../animation/DroneFlight';
 import { GateAnimator } from '../animation/GateAnimator';
-import { BEND_RADIUS, FACE_CAMERA, GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import { BEND_RADIUS, FACE_CAMERA, NODE_FOOTPRINT } from '../core/grid';
 import { NEUTRAL } from '../core/palette';
 import { seededRandom } from '../core/scatter';
 import { Branch } from '../primitives/branch/Branch';
@@ -22,7 +22,7 @@ import type { SceneHost } from '../stage/Stage';
 import { accessCheck } from './accessCheck';
 import { shoot } from './beam';
 import { HUB_SCALE, JIRA_EDGE, JiraHub } from './jiraHub';
-import { nodeFacts, SYSTEM_LABEL } from './rovoInspect';
+import { gateFacts, nodeFacts, SYSTEM_LABEL } from './rovoInspect';
 import { makeTask, type Step, TASK_TITLE, TASK_TYPES, type Task } from './rovoTasks';
 import { type PlacedSystem, SystemsOnGrid, TWG_SCALE } from './rovoSystems';
 import { buildOutput, CodeLane } from './rovoCode';
@@ -30,7 +30,7 @@ import type { OutputLine } from './shipOutput';
 import { SlackHub } from './rovoSlack';
 import { type StoryMap, storyMap } from './storyMap';
 import { fly, tween, wait } from './timeline';
-import { borderFor, cutToBorders, groundNode } from './units';
+import { borderFor, cutToBorders, gateEdge, gatePanel, groundNode } from './units';
 
 /** The mini systems: laid out round Jira from the seed by the house layout rules (storyMap, systemLayout). */
 export const MINI_SYSTEMS: readonly SystemKind[] = ['confluence', 'figma', 'gdocs', 'notion'];
@@ -187,6 +187,7 @@ export class RovoAtlassian {
     // Bitbucket, a Teamwork Graph app, is the repo: the code side's activity is all around it.
     this.scm = 'bitbucket';
     this.gate.position.copy(this.map.gate);
+    gatePanel(map.panels, this.gate, () => gateFacts(this.gate, this.lock));
     const animator = new GateAnimator(this.gate);
     stage.onTick((dt) => animator.update(dt));
     stage.add(this.gate);
@@ -257,7 +258,7 @@ export class RovoAtlassian {
     // Along the grid, never diagonal: out of the gate toward the camera, round one corner, and into Jira.
     const corner = new Vector3(map.gate.x, 0, map.jira.z);
     this.accessLine = new Branch(
-      roundedPath(cutToBorders([map.gate, corner, map.jira], GATE_FOOTPRINT / 2 + 0.05, jiraEdge), BEND_RADIUS),
+      roundedPath(cutToBorders([map.gate, corner, map.jira], gateEdge(map.panels, map.gate), jiraEdge), BEND_RADIUS),
       NEUTRAL.packet,
     );
     stage.add(this.accessLine);

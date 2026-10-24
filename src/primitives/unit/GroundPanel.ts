@@ -15,6 +15,10 @@ export interface GroundPanelData {
   makes: string;
   /** Systems the graph links it to. */
   linked: readonly string[];
+  /** Something that isn't a tool (the gate): its card's eyebrow (and no letter tile), its facts in place of System, Makes and Activity, and its list's label. */
+  eyebrow?: string;
+  facts?: readonly (readonly [string, string])[];
+  linkedLabel?: string;
 }
 
 /** The border: a light gray outline, the card's own edge color, and the only edge treatment. */
@@ -47,6 +51,8 @@ export interface GroundPanelOptions {
   direction: PanelDirection;
   /** The node's scale when it's fully up (a hub or a Teamwork Graph app stands bigger); the panel stays true size whatever it is. */
   fullScale?: number;
+  /** How wide the node stands at scale 1 (a gate stands wider than a node). */
+  nodeSize?: number;
   /** What to show, read fresh each frame; the panel repaints when it changes. */
   data: () => GroundPanelData;
 }
@@ -77,7 +83,7 @@ export class GroundPanel extends Group {
     super();
     const fullScale = options.fullScale ?? 1;
     this.direction = options.direction;
-    this.layout = unitLayout(options.direction, NODE_FOOTPRINT * fullScale);
+    this.layout = unitLayout(options.direction, (options.nodeSize ?? NODE_FOOTPRINT) * fullScale);
     this.data = options.data;
     this.name = 'ground-panel';
     // Undo the node's own scale, so at full size the panel is true size.
@@ -186,32 +192,36 @@ function paintNodePanel(ctx: CanvasRenderingContext2D, d: GroundPanelData, width
   ctx.textBaseline = 'top';
   ctx.letterSpacing = '0px';
 
-  // Head: the tile with the name's first letter, then the eyebrow and the name.
-  roundRect(ctx, PAD, PAD, 36, 36, 8);
-  ctx.fillStyle = TILE;
-  ctx.fill();
-  ctx.fillStyle = INK;
-  ctx.font = `700 12px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(d.name.slice(0, 1), PAD + 18, PAD + 18);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  label(ctx, 'Tool', PAD + 46, PAD + 2, 0.08);
+  // Head: a tool's tile with the name's first letter, then the eyebrow and the name (clear of the list on the right).
+  const left = width * 0.56;
+  const head = d.eyebrow ? PAD : PAD + 46;
+  if (!d.eyebrow) {
+    roundRect(ctx, PAD, PAD, 36, 36, 8);
+    ctx.fillStyle = TILE;
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.font = `700 12px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d.name.slice(0, 1), PAD + 18, PAD + 18);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+  }
+  label(ctx, d.eyebrow ?? 'Tool', head, PAD + 2, 0.08);
   ctx.fillStyle = INK;
   ctx.font = `650 16px ${FONT}`;
-  ctx.fillText(d.name, PAD + 46, PAD + 16, width / 2);
+  ctx.fillText(d.name, head, PAD + 16, left - head - PAD);
 
   // Facts: names in gray, values in ink.
   const activity = d.light === 'off' ? 'Idle' : `${STATUS_WORD[d.light]} now`;
-  const rows: [string, string][] = [
+  const rows = d.facts ?? [
     ['System', d.system],
     ['Makes', d.makes],
     ['Activity', activity],
   ];
   ctx.font = `12px ${FONT}`;
   const keyWidth = Math.max(...rows.map(([k]) => ctx.measureText(k).width));
-  const left = width * 0.56;
+  const gap = keyWidth ? 12 : 0;
   rows.forEach(([k, v], i) => {
     const y = PAD + 36 + 10 + i * (LINE + 1);
     ctx.font = `12px ${FONT}`;
@@ -219,11 +229,11 @@ function paintNodePanel(ctx: CanvasRenderingContext2D, d: GroundPanelData, width
     ctx.fillText(k, PAD, y);
     ctx.font = `550 12px ${FONT}`;
     ctx.fillStyle = INK;
-    ctx.fillText(v, PAD + keyWidth + 12, y, left - PAD - keyWidth - 24);
+    ctx.fillText(v, PAD + keyWidth + gap, y, left - PAD - keyWidth - gap - 12);
   });
 
   // Linked on the graph: chips, wrapping.
-  label(ctx, 'Linked on the graph', left, PAD + 2, 0.06);
+  label(ctx, d.linkedLabel ?? 'Linked on the graph', left, PAD + 2, 0.06);
   ctx.font = `12px ${FONT}`;
   let x = left;
   let y = PAD + 18;

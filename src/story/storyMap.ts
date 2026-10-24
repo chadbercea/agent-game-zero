@@ -244,6 +244,10 @@ export function storyMap(seed: number, options: StoryMapOptions): StoryMap {
     [3, -3],
     [-4, 3],
     [3, -4],
+    [4, 4],
+    [-4, 4],
+    [4, -4],
+    [-4, -4],
   ]);
   const turns = shuffled([0, 1, 2, 3].flatMap((turn) => [false, true].map((mirror) => ({ turn, mirror }))));
   const sides = shuffled(GRID_DIRS);
@@ -333,14 +337,14 @@ function arrange(
   const rovoStart = ROVO_STARTS.map(([x, z]) => gate.clone().add(new Vector3(x, 0, z))).find((p) => offLines([p], [...codeLines, slackLine]));
   if (!rovoStart) return null;
 
-  // The floor (ILI-1073): the code side's, then the gate, the glass gateway and their lines, then Jira's and Slack's units.
+  // The floor (ILI-1073): the code side's, then the glass gateway and the lines, then the gate's, Jira's and Slack's units.
   // Jira's panel lies along +x: the task board floats over the floor on its other side.
   let floor = side.floor.fork();
-  floor.addPart(squareAt(gate, GATE_FOOTPRINT));
   floor.addPart(runRect(slack.run, GATEWAY_WIDTH));
   floor.addLine(accessLine);
   floor.addLine(slackLine);
   const hub = standUnits(floor, [
+    { id: 'gate', at: gate, size: GATE_FOOTPRINT },
     { id: 'jira', at: jira, size: NODE_FOOTPRINT * HUB_SCALE },
     { id: 'slack', at: slackAt, size: NODE_FOOTPRINT },
   ], (u) => (u.id === 'jira' ? ['x'] : ['x', 'z']));

@@ -104,30 +104,38 @@ const STATUS_WORD: Record<Status, string> = { working: 'Working', waiting: 'Wait
 // Gate ---------------------------------------------------------------------
 
 export interface GateCardData {
-  /** The system it lets into. */
-  system: string;
+  /** The agent it checks. */
+  agent: string;
   state: GateState;
-  /** The tools behind it. */
+  /** Whether it's locked behind the agent. */
+  locked: boolean;
+  /** The tools the agent is permitted. */
   tools: readonly string[];
 }
 
-const GATE_WORD: Record<GateState, [string, string]> = {
-  off: ['Closed', OFF],
-  thinking: ['Checking access', hex(STATUS_COLOR.waiting)],
-  open: ['Access granted', hex(STATUS_COLOR.working)],
-  denied: ['Access denied', hex(STATUS_COLOR.stopped)],
-};
+export const GATE_TITLE = 'Agent access check';
+const IDENTITY_WORD: Record<GateState, string> = { off: 'Not checked', thinking: 'Checking', open: 'Verified', denied: 'Denied' };
 
-/** A gate: whether it's letting anyone in right now, and what's behind it. */
+/** A gate's facts: the agent, whether its identity checked out, and whether the gate locked behind it. */
+export function gateRows(d: GateCardData): [string, string][] {
+  return [
+    ['Agent', d.agent],
+    ['Identity', IDENTITY_WORD[d.state]],
+    ['Locked', d.locked ? 'Yes' : 'No'],
+  ];
+}
+
+export const gateToolsLabel = (d: GateCardData) => `Permitted tools · ${d.tools.length}`;
+
+/** A gate: the agent access check, how it's going, and the tools the agent is permitted. */
 export function gateCard(d: GateCardData): HTMLElement {
-  const [word, color] = GATE_WORD[d.state];
   const list = el('ul');
   for (const t of d.tools) {
     const li = el('li');
     li.append(dot('#3a3b40'), document.createTextNode(t));
     list.append(li);
   }
-  return card(el('div', 'eyebrow', 'Gate'), el('h3', undefined, d.system), pill(color, word), section(`Leads to · ${d.tools.length}`, list));
+  return card(el('div', 'eyebrow', 'Gate'), el('h3', undefined, GATE_TITLE), facts(gateRows(d)), section(gateToolsLabel(d), list));
 }
 
 // Node ---------------------------------------------------------------------

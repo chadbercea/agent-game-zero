@@ -244,6 +244,8 @@ describe('Rovo and Jira, the quarterback', () => {
     expect(appeared.size).toBeGreaterThan(1);
     expect(unprompted).toBe(0);
     expect(bare).toBe(0);
+    // The gate stands as a unit too.
+    expect(scene.gate.children.some((c) => c instanceof GroundPanel)).toBe(true);
     // Systems stand at their places; worktrees stand in the code lanes, Slack on its own behind its gateway.
     for (const kind of appeared) if (kind !== 'worktree' && kind !== 'slack') expect(scene.places[kind]).toBeDefined();
     // Once everything's done, only the Teamwork Graph apps are still standing.

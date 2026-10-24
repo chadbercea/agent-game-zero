@@ -1,6 +1,8 @@
 import { Vector3 } from 'three';
 import { unitBorder } from '../core/floor';
-import { NODE_FOOTPRINT } from '../core/grid';
+import { GATE_FOOTPRINT, NODE_FOOTPRINT } from '../core/grid';
+import type { Gate } from '../primitives/gate/Gate';
+import { GATE_TITLE, type GateCardData, gateRows, gateToolsLabel } from '../stage/inspectCards';
 import { trimPolyline } from '../primitives/branch/gridPath';
 import type { SystemNode } from '../primitives/node/SystemNode';
 import { GroundPanel, type GroundPanelData } from '../primitives/unit/GroundPanel';
@@ -71,4 +73,33 @@ export function borderFor(ways: PanelWays, id: string, at: Vector3, fullScale: n
 export function groundNode(ways: PanelWays, id: string, node: SystemNode, fullScale: number, data: () => GroundPanelData): void {
   const way = ways.get(id);
   if (way) groundPanel(node, way, fullScale, data);
+}
+
+/** Where lines leave the gate: its unit's border, or just off its pad if the map gave it no panel. */
+export function gateEdge(ways: PanelWays, at: Vector3): FloorRect | number {
+  const way = ways.get('gate');
+  return way ? unitBorder({ at, size: GATE_FOOTPRINT }, way) : GATE_FOOTPRINT / 2 + 0.05;
+}
+
+/** Give the gate its ground panel, showing its card: the agent access check, how it's going, and the tools the agent is permitted. */
+export function gatePanel(ways: PanelWays, gate: Gate, card: () => GateCardData): void {
+  const way = ways.get('gate');
+  if (!way) return;
+  new GroundPanel(gate, {
+    direction: way,
+    nodeSize: GATE_FOOTPRINT,
+    data: () => {
+      const d = card();
+      return {
+        eyebrow: 'Gate',
+        name: GATE_TITLE,
+        system: '',
+        light: 'off',
+        makes: '',
+        facts: gateRows(d),
+        linkedLabel: gateToolsLabel(d),
+        linked: d.tools,
+      };
+    },
+  });
 }
